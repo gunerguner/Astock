@@ -83,7 +83,7 @@ python main.py --turnover 1500000000000
 
 ## 配置说明
 
-主要配置项位于 `main.py` 顶部：
+主要配置项位于 `astock/config.py`：
 
 | 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -98,9 +98,15 @@ python main.py --turnover 1500000000000
 
 ```text
 .
-├── main.py           # 命令行入口和统计逻辑
-├── requirements.txt  # Python 依赖列表
-└── README.md         # 项目说明文档
+├── main.py            # 命令行入口：参数解析、模式分发与 main()
+├── astock/
+│   ├── __init__.py    # 包初始化
+│   ├── config.py      # 配置：阈值、起始日期、牛市区间定义
+│   ├── data.py        # 数据获取：baostock 会话与指数日线抓取
+│   ├── analysis.py    # 分析：牛市区间统计
+│   └── report.py      # 输出：金额格式化与统计结果打印
+├── requirements.txt   # Python 依赖列表
+└── README.md          # 项目说明文档
 ```
 
 ## 注意事项
