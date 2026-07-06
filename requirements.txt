@@ -1,2 +1,4 @@
 baostock
 pandas
+akshare
+pyarrow

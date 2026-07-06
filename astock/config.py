@@ -4,6 +4,11 @@
 THRESHOLD_POINT = 4000
 TURNOVER_THRESHOLD = 2_000_000_000_000  # 默认2万亿
 
+# 个股成交额模式配置
+MARKET_CAP_THRESHOLD = 100_000_000_000  # 默认市值阈值1000亿（单位：元）
+STOCK_CACHE_DIR = 'cache'  # 个股历史数据parquet缓存目录
+CANDIDATE_DAYS = 200  # 候选交易日数量：取全市场总成交额Top N 日作为个股扫描候选集
+
 # 历史数据查询起始日期
 START_DATE = '2005-01-01'
 

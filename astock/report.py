@@ -63,3 +63,21 @@ def print_top_turnover(df: pd.DataFrame, top_n: int = 5) -> None:
         print(f'  {date_str}: 上证{sh} + 深证{sz} = {total}')
 
     print()
+
+
+def print_stock_top_turnover(df: pd.DataFrame) -> None:
+    """打印A股个股历史单日成交额Top10"""
+    if df.empty:
+        print('\n未找到个股成交额记录\n')
+        return
+
+    print(f'{"="*80}')
+    print('A股个股历史单日成交额Top10')
+    print(f'{"="*80}\n')
+
+    for i, row in df.iterrows():
+        date_str = str(row['日期'])
+        amount = format_amount(row['成交额'])
+        print(f'  {i + 1:>2}. {date_str}  {row["名称"]}({row["代码"]})  成交额{amount}')
+
+    print(f'\n{"="*80}\n')
