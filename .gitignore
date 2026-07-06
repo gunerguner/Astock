@@ -68,8 +68,8 @@ dmypy.json
 .coverage
 htmlcov/
 
-# SQLite / 缓存数据库
-cache/
+# SQLite / 数据库
+db/
 *.db
 *.db-journal
 *.db-wal
@@ -79,3 +79,7 @@ cache/
 
 # Logs
 logs/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/

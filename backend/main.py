@@ -1,0 +1,8 @@
+"""Astock FastAPI 服务启动入口。"""
+
+import uvicorn
+
+from astock.config import FASTAPI_PORT
+
+if __name__ == "__main__":
+    uvicorn.run("astock.main:app", host="0.0.0.0", port=FASTAPI_PORT, reload=True)
