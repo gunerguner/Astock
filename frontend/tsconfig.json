@@ -11,12 +11,13 @@
     "esModuleInterop": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "vite-plugin-eslint": ["node_modules/vite-plugin-eslint/dist/index.d.ts"]
     },
     "lib": ["es2020", "dom"],
     "types": ["vite/client"],
     "skipLibCheck": true
   },
-  "include": ["src/**/*", "src/**/*.vue"],
+  "include": ["src/**/*", "src/**/*.vue", "config/**/*.ts"],
   "exclude": ["node_modules"]
 }

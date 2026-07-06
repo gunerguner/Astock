@@ -21,6 +21,9 @@
     </div>
     <ul class="right-side">
       <li>
+        <AdminRefreshButton />
+      </li>
+      <li>
         <a-dropdown
           trigger="click"
           @select="(val) => changeLocale(val as string)"
@@ -76,6 +79,7 @@
   import useLocale from '@/hooks/locale';
   import { LOCALE_OPTIONS } from '@/locale';
   import Menu from '@/components/menu/index.vue';
+  import AdminRefreshButton from '@/components/admin-refresh-button/index.vue';
 
   const appStore = useAppStore();
   const { currentLocale, changeLocale } = useLocale();
