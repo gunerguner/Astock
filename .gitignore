@@ -67,3 +67,15 @@ dmypy.json
 .pytest_cache/
 .coverage
 htmlcov/
+
+# SQLite / 缓存数据库
+cache/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Logs
+logs/

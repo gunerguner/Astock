@@ -1,116 +1,123 @@
 # Astock
 
-Astock 是一个用于统计 A 股历史行情的命令行脚本，当前支持从 BaoStock 拉取历史日线数据，并围绕预设牛市区间输出统计结果。
+Astock 是一个 A 股历史行情数据平台，基于 FastAPI + SQLite 构建，支持从 BaoStock / 腾讯行情增量拉取数据并缓存到本地数据库。
 
 ## 功能特性
 
-- 统计上证指数收盘价超过指定点位的交易日数量，默认阈值为 `4000` 点。
-- 统计上证、深证、创业板成交额合计超过指定金额的交易日数量，默认阈值为 `2` 万亿元。
-- 分别输出 2007-2008 年、2015 年、2025 年三个牛市区间内的命中交易日数量和最高值。
-- 在成交额模式下额外输出成交额 Top 记录，口径为“上证 + 深证”。
+- 全市场成交额（上证 + 深证 + 创业板）增量导入与 SQLite 缓存
+- 上证指数收盘价增量导入与缓存
+- 大市值个股高水位成交额切片（≥300亿）导入
+- 统一 REST API，支持按数据集类型触发导入
+
+## 数据源说明
+
+| 数据 | 来源 | 说明 |
+| --- | --- | --- |
+| 指数成交额 / 点位 | BaoStock | `astock/sources/baostock_client.py` |
+| 全市场股票代码清单 | BaoStock `query_all_stock` | 沪深主板/中小板/创业板/科创板，排除指数、基金、B股 |
+| 个股总市值快照 | 腾讯行情 `qt.gtimg.cn` | 无需鉴权，批量查询，用于大市值筛选 |
+| 个股历史日线成交额 | BaoStock `query_history_k_data_plus` | 替代 akshare，同一数据源，更稳定 |
+
+> 曾评估 akshare（东方财富数据源）用于大市值快照与个股日线，实测在当前网络环境下请求经常被中断（`Connection aborted`），根因在东方财富接口侧的限流/反爬，绕过 akshare 直连同一接口依旧不稳定。现已改为 BaoStock + 腾讯行情组合方案，两者均验证稳定可用。
 
 ## 环境要求
 
-- Python 3.10 或更高版本（代码使用了 `float | None` 类型标注语法）。
-- 可访问 BaoStock 数据服务的网络环境。
+- Python 3.10+
+- 可访问 BaoStock / 腾讯行情数据服务的网络环境
 
 ## 安装依赖
-
-建议先创建并启用虚拟环境：
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-```
-
-安装依赖：
-
-```bash
 pip install -r requirements.txt
 ```
 
-## 使用方法
-
-查看帮助信息：
+复制环境变量配置：
 
 ```bash
-python main.py --help
+cp .env.example .env
 ```
 
-### 点位统计模式
-
-默认运行即为点位统计模式，统计上证指数收盘价超过 `4000` 点的情况：
+## 启动服务
 
 ```bash
 python main.py
 ```
 
-也可以显式指定点位模式：
+默认监听 `http://0.0.0.0:8000`，可通过 `.env` 中 `FASTAPI_PORT` 修改。
+
+## API 接口
+
+### 数据导入
 
 ```bash
-python main.py --point
+# 导入全部数据集（turnover → point → stock）
+curl -X POST "http://localhost:8000/api/v1/admin/data/import?dataset=all"
+
+# 仅导入全市场成交额
+curl -X POST "http://localhost:8000/api/v1/admin/data/import?dataset=turnover"
+
+# 仅导入上证点位
+curl -X POST "http://localhost:8000/api/v1/admin/data/import?dataset=point"
+
+# 仅导入个股成交额切片
+curl -X POST "http://localhost:8000/api/v1/admin/data/import?dataset=stock"
 ```
 
-指定自定义点位阈值，例如统计超过 `3500` 点的情况：
+响应格式：
 
-```bash
-python main.py --point 3500
+```json
+{
+  "code": 0,
+  "message": "success",
+  "data": {
+    "imported": 123,
+    "total": 4567,
+    "last_date": "2026-07-04",
+    "status": "success",
+    "elapsed": 12.34
+  }
+}
 ```
 
-### 成交额统计模式
+### 交互式文档
 
-使用默认成交额阈值 `2` 万亿元：
-
-```bash
-python main.py --turnover
-```
-
-指定自定义成交额阈值，单位为“元”。例如统计超过 `1.5` 万亿元的情况：
-
-```bash
-python main.py --turnover 1500000000000
-```
-
-## 输出说明
-
-程序会打印以下信息：
-
-1. 数据获取进度和耗时。
-2. 各牛市区间内超过阈值的交易日数量。
-3. 各牛市区间内对应指标的最高值。
-4. 三个牛市区间的合计交易日数量。
-5. 成交额模式下的成交额 Top 记录。
-
-## 配置说明
-
-主要配置项位于 `astock/config.py`：
-
-| 配置项 | 默认值 | 说明 |
-| --- | --- | --- |
-| `THRESHOLD_POINT` | `4000` | 点位模式默认阈值。 |
-| `TURNOVER_THRESHOLD` | `2_000_000_000_000` | 成交额模式默认阈值，单位为元。 |
-| `START_DATE` | `2005-01-01` | 历史数据查询起始日期。 |
-| `BULL_MARKETS` | 见源码 | 需要统计的牛市区间。 |
-
-如需调整默认阈值或牛市区间，可以直接修改这些配置项。
+启动后访问 [http://localhost:8000/docs](http://localhost:8000/docs) 查看 Swagger UI。
 
 ## 项目结构
 
 ```text
 .
-├── main.py            # 命令行入口：参数解析、模式分发与 main()
+├── main.py                 # uvicorn 启动入口
 ├── astock/
-│   ├── __init__.py    # 包初始化
-│   ├── config.py      # 配置：阈值、起始日期、牛市区间定义
-│   ├── data.py        # 数据获取：baostock 会话与指数日线抓取
-│   ├── analysis.py    # 分析：牛市区间统计
-│   └── report.py      # 输出：金额格式化与统计结果打印
-├── requirements.txt   # Python 依赖列表
-└── README.md          # 项目说明文档
+│   ├── main.py             # FastAPI app
+│   ├── config.py           # 环境变量 + 业务常量
+│   ├── core/               # 数据库、异常、日志、装饰器
+│   ├── models/             # SQLModel 表定义
+│   ├── schemas/            # Pydantic 请求/响应
+│   ├── sources/            # 外部数据源客户端
+│   ├── services/           # 业务逻辑
+│   ├── routers/            # HTTP 路由
+│   └── common/             # 类型定义
+├── cache/astock.db         # SQLite 缓存库
+├── db.md                   # 技术方案文档
+└── requirements.txt
 ```
+
+## 配置说明
+
+| 配置项 | 默认值 | 说明 |
+| --- | --- | --- |
+| `DB_PATH` | `cache/astock.db` | SQLite 库路径 |
+| `FASTAPI_PORT` | `8000` | 服务端口 |
+| `START_DATE` | `2005-01-01` | 历史数据起始日期 |
+| `CANDIDATE_DAYS` | `200` | 个股扫描候选交易日数 |
+| `MARKET_CAP_THRESHOLD` | `1000亿` | 大市值过滤阈值 |
+| `STOCK_TURNOVER_SLICE_THRESHOLD` | `300亿` | 个股切片入库阈值 |
 
 ## 注意事项
 
-- BaoStock 查询依赖外部网络和服务可用性，运行失败时请先确认网络连接和 BaoStock 服务状态。
-- 成交额模式使用指数日线数据中的 `amount` 字段，并按上证、深证、创业板三类指数进行汇总。
-- 当前脚本以交易日数据为基础，非交易日不会产生统计记录。
+- SQLite 库文件 `cache/astock.db` 提交到 git，团队 clone 后增量更新即可
+- WAL 模式产生的 `-wal` / `-shm` 文件已加入 `.gitignore`
+- 个股导入（`dataset=stock`）需逐只拉取日线，可能耗时数分钟

@@ -1,4 +1,8 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+sqlmodel>=0.0.22
+pandas>=2.0.0
 baostock
-pandas
-akshare
-pyarrow
+httpx>=0.27.0
+python-dotenv>=1.0.0
+PyYAML>=6.0
