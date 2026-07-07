@@ -28,6 +28,7 @@ from astock.services.price_utils import (
     sorted_dates,
     write_recent_closes_cache,
 )
+from astock.services.sync_store import batch_upsert, get_sync_meta, upsert_sync_meta
 from astock.sources.akshare_client import fetch_all_assets
 
 logger = logging.getLogger(__name__)
@@ -108,8 +109,6 @@ def _backfill_from_akshare(
 
 
 def refresh_asset_highs(db: Session) -> dict[str, Any]:
-    from astock.services.import_service import _batch_upsert, get_sync_meta, upsert_sync_meta
-
     meta = get_sync_meta(db, "asset_high")
     if (
         meta
@@ -168,7 +167,7 @@ def refresh_asset_highs(db: Session) -> dict[str, Any]:
         )
 
     imported = (
-        _batch_upsert(db, AssetHigh, records, ["ticker"], commit_mode="single")
+        batch_upsert(db, AssetHigh, records, ["ticker"], commit_mode="single")
         if records
         else 0
     )
@@ -240,8 +239,6 @@ def _pending_item(asset: dict[str, str]) -> dict[str, Any]:
 
 
 def get_price_levels(db: Session, *, force_refresh: bool = False) -> dict[str, Any]:
-    from astock.services.import_service import get_sync_meta
-
     rows = db.exec(select(AssetHigh)).all()
     if not rows and not force_refresh:
         meta = get_sync_meta(db, "asset_high")

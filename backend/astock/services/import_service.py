@@ -4,13 +4,11 @@ import logging
 import time
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from typing import Any, Literal
+from typing import Any
 
 import baostock as bs
 import baostock.common.context as bs_context
-from sqlalchemy import func
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from astock.config import (
     MARKET_CAP_THRESHOLD,
@@ -21,10 +19,18 @@ from astock.config import (
 from astock.core.exceptions import ExternalSourceAppError
 from astock.models.point import Point
 from astock.models.stock_turnover import StockTurnover
-from astock.models.sync_meta import SyncMeta
 from astock.models.turnover import Turnover
 from astock.schemas.imports import ImportDataset
+from astock.services.global_asset_service import refresh_asset_highs
 from astock.services.price_utils import iso_now
+from astock.services.sync_store import (
+    batch_upsert,
+    count_rows,
+    get_last_date,
+    get_sync_meta,
+    get_sync_start_date,
+    upsert_sync_meta,
+)
 from astock.sources.baostock_client import (
     BaostockClient,
     _SOCKET_TIMEOUT_SECONDS,
@@ -40,7 +46,6 @@ baostock_client = BaostockClient()
 tencent_client = TencentQuoteClient()
 
 STOCK_UPSERT_FLUSH_SIZE = 5000
-CommitMode = Literal["per_batch", "single"]
 
 
 def _baostock_worker_init() -> None:
@@ -63,85 +68,6 @@ def _fetch_stock_amount_worker(
         return code, fr
     except Exception as e:
         return code, SourceFetchResult(records=[], ok=False, errors=[str(e)])
-
-
-def get_last_date(db: Session, model: type) -> str | None:
-    return db.exec(select(func.max(model.date))).one()
-
-
-def get_sync_meta(db: Session, table_name: str) -> SyncMeta | None:
-    return db.exec(
-        select(SyncMeta).where(SyncMeta.table_name == table_name)
-    ).first()
-
-
-def get_sync_start_date(db: Session, table_name: str) -> str:
-    meta = get_sync_meta(db, table_name)
-    if meta and meta.last_synced_date:
-        return meta.last_synced_date
-    return START_DATE
-
-
-def upsert_sync_meta(
-    db: Session,
-    table_name: str,
-    *,
-    last_synced_date: str | None,
-    status: str,
-    error: str | None = None,
-) -> str:
-    meta = get_sync_meta(db, table_name) or SyncMeta(table_name=table_name)
-    synced_at = iso_now()
-    meta.last_synced_date = last_synced_date
-    meta.last_synced_at = synced_at
-    meta.last_status = status
-    meta.last_error = error
-    db.merge(meta)
-    db.commit()
-    return synced_at
-
-
-def _count_rows(db: Session, model: type) -> int:
-    return db.exec(select(func.count()).select_from(model)).one()
-
-
-def _batch_upsert(
-    db: Session,
-    model: type,
-    records: list[dict[str, Any]],
-    conflict_cols: list[str],
-    *,
-    batch_size: int = 500,
-    commit_mode: CommitMode = "per_batch",
-) -> int:
-    if not records:
-        return 0
-
-    total = 0
-    table = model.__table__
-    try:
-        for i in range(0, len(records), batch_size):
-            batch = records[i : i + batch_size]
-            stmt = sqlite_insert(table).values(batch)
-            update_cols = {
-                col.name: stmt.excluded[col.name]
-                for col in table.columns
-                if col.name not in conflict_cols
-            }
-            stmt = stmt.on_conflict_do_update(
-                index_elements=conflict_cols,
-                set_=update_cols,
-            )
-            db.exec(stmt)
-            if commit_mode == "per_batch":
-                db.commit()
-            total += len(batch)
-        if commit_mode == "single":
-            db.commit()
-    except Exception:
-        db.rollback()
-        raise
-    return total
 
 
 def _resolve_status(ok: bool, imported: int) -> str:
@@ -187,7 +113,7 @@ def _import_simple_dataset(
     start_date = get_sync_start_date(db, table_name)
 
     fr = fetch(start_date)
-    imported = _batch_upsert(
+    imported = batch_upsert(
         db,
         model,
         fr.records,
@@ -207,7 +133,7 @@ def _import_simple_dataset(
 
     result = _build_result(
         imported=imported,
-        total=_count_rows(db, model),
+        total=count_rows(db, model),
         last_date=last_date,
         ok=fr.ok,
         source_errors=fr.to_error_map(source_key),
@@ -262,7 +188,7 @@ def import_stock(db: Session) -> dict[str, Any]:
     start_ts = time.perf_counter()
     errors: list[str] = []
 
-    turnover_count = _count_rows(db, Turnover)
+    turnover_count = count_rows(db, Turnover)
     if turnover_count == 0:
         import_turnover(db)
 
@@ -285,7 +211,7 @@ def import_stock(db: Session) -> dict[str, Any]:
         )
         result = _build_result(
             imported=0,
-            total=_count_rows(db, StockTurnover),
+            total=count_rows(db, StockTurnover),
             last_date=stock_last_date,
             ok=True,
             source_errors={"stock": None},
@@ -340,7 +266,7 @@ def import_stock(db: Session) -> dict[str, Any]:
         nonlocal imported, record_buffer
         if not record_buffer:
             return
-        imported += _batch_upsert(
+        imported += batch_upsert(
             db,
             StockTurnover,
             record_buffer,
@@ -404,7 +330,7 @@ def import_stock(db: Session) -> dict[str, Any]:
 
     result = _build_result(
         imported=imported,
-        total=_count_rows(db, StockTurnover),
+        total=count_rows(db, StockTurnover),
         last_date=as_of_date,
         ok=ok,
         source_errors={"stock": "; ".join(all_errors[:5]) if all_errors else None},
@@ -429,8 +355,6 @@ def import_stock(db: Session) -> dict[str, Any]:
 
 
 def import_global_assets(db: Session) -> dict[str, Any]:
-    from astock.services.global_asset_service import refresh_asset_highs
-
     start_ts = time.perf_counter()
     result = refresh_asset_highs(db)
     elapsed = time.perf_counter() - start_ts

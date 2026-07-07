@@ -1,4 +1,4 @@
-import axios from 'axios';
+import request from './request';
 
 export interface BullMarketItem {
   market: string;
@@ -43,20 +43,27 @@ export interface StockRanking {
   items: StockRankingItem[];
 }
 
-export function fetchBullMarketPointStats(threshold: number) {
-  return axios.get<BullMarketStats>('/analysis/bull-markets/point', {
+export function fetchBullMarketPointStats(
+  threshold: number
+): Promise<BullMarketStats> {
+  return request.get('/analysis/bull-markets/point', {
     params: { threshold },
   });
 }
 
-export function fetchBullMarketTurnoverStats(threshold: number) {
-  return axios.get<BullMarketStats>('/analysis/bull-markets/turnover', {
+export function fetchBullMarketTurnoverStats(
+  threshold: number
+): Promise<BullMarketStats> {
+  return request.get('/analysis/bull-markets/turnover', {
     params: { threshold },
   });
 }
 
-export function fetchTurnoverRanking(top: number, bullMarket?: string) {
-  return axios.get<TurnoverRanking>('/analysis/turnover/ranking', {
+export function fetchTurnoverRanking(
+  top: number,
+  bullMarket?: string
+): Promise<TurnoverRanking> {
+  return request.get('/analysis/turnover/ranking', {
     params: {
       top,
       bull_market: bullMarket && bullMarket !== 'all' ? bullMarket : undefined,
@@ -64,8 +71,11 @@ export function fetchTurnoverRanking(top: number, bullMarket?: string) {
   });
 }
 
-export function fetchStockRanking(top: number, bullMarket?: string) {
-  return axios.get<StockRanking>('/analysis/stock/ranking', {
+export function fetchStockRanking(
+  top: number,
+  bullMarket?: string
+): Promise<StockRanking> {
+  return request.get('/analysis/stock/ranking', {
     params: {
       top,
       bull_market: bullMarket && bullMarket !== 'all' ? bullMarket : undefined,
@@ -96,8 +106,10 @@ export interface AssetPriceLevels {
   cache_errors?: string[] | null;
 }
 
-export function fetchAssetPriceLevels(forceRefresh = false) {
-  return axios.get<AssetPriceLevels>('/analysis/asset-price-levels', {
+export function fetchAssetPriceLevels(
+  forceRefresh = false
+): Promise<AssetPriceLevels> {
+  return request.get('/analysis/asset-price-levels', {
     params: { force_refresh: forceRefresh || undefined },
   });
 }
@@ -127,8 +139,10 @@ export interface MarketOverview {
   errors?: string[] | null;
 }
 
-export function fetchMarketOverview(forceRefresh = false) {
-  return axios.get<MarketOverview>('/analysis/market-overview', {
+export function fetchMarketOverview(
+  forceRefresh = false
+): Promise<MarketOverview> {
+  return request.get('/analysis/market-overview', {
     params: { force_refresh: forceRefresh || undefined },
   });
 }

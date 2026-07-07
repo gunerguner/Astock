@@ -37,8 +37,7 @@ export default function useAdminDataRefresh() {
     refreshing.value = true;
 
     try {
-      const res = await refreshAllDataApi();
-      const result = res.data;
+      const result = await refreshAllDataApi();
       const detailLines = collectSourceNotes(result);
       const content =
         detailLines.length > 0 ? detailLines.join('\n') : undefined;

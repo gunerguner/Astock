@@ -41,6 +41,7 @@
         :data="mergedRows"
         :loading="loading"
         :pagination="false"
+        :scroll="tableScrollX"
         row-key="market"
       />
     </a-card>
@@ -56,7 +57,9 @@
     type BullMarketStats,
   } from '@/api/analysis';
   import { fetchSyncStatusApi, type SyncStatus } from '@/api/admin';
+  import useAsyncRequest from '@/hooks/async-request';
   import { formatAmount, formatPeriod, formatPoint } from '@/utils/format';
+  import tableScrollX from '@/utils/table';
   import formatSyncMeta from '@/utils/sync-meta';
 
   defineOptions({
@@ -74,13 +77,28 @@
     turnoverMax: number | null;
   }
 
+  interface BullStatsPair {
+    point: BullMarketStats;
+    turnover: BullMarketStats;
+  }
+
   const filterForm = reactive({
     pointThreshold: 4000,
     turnoverThresholdTrillion: 2,
   });
-  const loading = ref(false);
-  const pointStats = ref<BullMarketStats | null>(null);
-  const turnoverStats = ref<BullMarketStats | null>(null);
+  const {
+    loading,
+    data: statsData,
+    run: loadStats,
+  } = useAsyncRequest(async (): Promise<BullStatsPair> => {
+    const [point, turnover] = await Promise.all([
+      fetchBullMarketPointStats(filterForm.pointThreshold),
+      fetchBullMarketTurnoverStats(filterForm.turnoverThresholdTrillion * 1e12),
+    ]);
+    return { point, turnover };
+  });
+  const pointStats = computed(() => statsData.value?.point ?? null);
+  const turnoverStats = computed(() => statsData.value?.turnover ?? null);
   const syncStatus = ref<SyncStatus | null>(null);
 
   const metaText = computed(() =>
@@ -96,10 +114,12 @@
 
   const mergedRows = computed<MergedRow[]>(() => {
     const base = pointStats.value?.items ?? turnoverStats.value?.items ?? [];
+    const turnoverByMarket = new Map(
+      (turnoverStats.value?.items ?? []).map((item) => [item.market, item])
+    );
+
     return base.map((item) => {
-      const turnoverItem = turnoverStats.value?.items.find(
-        (t) => t.market === item.market
-      );
+      const turnoverItem = turnoverByMarket.get(item.market);
       return {
         market: item.market,
         start: item.start,
@@ -147,26 +167,9 @@
     },
   ];
 
-  const loadStats = async () => {
-    loading.value = true;
-    try {
-      const [pointRes, turnoverRes] = await Promise.all([
-        fetchBullMarketPointStats(filterForm.pointThreshold),
-        fetchBullMarketTurnoverStats(
-          filterForm.turnoverThresholdTrillion * 1e12
-        ),
-      ]);
-      pointStats.value = pointRes.data;
-      turnoverStats.value = turnoverRes.data;
-    } finally {
-      loading.value = false;
-    }
-  };
-
   const loadSyncStatus = async () => {
     try {
-      const res = await fetchSyncStatusApi();
-      syncStatus.value = res.data;
+      syncStatus.value = await fetchSyncStatusApi();
     } catch {
       // 静默失败，不影响主要数据展示
     }

@@ -1,4 +1,4 @@
-import axios from 'axios';
+import request from './request';
 
 const REFRESH_TIMEOUT = 5 * 60 * 1000;
 
@@ -22,14 +22,14 @@ export interface ImportAllResult {
   status: ImportStatus;
 }
 
-export function refreshAllDataApi() {
-  return axios.post<ImportAllResult>('/admin/data/import', null, {
+export function refreshAllDataApi(): Promise<ImportAllResult> {
+  return request.post('/admin/data/import', null, {
     timeout: REFRESH_TIMEOUT,
   });
 }
 
-export function refreshGlobalAssetsApi() {
-  return axios.post<ImportResultItem>('/admin/data/import', null, {
+export function refreshGlobalAssetsApi(): Promise<ImportResultItem> {
+  return request.post('/admin/data/import', null, {
     params: { dataset: 'global_assets' },
     timeout: REFRESH_TIMEOUT,
   });
@@ -48,6 +48,6 @@ export interface SyncStatus {
   global_assets: SyncStatusItem;
 }
 
-export function fetchSyncStatusApi() {
-  return axios.get<SyncStatus>('/admin/data/sync-status');
+export function fetchSyncStatusApi(): Promise<SyncStatus> {
+  return request.get('/admin/data/sync-status');
 }

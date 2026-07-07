@@ -8,7 +8,7 @@ import i18n from './locale';
 import directive from './directive';
 import App from './App.vue';
 import '@/assets/style/global.less';
-import '@/api/interceptor';
+import '@/api/request';
 
 const app = createApp(App);
 

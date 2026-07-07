@@ -1,34 +1,19 @@
 <template>
   <div class="page-container">
-    <a-row :gutter="16">
-      <a-col :span="12">
-        <a-card title="大盘成交额排名" class="section-card">
+    <a-row :gutter="[16, 16]">
+      <a-col v-for="panel in panels" :key="panel.key" :xs="24" :md="12">
+        <a-card :title="panel.title" class="section-card">
           <template #extra>
-            <span v-if="turnoverMetaText" class="meta-text">{{
-              turnoverMetaText
-            }}</span>
+            <span v-if="panelMetaText(panel.syncKey)" class="meta-text">
+              {{ panelMetaText(panel.syncKey) }}
+            </span>
           </template>
           <a-table
-            :columns="marketColumns"
-            :data="marketRanking?.items ?? []"
-            :loading="marketLoading"
+            :columns="panel.columns"
+            :data="getPanelItems(panel)"
+            :loading="isPanelLoading(panel)"
             :pagination="false"
-            row-key="rank"
-          />
-        </a-card>
-      </a-col>
-      <a-col :span="12">
-        <a-card title="个股成交额排名" class="section-card">
-          <template #extra>
-            <span v-if="stockMetaText" class="meta-text">{{
-              stockMetaText
-            }}</span>
-          </template>
-          <a-table
-            :columns="stockColumns"
-            :data="stockRanking?.items ?? []"
-            :loading="stockLoading"
-            :pagination="false"
+            :scroll="tableScrollX"
             row-key="rank"
           />
         </a-card>
@@ -38,7 +23,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, onMounted, ref } from 'vue';
+  import { onMounted, ref, type Ref } from 'vue';
   import type { TableColumnData } from '@arco-design/web-vue';
   import {
     fetchStockRanking,
@@ -47,7 +32,9 @@
     type TurnoverRanking,
   } from '@/api/analysis';
   import { fetchSyncStatusApi, type SyncStatus } from '@/api/admin';
+  import useAsyncRequest from '@/hooks/async-request';
   import { formatAmount } from '@/utils/format';
+  import tableScrollX from '@/utils/table';
   import formatSyncMeta from '@/utils/sync-meta';
 
   defineOptions({
@@ -55,16 +42,21 @@
   });
 
   const DEFAULT_TOP = 20;
-  const marketLoading = ref(false);
-  const stockLoading = ref(false);
-  const marketRanking = ref<TurnoverRanking | null>(null);
-  const stockRanking = ref<StockRanking | null>(null);
-  const syncStatus = ref<SyncStatus | null>(null);
 
-  const turnoverMetaText = computed(() =>
-    formatSyncMeta(syncStatus.value?.turnover)
-  );
-  const stockMetaText = computed(() => formatSyncMeta(syncStatus.value?.stock));
+  type PanelSyncKey = 'turnover' | 'stock';
+
+  type RankingResult = TurnoverRanking | StockRanking;
+
+  interface RankingPanel {
+    key: string;
+    title: string;
+    columns: TableColumnData[];
+    syncKey: PanelSyncKey;
+    request: () => Promise<RankingResult>;
+    loading: Ref<boolean>;
+    data: Ref<RankingResult | null>;
+    run: () => Promise<RankingResult>;
+  }
 
   const marketColumns: TableColumnData[] = [
     { title: '排名', dataIndex: 'rank', width: 80 },
@@ -94,36 +86,46 @@
     },
   ];
 
-  const loadMarketRanking = async () => {
-    marketLoading.value = true;
-    try {
-      const res = await fetchTurnoverRanking(DEFAULT_TOP);
-      marketRanking.value = res.data;
-    } finally {
-      marketLoading.value = false;
-    }
-  };
+  const marketPanel = useAsyncRequest(() => fetchTurnoverRanking(DEFAULT_TOP));
+  const stockPanel = useAsyncRequest(() => fetchStockRanking(DEFAULT_TOP));
 
-  const loadStockRanking = async () => {
-    stockLoading.value = true;
-    try {
-      const res = await fetchStockRanking(DEFAULT_TOP);
-      stockRanking.value = res.data;
-    } finally {
-      stockLoading.value = false;
-    }
-  };
+  const panels: RankingPanel[] = [
+    {
+      key: 'market',
+      title: '大盘成交额排名',
+      columns: marketColumns,
+      syncKey: 'turnover',
+      request: () => fetchTurnoverRanking(DEFAULT_TOP),
+      ...marketPanel,
+    },
+    {
+      key: 'stock',
+      title: '个股成交额排名',
+      columns: stockColumns,
+      syncKey: 'stock',
+      request: () => fetchStockRanking(DEFAULT_TOP),
+      ...stockPanel,
+    },
+  ];
+
+  const syncStatus = ref<SyncStatus | null>(null);
+
+  const panelMetaText = (syncKey: PanelSyncKey) =>
+    formatSyncMeta(syncStatus.value?.[syncKey]);
+
+  const getPanelItems = (panel: RankingPanel) => panel.data.value?.items ?? [];
+
+  const isPanelLoading = (panel: RankingPanel) => panel.loading.value;
 
   const loadSyncStatus = async () => {
     try {
-      const res = await fetchSyncStatusApi();
-      syncStatus.value = res.data;
+      syncStatus.value = await fetchSyncStatusApi();
     } catch {
       // 静默失败，不影响主要数据展示
     }
   };
 
   onMounted(() => {
-    Promise.all([loadMarketRanking(), loadStockRanking(), loadSyncStatus()]);
+    Promise.all([...panels.map((panel) => panel.run()), loadSyncStatus()]);
   });
 </script>

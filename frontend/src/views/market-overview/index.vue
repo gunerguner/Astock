@@ -9,6 +9,7 @@
         :data="tableRows"
         :loading="loading"
         :pagination="false"
+        :scroll="tableScrollX"
         :span-method="spanMethod"
         :row-class="rowClass"
         row-key="key"
@@ -18,63 +19,47 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, h, onMounted, ref } from 'vue';
-  import type { TableColumnData, TableData } from '@arco-design/web-vue';
+  import { computed, h, onMounted } from 'vue';
+  import type { TableColumnData } from '@arco-design/web-vue';
+  import { fetchMarketOverview, type MarketOverviewItem } from '@/api/analysis';
+  import useAsyncRequest from '@/hooks/async-request';
   import {
-    fetchMarketOverview,
-    type MarketOverview,
-    type MarketOverviewItem,
-  } from '@/api/analysis';
+    isDividerRow,
+    toTableRow,
+    useDividerTable,
+    type BaseDividerRow,
+  } from '@/hooks/grouped-table';
+  import { formatPercent, formatPrice, getPercentColor } from '@/utils/format';
+  import tableScrollX from '@/utils/table';
 
   defineOptions({
     name: 'MarketOverview',
   });
 
-  interface DividerRow {
-    key: string;
-    rowKind: 'divider';
-    label: string;
+  interface DividerRow extends BaseDividerRow {
     periodText: string;
   }
 
   type TableRow = (MarketOverviewItem & { rowKind?: 'data' }) | DividerRow;
 
-  const loading = ref(false);
-  const overview = ref<MarketOverview | null>(null);
+  const {
+    loading,
+    data: overview,
+    run: loadOverview,
+  } = useAsyncRequest((forceRefresh?: boolean) =>
+    fetchMarketOverview(forceRefresh ?? false)
+  );
 
   const metaText = computed(() => {
     if (!overview.value?.latest_trading_date) return '';
     return `最新数据日期 ${overview.value.latest_trading_date}`;
   });
 
-  const formatPrice = (value: number | null) => {
-    if (value === null || value === undefined) return '--';
-    return value.toFixed(2);
-  };
-
-  const formatPct = (value: number | null) => {
-    if (value === null || value === undefined) return '--';
-    const prefix = value > 0 ? '+' : '';
-    return `${prefix}${value.toFixed(2)}%`;
-  };
-
-  const pctColor = (value: number | null) => {
-    if (value === null || value === undefined) return undefined;
-    if (value > 0) return '#00b42a';
-    if (value < 0) return '#f53f3f';
-    return undefined;
-  };
-
   const formatPeriod = (start: string | null, end: string | null) => {
     if (!start || !end) return '';
     if (start === end) return start;
     return `${start} 至 ${end}`;
   };
-
-  const isDividerRow = (record: TableRow): record is DividerRow =>
-    'rowKind' in record && record.rowKind === 'divider';
-
-  const toTableRow = (record: TableData): TableRow => record as TableRow;
 
   const tableRows = computed<TableRow[]>(() => {
     const categories = overview.value?.categories ?? [];
@@ -117,7 +102,7 @@
     {
       title: '资产',
       render: ({ record }) => {
-        const row = toTableRow(record);
+        const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) {
           const suffix = row.periodText ? `（${row.periodText}）` : '';
           return h(
@@ -135,7 +120,7 @@
     {
       title: '最新价',
       render: ({ record }) => {
-        const row = toTableRow(record);
+        const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) return null;
         if (row.error) return '数据获取失败';
         return formatPrice(row.current_price);
@@ -144,58 +129,30 @@
     {
       title: '日涨跌',
       render: ({ record }) => {
-        const row = toTableRow(record);
+        const row = toTableRow<TableRow>(record);
         if (isDividerRow(row) || row.error) return null;
         return h(
           'span',
-          { style: { color: pctColor(row.daily_change) } },
-          formatPct(row.daily_change)
+          { style: { color: getPercentColor(row.daily_change) } },
+          formatPercent(row.daily_change)
         );
       },
     },
     {
       title: '周涨跌',
       render: ({ record }) => {
-        const row = toTableRow(record);
+        const row = toTableRow<TableRow>(record);
         if (isDividerRow(row) || row.error) return null;
         return h(
           'span',
-          { style: { color: pctColor(row.weekly_change) } },
-          formatPct(row.weekly_change)
+          { style: { color: getPercentColor(row.weekly_change) } },
+          formatPercent(row.weekly_change)
         );
       },
     },
   ];
 
-  const spanMethod = ({
-    record,
-    columnIndex,
-  }: {
-    record: TableData;
-    columnIndex: number;
-  }) => {
-    const row = toTableRow(record);
-    if (isDividerRow(row)) {
-      if (columnIndex === 0) {
-        return { rowspan: 1, colspan: columns.length };
-      }
-      return { rowspan: 0, colspan: 0 };
-    }
-    return { rowspan: 1, colspan: 1 };
-  };
-
-  const rowClass = (record: TableData) =>
-    isDividerRow(toTableRow(record)) ? 'section-divider-row' : '';
-
-  const loadOverview = async (forceRefresh = false) => {
-    loading.value = true;
-    try {
-      const res = await fetchMarketOverview(forceRefresh);
-      overview.value = res.data;
-    } finally {
-      loading.value = false;
-    }
-  };
+  const { spanMethod, rowClass } = useDividerTable(columns);
 
   onMounted(() => {
     loadOverview();

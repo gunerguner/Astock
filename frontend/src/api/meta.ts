@@ -1,4 +1,4 @@
-import axios from 'axios';
+import request from './request';
 
 export interface BullMarketMetaItem {
   name: string;
@@ -11,6 +11,6 @@ export interface BullMarketsMeta {
   items: BullMarketMetaItem[];
 }
 
-export function fetchBullMarkets() {
-  return axios.get<BullMarketsMeta>('/meta/bull-markets');
+export function fetchBullMarkets(): Promise<BullMarketsMeta> {
+  return request.get('/meta/bull-markets');
 }

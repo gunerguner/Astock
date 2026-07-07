@@ -9,6 +9,7 @@
         :data="tableRows"
         :loading="loading"
         :pagination="false"
+        :scroll="tableScrollX"
         :span-method="spanMethod"
         :row-class="rowClass"
         row-key="key"
@@ -18,14 +19,22 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, h, onMounted, ref } from 'vue';
+  import { computed, h, onMounted } from 'vue';
   import { Tag } from '@arco-design/web-vue';
-  import type { TableColumnData, TableData } from '@arco-design/web-vue';
+  import type { TableColumnData } from '@arco-design/web-vue';
   import {
     fetchAssetPriceLevels,
     type AssetPriceLevelItem,
-    type AssetPriceLevels,
   } from '@/api/analysis';
+  import useAsyncRequest from '@/hooks/async-request';
+  import {
+    isDividerRow,
+    toTableRow,
+    useDividerTable,
+    type BaseDividerRow,
+  } from '@/hooks/grouped-table';
+  import { formatPercent, formatPrice, getPercentColor } from '@/utils/format';
+  import tableScrollX from '@/utils/table';
 
   defineOptions({
     name: 'AssetPriceLevels',
@@ -43,39 +52,22 @@
     'SPCX',
   ]);
 
-  interface DividerRow {
-    key: string;
-    rowKind: 'divider';
-    label: string;
-  }
+  type DividerRow = BaseDividerRow;
 
   type TableRow = (AssetPriceLevelItem & { key: string }) | DividerRow;
 
-  const loading = ref(false);
-  const levels = ref<AssetPriceLevels | null>(null);
+  const {
+    loading,
+    data: levels,
+    run: loadLevels,
+  } = useAsyncRequest((forceRefresh?: boolean) =>
+    fetchAssetPriceLevels(forceRefresh ?? false)
+  );
 
   const metaText = computed(() => {
     if (!levels.value?.latest_trading_date) return '';
     return `最新数据日期 ${levels.value.latest_trading_date}`;
   });
-
-  const formatPrice = (value: number | null) => {
-    if (value === null || value === undefined) return '--';
-    return value.toFixed(2);
-  };
-
-  const formatPct = (value: number | null) => {
-    if (value === null || value === undefined) return '--';
-    const prefix = value > 0 ? '+' : '';
-    return `${prefix}${value.toFixed(2)}%`;
-  };
-
-  const pctColor = (value: number | null) => {
-    if (value === null || value === undefined) return undefined;
-    if (value > 0) return '#00b42a';
-    if (value < 0) return '#f53f3f';
-    return undefined;
-  };
 
   const conclusionColor = (conclusion: string) => {
     if (conclusion === '待接入') return 'gray';
@@ -85,28 +77,44 @@
     return 'red';
   };
 
-  const isDividerRow = (record: TableRow): record is DividerRow =>
-    'rowKind' in record && record.rowKind === 'divider';
-
-  const toTableRow = (record: TableData): TableRow => record as TableRow;
-
   const isFocusedTicker = (ticker: string) => FOCUSED_TICKERS.has(ticker);
+
+  const sortByPercentageDiff = (
+    a: AssetPriceLevelItem,
+    b: AssetPriceLevelItem
+  ) => (a.percentage_diff ?? 0) - (b.percentage_diff ?? 0);
 
   const tableRows = computed<TableRow[]>(() => {
     const items = levels.value?.items ?? [];
-    const stockItems = items.filter((item) => item.asset_type === 'stock');
-    const pendingStocks = stockItems
-      .filter((item) => item.data_pending)
-      .map((item) => ({ ...item, key: item.ticker }));
-    const normalStocks = stockItems
-      .filter((item) => !item.data_pending)
-      .sort((a, b) => (a.percentage_diff ?? 0) - (b.percentage_diff ?? 0))
-      .map((item) => ({ ...item, key: item.ticker }));
-    const stocks = [...pendingStocks, ...normalStocks];
-    const metals = items
-      .filter((item) => item.asset_type === 'metal')
-      .sort((a, b) => (a.percentage_diff ?? 0) - (b.percentage_diff ?? 0))
-      .map((item) => ({ ...item, key: item.ticker }));
+    const groups = {
+      pendingStocks: [] as TableRow[],
+      normalStocks: [] as AssetPriceLevelItem[],
+      metals: [] as AssetPriceLevelItem[],
+    };
+
+    items.forEach((item) => {
+      if (item.asset_type === 'metal') {
+        groups.metals.push(item);
+      } else if (item.asset_type === 'stock') {
+        if (item.data_pending) {
+          groups.pendingStocks.push({ ...item, key: item.ticker });
+        } else {
+          groups.normalStocks.push(item);
+        }
+      }
+    });
+
+    const stocks = [
+      ...groups.pendingStocks,
+      ...groups.normalStocks.sort(sortByPercentageDiff).map((item) => ({
+        ...item,
+        key: item.ticker,
+      })),
+    ];
+    const metals = groups.metals.sort(sortByPercentageDiff).map((item) => ({
+      ...item,
+      key: item.ticker,
+    }));
 
     if (metals.length === 0) return stocks;
 
@@ -140,7 +148,7 @@
     {
       title: '资产',
       render: ({ record }) => {
-        const row = toTableRow(record);
+        const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) {
           return h('span', { class: 'section-divider-label' }, row.label);
         }
@@ -150,7 +158,7 @@
     {
       title: '当前参考价',
       render: ({ record }) => {
-        const row = toTableRow(record);
+        const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) return null;
         return formatPrice(row.current_price);
       },
@@ -158,7 +166,7 @@
     {
       title: '历史最高价',
       render: ({ record }) => {
-        const row = toTableRow(record);
+        const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) return null;
         return formatPrice(row.all_time_high);
       },
@@ -166,19 +174,19 @@
     {
       title: '距最高点',
       render: ({ record }) => {
-        const row = toTableRow(record);
+        const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) return null;
         return h(
           'span',
-          { style: { color: pctColor(row.percentage_diff) } },
-          formatPct(row.percentage_diff)
+          { style: { color: getPercentColor(row.percentage_diff) } },
+          formatPercent(row.percentage_diff)
         );
       },
     },
     {
       title: '距最高天数',
       render: ({ record }) => {
-        const row = toTableRow(record);
+        const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) return null;
         return row.ath_days ?? '--';
       },
@@ -186,31 +194,31 @@
     {
       title: '日涨跌',
       render: ({ record }) => {
-        const row = toTableRow(record);
+        const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) return null;
         return h(
           'span',
-          { style: { color: pctColor(row.daily_change) } },
-          formatPct(row.daily_change)
+          { style: { color: getPercentColor(row.daily_change) } },
+          formatPercent(row.daily_change)
         );
       },
     },
     {
       title: '周涨跌',
       render: ({ record }) => {
-        const row = toTableRow(record);
+        const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) return null;
         return h(
           'span',
-          { style: { color: pctColor(row.weekly_change) } },
-          formatPct(row.weekly_change)
+          { style: { color: getPercentColor(row.weekly_change) } },
+          formatPercent(row.weekly_change)
         );
       },
     },
     {
       title: '结论',
       render: ({ record }) => {
-        const row = toTableRow(record);
+        const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) return null;
         return h(
           Tag,
@@ -221,35 +229,7 @@
     },
   ];
 
-  const spanMethod = ({
-    record,
-    columnIndex,
-  }: {
-    record: TableData;
-    columnIndex: number;
-  }) => {
-    const row = toTableRow(record);
-    if (isDividerRow(row)) {
-      if (columnIndex === 0) {
-        return { rowspan: 1, colspan: columns.length };
-      }
-      return { rowspan: 0, colspan: 0 };
-    }
-    return { rowspan: 1, colspan: 1 };
-  };
-
-  const rowClass = (record: TableData) =>
-    isDividerRow(toTableRow(record)) ? 'section-divider-row' : '';
-
-  const loadLevels = async (forceRefresh = false) => {
-    loading.value = true;
-    try {
-      const res = await fetchAssetPriceLevels(forceRefresh);
-      levels.value = res.data;
-    } finally {
-      loading.value = false;
-    }
-  };
+  const { spanMethod, rowClass } = useDividerTable(columns);
 
   onMounted(() => {
     loadLevels();
