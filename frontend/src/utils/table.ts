@@ -1,4 +1,10 @@
-/** Arco Table 小屏横向滚动：列总宽超出容器时可滑动查看 */
-const tableScrollX = { x: 'max-content' } as const;
+import { computed } from 'vue';
+import { useAppStore } from '@/store';
 
-export default tableScrollX;
+/** 仅移动端启用横向滚动，桌面端表格自适应容器宽度 */
+export default function useTableScroll() {
+  const appStore = useAppStore();
+  return computed(() =>
+    appStore.device === 'mobile' ? { x: 'max-content' } : undefined
+  );
+}

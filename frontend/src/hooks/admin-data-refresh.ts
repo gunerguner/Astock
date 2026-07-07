@@ -5,23 +5,32 @@ import {
   type ImportAllResult,
   type ImportResultItem,
 } from '@/api/admin';
+import i18n from '@/locale';
 
-const DATASET_LABELS: Record<keyof Omit<ImportAllResult, 'status'>, string> = {
-  turnover: '成交额',
-  point: '上证点位',
-  stock: '个股切片',
-  global_assets: '全球资产',
-};
+const { t } = i18n.global;
+
+function getDatasetLabels(): Record<
+  keyof Omit<ImportAllResult, 'status'>,
+  string
+> {
+  return {
+    turnover: t('adminRefresh.dataset.turnover'),
+    point: t('adminRefresh.dataset.point'),
+    stock: t('adminRefresh.dataset.stock'),
+    global_assets: t('adminRefresh.dataset.globalAssets'),
+  };
+}
 
 function collectSourceNotes(result: ImportAllResult): string[] {
   const lines: string[] = [];
-  (Object.keys(DATASET_LABELS) as Array<keyof typeof DATASET_LABELS>).forEach(
+  const datasetLabels = getDatasetLabels();
+  (Object.keys(datasetLabels) as Array<keyof typeof datasetLabels>).forEach(
     (key) => {
       const item = result[key] as ImportResultItem | undefined;
       if (!item?.source_errors) return;
       Object.entries(item.source_errors).forEach(([source, message]) => {
         if (message) {
-          lines.push(`${DATASET_LABELS[key]}(${source}): ${message}`);
+          lines.push(`${datasetLabels[key]}(${source}): ${message}`);
         }
       });
     }
@@ -44,7 +53,7 @@ export default function useAdminDataRefresh() {
 
       if (result.status === 'failed') {
         Notification.error({
-          title: '数据刷新失败',
+          title: t('adminRefresh.notification.failedTitle'),
           content: content ?? '',
           duration: 8000,
         });
@@ -53,7 +62,7 @@ export default function useAdminDataRefresh() {
 
       if (result.status === 'partial_failure') {
         Notification.warning({
-          title: '数据部分刷新成功',
+          title: t('adminRefresh.notification.partialTitle'),
           content: content ?? '',
           duration: 8000,
         });
@@ -61,7 +70,7 @@ export default function useAdminDataRefresh() {
       }
 
       Notification.success({
-        title: '数据刷新成功',
+        title: t('adminRefresh.notification.successTitle'),
         content: '',
         duration: 3000,
       });

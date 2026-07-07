@@ -27,6 +27,10 @@
       });
 
       const topMenu = computed(() => appStore.topMenu);
+
+      const menuMode = computed(() =>
+        topMenu.value ? 'horizontal' : 'vertical'
+      );
       const openKeys = ref<string[]>([]);
       const selectedKey = ref<string[]>([]);
 
@@ -135,10 +139,11 @@
 
       return () => (
         <a-menu
-          mode={topMenu.value ? 'horizontal' : 'vertical'}
+          class={topMenu.value ? 'top-nav-menu' : ''}
+          mode={menuMode.value}
           v-model:collapsed={collapsed.value}
           v-model:open-keys={openKeys.value}
-          show-collapse-button={appStore.device !== 'mobile'}
+          show-collapse-button={!topMenu.value && appStore.device !== 'mobile'}
           auto-open={false}
           selected-keys={selectedKey.value}
           auto-open-selected={true}
@@ -158,11 +163,6 @@
     .arco-menu-inline-header {
       display: flex;
       align-items: center;
-    }
-    .arco-icon {
-      &:not(.arco-icon-down) {
-        font-size: 18px;
-      }
     }
   }
 </style>

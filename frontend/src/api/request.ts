@@ -1,5 +1,8 @@
 import axios, { type AxiosRequestConfig, type AxiosResponse } from 'axios';
 import { Message } from '@arco-design/web-vue';
+import i18n from '@/locale';
+
+const { t } = i18n.global;
 
 export interface ApiResponse<T = unknown> {
   code: number;
@@ -35,16 +38,20 @@ instance.interceptors.response.use(
     const res = response.data;
     if (res.code !== 0) {
       Message.error({
-        content: res.message || '请求失败',
+        content: res.message || t('common.requestFailed'),
         duration: 5 * 1000,
       });
-      return Promise.reject(new Error(res.message || '请求失败'));
+      return Promise.reject(
+        new Error(res.message || t('common.requestFailed'))
+      );
     }
     return res.data as unknown as AxiosResponse<ApiResponse>;
   },
   (error) => {
     const message =
-      error.response?.data?.message || error.message || '网络请求失败';
+      error.response?.data?.message ||
+      error.message ||
+      t('common.networkFailed');
     Message.error({
       content: message,
       duration: 5 * 1000,

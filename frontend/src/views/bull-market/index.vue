@@ -1,17 +1,24 @@
 <template>
   <div class="page-container">
-    <a-card title="A股牛市数据总览" class="section-card">
+    <a-card :title="$t('pages.bullMarket.title')" class="section-card">
       <template #extra>
         <span v-if="metaText" class="meta-text">{{ metaText }}</span>
         <span class="total-summary">
-          点位达标：<strong>{{ pointStats?.total_days ?? '-' }}</strong> 天
+          {{ $t('pages.bullMarket.pointStandardDays') }}
+          <strong>{{ pointStats?.total_days ?? '-' }}</strong>
+          {{ $t('pages.bullMarket.unitDays') }}
         </span>
         <span class="total-summary">
-          成交额达标：<strong>{{ turnoverStats?.total_days ?? '-' }}</strong> 天
+          {{ $t('pages.bullMarket.turnoverStandardDays') }}
+          <strong>{{ turnoverStats?.total_days ?? '-' }}</strong>
+          {{ $t('pages.bullMarket.unitDays') }}
         </span>
       </template>
       <a-form :model="filterForm" layout="inline" @submit-success="loadStats">
-        <a-form-item label="点位阈值" field="pointThreshold">
+        <a-form-item
+          :label="$t('pages.bullMarket.pointLabel')"
+          field="pointThreshold"
+        >
           <a-input-number
             v-model="filterForm.pointThreshold"
             :min="1"
@@ -20,7 +27,10 @@
             style="width: 200px"
           />
         </a-form-item>
-        <a-form-item label="成交额阈值(万亿)" field="turnoverThresholdTrillion">
+        <a-form-item
+          :label="$t('pages.bullMarket.turnoverLabel')"
+          field="turnoverThresholdTrillion"
+        >
           <a-input-number
             v-model="filterForm.turnoverThresholdTrillion"
             :min="0.01"
@@ -31,7 +41,7 @@
         </a-form-item>
         <a-form-item>
           <a-button type="primary" html-type="submit" :loading="loading">
-            查询
+            {{ $t('pages.bullMarket.query') }}
           </a-button>
         </a-form-item>
       </a-form>
@@ -41,7 +51,7 @@
         :data="mergedRows"
         :loading="loading"
         :pagination="false"
-        :scroll="tableScrollX"
+        :scroll="tableScroll"
         row-key="market"
       />
     </a-card>
@@ -49,7 +59,8 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, onMounted, reactive, ref } from 'vue';
+  import { computed, h, onMounted, reactive, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import type { TableColumnData } from '@arco-design/web-vue';
   import {
     fetchBullMarketPointStats,
@@ -58,9 +69,17 @@
   } from '@/api/analysis';
   import { fetchSyncStatusApi, type SyncStatus } from '@/api/admin';
   import useAsyncRequest from '@/hooks/async-request';
-  import { formatAmount, formatPeriod, formatPoint } from '@/utils/format';
-  import tableScrollX from '@/utils/table';
+  import {
+    formatAmount,
+    formatPeriod,
+    formatPoint,
+    numClass,
+  } from '@/utils/format';
+  import useTableScroll from '@/utils/table';
   import formatSyncMeta from '@/utils/sync-meta';
+
+  const { t } = useI18n();
+  const tableScroll = useTableScroll();
 
   defineOptions({
     name: 'BullMarket',
@@ -133,39 +152,55 @@
     });
   });
 
-  const mergedColumns: TableColumnData[] = [
-    { title: '牛市名称', dataIndex: 'market', width: 140 },
+  const mergedColumns = computed<TableColumnData[]>(() => [
     {
-      title: '区间',
+      title: t('pages.bullMarket.columns.market'),
+      dataIndex: 'market',
+      width: 140,
+    },
+    {
+      title: t('pages.bullMarket.columns.period'),
       render: ({ record }) => formatPeriod(record.start, record.end),
     },
     {
-      title: '点位维度',
+      title: t('pages.bullMarket.columns.pointDimension'),
       children: [
         {
-          title: '达标天数',
-          render: ({ record }) => formatDays(record.pointDays),
+          title: t('pages.bullMarket.columns.standardDays'),
+          align: 'right',
+          render: ({ record }) =>
+            h('span', { class: 'num' }, formatDays(record.pointDays)),
         },
         {
-          title: '最高点位',
-          render: ({ record }) => formatPoint(record.pointMax),
+          title: t('pages.bullMarket.columns.maxPoint'),
+          align: 'right',
+          render: ({ record }) =>
+            h(
+              'span',
+              { class: numClass(record.pointMax) },
+              formatPoint(record.pointMax)
+            ),
         },
       ],
     },
     {
-      title: '成交额维度',
+      title: t('pages.bullMarket.columns.turnoverDimension'),
       children: [
         {
-          title: '达标天数',
-          render: ({ record }) => formatDays(record.turnoverDays),
+          title: t('pages.bullMarket.columns.standardDays'),
+          align: 'right',
+          render: ({ record }) =>
+            h('span', { class: 'num' }, formatDays(record.turnoverDays)),
         },
         {
-          title: '最高成交额',
-          render: ({ record }) => formatAmount(record.turnoverMax),
+          title: t('pages.bullMarket.columns.maxTurnover'),
+          align: 'right',
+          render: ({ record }) =>
+            h('span', { class: 'num' }, formatAmount(record.turnoverMax)),
         },
       ],
     },
-  ];
+  ]);
 
   const loadSyncStatus = async () => {
     try {
@@ -187,22 +222,19 @@
     margin-bottom: 16px;
   }
 
-  .meta-text {
-    margin-right: 16px;
-  }
-
   .total-summary {
+    display: inline-flex;
+    align-items: center;
     color: var(--color-text-2);
-    font-size: 14px;
-    margin-left: 16px;
-
-    &:first-child {
-      margin-left: 0;
-    }
+    font-size: var(--fs-body);
+    line-height: var(--lh-title);
+    margin-left: 0;
 
     strong {
-      color: rgb(var(--primary-6));
-      font-size: 18px;
+      color: var(--brand-6);
+      font-size: var(--fs-title);
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: 'tnum';
     }
   }
 

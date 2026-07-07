@@ -1,4 +1,5 @@
 import type { SyncStatusItem } from '@/api/admin';
+import i18n from '@/locale';
 
 /**
  * 合并多个数据集的同步状态，取最新的数据日期，
@@ -16,5 +17,7 @@ export default function formatSyncMeta(
     .sort()
     .at(-1);
 
-  return latestDate ? `最新数据日期 ${latestDate}` : '';
+  return latestDate
+    ? i18n.global.t('common.metaLatestDate', { date: latestDate })
+    : '';
 }

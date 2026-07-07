@@ -1,9 +1,8 @@
 <template>
-  <a-tooltip content="刷新全部数据">
+  <a-tooltip :content="$t('adminRefresh.tooltip')">
     <a-button
-      class="nav-btn"
-      type="outline"
-      shape="circle"
+      class="nav-btn-ghost"
+      type="text"
       :disabled="refreshing"
       @click="openConfirmModal"
     >
@@ -15,20 +14,18 @@
 
   <a-modal
     v-model:visible="modalVisible"
-    title="确认刷新全部数据"
-    ok-text="确认刷新"
-    cancel-text="取消"
+    :title="$t('adminRefresh.modalTitle')"
+    :ok-text="$t('adminRefresh.okText')"
+    :cancel-text="$t('adminRefresh.cancelText')"
     :ok-button-props="{ status: 'danger' }"
     :ok-loading="refreshing"
     @ok="handleConfirm"
     @cancel="handleClose"
   >
-    <p class="refresh-hint">
-      此操作将从外部数据源重新拉取成交额、上证点位与个股切片数据，耗时较长。请输入密码以继续。
-    </p>
+    <p class="refresh-hint">{{ $t('adminRefresh.hint') }}</p>
     <a-input-password
       v-model="inputPassword"
-      placeholder="请输入密码"
+      :placeholder="$t('adminRefresh.passwordPlaceholder')"
       allow-clear
       @press-enter="handleConfirm"
     />
@@ -38,10 +35,12 @@
 <script lang="ts" setup>
   import { ref } from 'vue';
   import { Message } from '@arco-design/web-vue';
+  import { useI18n } from 'vue-i18n';
   import useAdminDataRefresh from '@/hooks/admin-data-refresh';
 
   const CONFIRM_PASSWORD = import.meta.env.VITE_ADMIN_REFRESH_PASSWORD ?? '';
 
+  const { t } = useI18n();
   const { refreshAllData, refreshing } = useAdminDataRefresh();
   const modalVisible = ref(false);
   const inputPassword = ref('');
@@ -59,11 +58,11 @@
 
   function handleConfirm() {
     if (!CONFIRM_PASSWORD) {
-      Message.error('未配置刷新密码');
+      Message.error(t('adminRefresh.missingPassword'));
       return false;
     }
     if (inputPassword.value !== CONFIRM_PASSWORD) {
-      Message.error('密码错误');
+      Message.error(t('adminRefresh.wrongPassword'));
       return false;
     }
     handleClose();
@@ -73,23 +72,9 @@
 </script>
 
 <style scoped lang="less">
-  .nav-btn {
-    border-color: rgb(var(--gray-2));
-    color: rgb(var(--gray-8));
-    font-size: 16px;
-    background-color: transparent;
-
-    &:hover,
-    &:focus-visible {
-      border-color: rgb(var(--gray-3));
-      color: rgb(var(--gray-8));
-      background-color: var(--color-fill-2);
-    }
-  }
-
   .refresh-hint {
     margin-bottom: 16px;
-    font-size: 14px;
+    font-size: var(--fs-body);
     color: var(--color-text-3);
   }
 </style>

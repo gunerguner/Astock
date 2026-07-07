@@ -1,3 +1,130 @@
+// ─── Design Tokens ───────────────────────────────────────────────
+
+.market-colors(@brand1, @brand6, @brand7, @up, @down, @upBg, @downBg) {
+  --brand-1: @brand1;
+  --brand-6: @brand6;
+  --brand-7: @brand7;
+  --up-color: @up;
+  --down-color: @down;
+  --up-bg: @upBg;
+  --down-bg: @downBg;
+}
+
+.arco-palette(@p1, @p2, @p3, @p4, @p5, @p6, @p7) {
+  --primary-1: @p1;
+  --primary-2: @p2;
+  --primary-3: @p3;
+  --primary-4: @p4;
+  --primary-5: @p5;
+  --primary-6: @p6;
+  --primary-7: @p7;
+  --arcoblue-1: @p1;
+  --arcoblue-2: @p2;
+  --arcoblue-3: @p3;
+  --arcoblue-4: @p4;
+  --arcoblue-5: @p5;
+  --arcoblue-6: @p6;
+  --arcoblue-7: @p7;
+}
+
+@light-arcoblue-1: 232, 238, 247;
+@light-arcoblue-2: 196, 214, 235;
+@light-arcoblue-3: 148, 180, 215;
+@light-arcoblue-4: 96, 140, 190;
+@light-arcoblue-5: 52, 105, 165;
+@light-arcoblue-6: 26, 75, 140;
+@light-arcoblue-7: 15, 58, 114;
+
+@dark-arcoblue-1: 26, 42, 64;
+@dark-arcoblue-2: 32, 58, 96;
+@dark-arcoblue-3: 42, 78, 130;
+@dark-arcoblue-4: 52, 100, 168;
+@dark-arcoblue-5: 56, 112, 190;
+@dark-arcoblue-6: 62, 122, 214;
+@dark-arcoblue-7: 90, 154, 232;
+
+:root {
+  --font-family-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-family-mono: 'SF Mono', 'JetBrains Mono', 'Roboto Mono', Menlo,
+    Consolas, monospace;
+
+  --fs-caption: 12px;
+  --fs-body: 13px;
+  --fs-title: 15px;
+  --fs-h5: 17px;
+
+  --lh-caption: 18px;
+  --lh-body: 20px;
+  --lh-title: 22px;
+  --lh-h5: 24px;
+
+  --navbar-height: 52px;
+
+  /* 浅色为默认；body 在 light 模式下通常无 arco-theme 属性 */
+  .market-colors(
+    #e8eef7,
+    #1a4b8c,
+    #0f3a72,
+    #e0463e,
+    #2ba471,
+    rgba(224, 70, 62, 0.08),
+    rgba(43, 164, 113, 0.08)
+  );
+  .arco-palette(
+    @light-arcoblue-1,
+    @light-arcoblue-2,
+    @light-arcoblue-3,
+    @light-arcoblue-4,
+    @light-arcoblue-5,
+    @light-arcoblue-6,
+    @light-arcoblue-7
+  );
+}
+
+// Arco 组件样式为按需注入，加载顺序常晚于本文件，
+// 同选择器的 CSS 变量会被其内置值覆盖，故此处用 !important 直接改颜色值
+.arco-tag.arco-tag-checked.arco-tag-arcoblue,
+.arco-tag.arco-tag-arcoblue {
+  color: var(--brand-6) !important;
+  background-color: var(--brand-1) !important;
+  border-color: transparent !important;
+
+  .arco-tag-icon,
+  .arco-tag-close-btn,
+  .arco-tag-loading-icon {
+    color: var(--brand-6) !important;
+  }
+}
+
+.focus-tag {
+  font-size: var(--fs-caption);
+  font-weight: 600;
+}
+
+body[arco-theme='dark'] {
+  .market-colors(
+    #1a2a40,
+    #3e7ad6,
+    #5a9ae8,
+    #f0635a,
+    #3fc57a,
+    rgba(240, 99, 90, 0.12),
+    rgba(63, 197, 122, 0.12)
+  );
+  .arco-palette(
+    @dark-arcoblue-1,
+    @dark-arcoblue-2,
+    @dark-arcoblue-3,
+    @dark-arcoblue-4,
+    @dark-arcoblue-5,
+    @dark-arcoblue-6,
+    @dark-arcoblue-7
+  );
+}
+
+// ─── Base ────────────────────────────────────────────────────────
+
 * {
   box-sizing: border-box;
 }
@@ -8,86 +135,366 @@ body {
   height: 100%;
   margin: 0;
   padding: 0;
-  font-size: 14px;
+  font-family: var(--font-family-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
   background-color: var(--color-bg-1);
   -moz-osx-font-smoothing: grayscale;
   -webkit-font-smoothing: antialiased;
 }
 
 .page-container {
-  padding: 16px 20px 20px;
+  padding: 20px 24px 24px;
 }
 
 @media (max-width: 768px) {
   .page-container {
     padding: 12px;
   }
+}
 
-  .section-card > .arco-card-header {
-    flex-wrap: wrap;
-    height: auto;
-    row-gap: 8px;
-  }
+// ─── Typography Utilities ────────────────────────────────────────
 
-  .section-card > .arco-card-header-extra {
-    flex-wrap: wrap;
-    gap: 8px;
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+.num-negative {
+  letter-spacing: -0.04em;
+}
+
+.pct-cell {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+.pct-up {
+  color: var(--up-color) !important;
+  background-color: var(--up-bg);
+}
+
+.pct-down {
+  color: var(--down-color) !important;
+  background-color: var(--down-bg);
+}
+
+.pct-flat {
+  color: var(--color-text-3);
+}
+
+.asset-name-text {
+  font-weight: 500;
+}
+
+.asset-name-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.asset-name-hover {
+  border-bottom: 1px dashed transparent;
+  cursor: default;
+  transition: color 0.15s, border-color 0.15s;
+
+  &:hover {
+    color: var(--brand-6);
+    border-bottom-color: var(--brand-6);
   }
 }
+
+.num-price {
+  color: var(--brand-6);
+  font-weight: 500;
+}
+
+// ─── Meta Text ───────────────────────────────────────────────────
+
+.meta-text {
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text-3);
+  font-size: var(--fs-caption);
+  line-height: 1;
+
+  &::before {
+    display: inline-block;
+    flex-shrink: 0;
+    width: 4px;
+    height: 4px;
+    margin-right: 6px;
+    border-radius: 50%;
+    background-color: var(--brand-6);
+    content: '';
+  }
+}
+
+// ─── Cards ───────────────────────────────────────────────────────
 
 .section-card {
   height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--color-border-1);
+  border-radius: 6px;
+  background: var(--color-bg-2);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+
+  > .arco-card-header {
+    display: flex;
+    align-items: center;
+    height: auto;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--color-border-1);
+    background: var(--color-bg-3);
+
+    .arco-card-header-title {
+      display: flex;
+      align-items: center;
+      color: var(--brand-6);
+      font-size: var(--fs-title);
+      line-height: var(--lh-title);
+      font-weight: 600;
+    }
+
+    .arco-card-header-extra {
+      display: inline-flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      line-height: var(--lh-title);
+    }
+  }
+
+  > .arco-card-body {
+    padding: 16px 20px 16px;
+  }
+
+  > .arco-card-body > .arco-table {
+    margin-top: 4px;
+  }
 }
 
-.meta-text {
-  color: var(--color-text-3);
-  font-size: 13px;
+@media (max-width: 768px) {
+  .section-card {
+    border-radius: 4px;
+
+    > .arco-card-header {
+      flex-wrap: wrap;
+      row-gap: 8px;
+      padding: 12px 16px;
+    }
+
+    > .arco-card-header-extra {
+      gap: 8px;
+    }
+
+    > .arco-card-body {
+      padding: 12px;
+    }
+  }
+}
+
+// ─── Table ───────────────────────────────────────────────────────
+
+.arco-table {
+  width: 100%;
+
+  table {
+    width: 100% !important;
+  }
+
+  .arco-table-th {
+    background-color: var(--brand-1);
+    color: var(--brand-7);
+    font-weight: 600;
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+    border-bottom: 1px solid var(--color-border-1);
+  }
+
+  .arco-table-th .arco-table-cell {
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .arco-table-td {
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+    border-bottom: 1px solid var(--color-border-1);
+  }
+
+  .arco-table-tr:not(.section-divider-row):hover .arco-table-td:not(.arco-table-col-fixed-left) {
+    background-color: var(--brand-1);
+  }
 }
 
 .section-divider-row {
   td {
-    background: var(--color-fill-2);
-    border-top: 1px solid var(--color-border-2);
-    border-bottom: 1px solid var(--color-border-2);
-    padding-top: 10px;
-    padding-bottom: 10px;
+    background: var(--brand-1);
+    border-top: 1px solid var(--color-border-1);
+    border-bottom: 1px solid var(--color-border-1);
+  }
+
+  .arco-table-cell {
+    padding-top: 4px;
+    padding-bottom: 4px;
   }
 }
 
 .section-divider-label {
-  color: var(--color-text-2);
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--brand-6);
+  font-size: var(--fs-body);
   font-weight: 600;
   letter-spacing: 0.02em;
-}
 
-.general-card {
-  border-radius: 4px;
-  border: none;
-  & > .arco-card-header {
-    height: auto;
-    padding: 20px;
-    border: none;
-  }
-  & > .arco-card-body {
-    padding: 0 20px 20px 20px;
-  }
-}
-
-.split-line {
-  border-color: rgb(var(--gray-2));
-}
-
-.arco-table-cell {
-  .circle {
+  &::before {
     display: inline-block;
-    margin-right: 4px;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background-color: rgb(var(--blue-6));
-    &.pass {
-      background-color: rgb(var(--green-6));
+    width: 3px;
+    height: 14px;
+    margin-right: 8px;
+    border-radius: 1px;
+    background-color: var(--brand-6);
+    content: '';
+  }
+}
+
+// ─── Top Nav Menu ────────────────────────────────────────────────
+
+.top-nav-menu.arco-menu-horizontal {
+  height: 100%;
+  background-color: transparent;
+  border-bottom: none !important;
+  line-height: 1;
+
+  .arco-menu-inner {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    padding: 0 !important;
+    overflow: visible;
+  }
+
+  .arco-menu-item,
+  .arco-menu-pop {
+    display: inline-flex !important;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .arco-menu-item {
+    height: 36px !important;
+    min-height: 36px;
+    margin: 0 2px !important;
+    padding: 0 10px !important;
+    line-height: 36px !important;
+    color: var(--color-text-2);
+    font-size: var(--fs-body);
+    background-color: transparent !important;
+    border-radius: 4px;
+
+    .arco-menu-icon {
+      margin-right: 4px !important;
+    }
+
+    .arco-icon:not(.arco-icon-down) {
+      margin-right: 0 !important;
+      font-size: 14px;
+    }
+
+    &:hover {
+      color: var(--brand-6);
+      background-color: var(--brand-1) !important;
+    }
+  }
+
+  .arco-menu-item.arco-menu-selected {
+    position: relative;
+    color: var(--brand-6) !important;
+    font-weight: 600;
+    background-color: transparent !important;
+    border-radius: 0;
+    box-shadow: none;
+
+    .arco-icon:not(.arco-icon-down) {
+      color: var(--brand-6);
+    }
+
+    // 禁用侧边栏遗留的左侧竖条
+    &::before {
+      display: none !important;
+    }
+
+    // 底部选中条
+    &::after {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 2px;
+      background-color: var(--brand-6);
+      border-radius: 0;
+      content: '';
+    }
+  }
+
+  // 禁用 Arco 水平菜单自带的底部选中条
+  .arco-menu-selected-label {
+    display: none !important;
+  }
+}
+
+// ─── Brand Primary Button & Tags ─────────────────────────────────
+
+.arco-btn-primary:not(.arco-btn-status-danger):not(:disabled) {
+  background-color: var(--brand-6);
+  border-color: var(--brand-6);
+
+  &:hover,
+  &:focus-visible {
+    background-color: var(--brand-7);
+    border-color: var(--brand-7);
+  }
+}
+
+// ─── Form ────────────────────────────────────────────────────────
+
+.arco-form-item-label {
+  color: var(--brand-7);
+  font-weight: 500;
+}
+
+// ─── Navbar Ghost Buttons ─────────────────────────────────────────
+
+.nav-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  color: var(--brand-6);
+  font-size: 16px;
+  background-color: transparent;
+
+  .arco-icon {
+    color: var(--brand-6);
+  }
+
+  &:hover,
+  &:focus-visible {
+    color: var(--brand-7);
+    background-color: var(--brand-1);
+
+    .arco-icon {
+      color: var(--brand-7);
     }
   }
 }

@@ -1,6 +1,6 @@
 <template>
   <div class="page-container">
-    <a-row :gutter="[16, 16]">
+    <a-row :gutter="[20, 20]">
       <a-col v-for="panel in panels" :key="panel.key" :xs="24" :md="12">
         <a-card :title="panel.title" class="section-card">
           <template #extra>
@@ -13,7 +13,7 @@
             :data="getPanelItems(panel)"
             :loading="isPanelLoading(panel)"
             :pagination="false"
-            :scroll="tableScrollX"
+            :scroll="tableScroll"
             row-key="rank"
           />
         </a-card>
@@ -23,7 +23,8 @@
 </template>
 
 <script lang="ts" setup>
-  import { onMounted, ref, type Ref } from 'vue';
+  import { computed, h, onMounted, ref, type Ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import type { TableColumnData } from '@arco-design/web-vue';
   import {
     fetchStockRanking,
@@ -34,8 +35,11 @@
   import { fetchSyncStatusApi, type SyncStatus } from '@/api/admin';
   import useAsyncRequest from '@/hooks/async-request';
   import { formatAmount } from '@/utils/format';
-  import tableScrollX from '@/utils/table';
+  import useTableScroll from '@/utils/table';
   import formatSyncMeta from '@/utils/sync-meta';
+
+  const { t } = useI18n();
+  const tableScroll = useTableScroll();
 
   defineOptions({
     name: 'TurnoverRank',
@@ -58,55 +62,80 @@
     run: () => Promise<RankingResult>;
   }
 
-  const marketColumns: TableColumnData[] = [
-    { title: '排名', dataIndex: 'rank', width: 80 },
-    { title: '日期', dataIndex: 'date' },
+  const marketColumns = computed<TableColumnData[]>(() => [
     {
-      title: '上证',
-      render: ({ record }) => formatAmount(record.sh_amount),
+      title: t('pages.turnoverRank.columns.rank'),
+      dataIndex: 'rank',
+      width: 72,
+      align: 'right',
+    },
+    { title: t('pages.turnoverRank.columns.date'), dataIndex: 'date' },
+    {
+      title: t('pages.turnoverRank.columns.sh'),
+      align: 'right',
+      render: ({ record }) =>
+        h('span', { class: 'num' }, formatAmount(record.sh_amount)),
     },
     {
-      title: '深证',
-      render: ({ record }) => formatAmount(record.sz_amount),
+      title: t('pages.turnoverRank.columns.sz'),
+      align: 'right',
+      render: ({ record }) =>
+        h('span', { class: 'num' }, formatAmount(record.sz_amount)),
     },
     {
-      title: '合计成交额',
-      render: ({ record }) => formatAmount(record.turnover),
+      title: t('pages.turnoverRank.columns.total'),
+      align: 'right',
+      render: ({ record }) =>
+        h('span', { class: 'num' }, formatAmount(record.turnover)),
     },
-  ];
+  ]);
 
-  const stockColumns: TableColumnData[] = [
-    { title: '排名', dataIndex: 'rank', width: 80 },
-    { title: '日期', dataIndex: 'date' },
-    { title: '股票代码', dataIndex: 'code' },
-    { title: '股票名称', dataIndex: 'name' },
+  const stockColumns = computed<TableColumnData[]>(() => [
     {
-      title: '成交额',
-      render: ({ record }) => formatAmount(record.amount),
+      title: t('pages.turnoverRank.columns.rank'),
+      dataIndex: 'rank',
+      width: 72,
+      align: 'right',
     },
-  ];
+    { title: t('pages.turnoverRank.columns.date'), dataIndex: 'date' },
+    {
+      title: t('pages.turnoverRank.columns.stockName'),
+      dataIndex: 'name',
+    },
+    {
+      title: t('pages.turnoverRank.columns.stockCode'),
+      dataIndex: 'code',
+      width: 96,
+    },
+    {
+      title: t('pages.turnoverRank.columns.turnover'),
+      align: 'right',
+      render: ({ record }) =>
+        h('span', { class: 'num' }, formatAmount(record.amount)),
+    },
+  ]);
 
   const marketPanel = useAsyncRequest(() => fetchTurnoverRanking(DEFAULT_TOP));
   const stockPanel = useAsyncRequest(() => fetchStockRanking(DEFAULT_TOP));
 
-  const panels: RankingPanel[] = [
+  const panels = computed<RankingPanel[]>(() => [
     {
       key: 'market',
-      title: '大盘成交额排名',
-      columns: marketColumns,
+      title: t('pages.turnoverRank.marketTitle'),
+      columns: marketColumns.value,
       syncKey: 'turnover',
       request: () => fetchTurnoverRanking(DEFAULT_TOP),
       ...marketPanel,
     },
     {
       key: 'stock',
-      title: '个股成交额排名',
-      columns: stockColumns,
+      title: t('pages.turnoverRank.stockTitle'),
+      columns: stockColumns.value,
       syncKey: 'stock',
       request: () => fetchStockRanking(DEFAULT_TOP),
       ...stockPanel,
     },
-  ];
+  ]);
 
   const syncStatus = ref<SyncStatus | null>(null);
 
@@ -126,6 +155,9 @@
   };
 
   onMounted(() => {
-    Promise.all([...panels.map((panel) => panel.run()), loadSyncStatus()]);
+    Promise.all([
+      ...panels.value.map((panel) => panel.run()),
+      loadSyncStatus(),
+    ]);
   });
 </script>

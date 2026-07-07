@@ -1,6 +1,6 @@
 <template>
   <div class="page-container">
-    <a-card title="全球资产价格水位" class="section-card">
+    <a-card :title="$t('pages.assetPriceLevels.title')" class="section-card">
       <template #extra>
         <span v-if="metaText" class="meta-text">{{ metaText }}</span>
       </template>
@@ -9,7 +9,7 @@
         :data="tableRows"
         :loading="loading"
         :pagination="false"
-        :scroll="tableScrollX"
+        :scroll="tableScroll"
         :span-method="spanMethod"
         :row-class="rowClass"
         row-key="key"
@@ -20,6 +20,7 @@
 
 <script lang="ts" setup>
   import { computed, h, onMounted } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { Tag } from '@arco-design/web-vue';
   import type { TableColumnData } from '@arco-design/web-vue';
   import {
@@ -33,8 +34,18 @@
     useDividerTable,
     type BaseDividerRow,
   } from '@/hooks/grouped-table';
-  import { formatPercent, formatPrice, getPercentColor } from '@/utils/format';
-  import tableScrollX from '@/utils/table';
+  import {
+    formatPercent,
+    formatPrice,
+    getPercentClass,
+    numClass,
+    CONCLUSION_I18N_KEYS,
+  } from '@/utils/format';
+  import renderAssetNameWithTooltip from '@/utils/render-asset-cell';
+  import useTableScroll from '@/utils/table';
+
+  const { t } = useI18n();
+  const tableScroll = useTableScroll();
 
   defineOptions({
     name: 'AssetPriceLevels',
@@ -66,7 +77,9 @@
 
   const metaText = computed(() => {
     if (!levels.value?.latest_trading_date) return '';
-    return `最新数据日期 ${levels.value.latest_trading_date}`;
+    return t('common.metaLatestDate', {
+      date: levels.value.latest_trading_date,
+    });
   });
 
   const conclusionColor = (conclusion: string) => {
@@ -120,33 +133,35 @@
 
     return [
       ...stocks,
-      { key: 'divider-metal', rowKind: 'divider', label: '贵金属' },
+      {
+        key: 'divider-metal',
+        rowKind: 'divider',
+        label: t('pages.assetPriceLevels.metalDivider'),
+      },
       ...metals,
     ];
   });
 
   const renderAssetCell = (record: AssetPriceLevelItem) => {
-    return h('span', { class: 'asset-name-cell' }, [
-      h('span', { class: 'asset-name-text' }, record.name),
-      h('span', { class: 'asset-ticker-text' }, ` (${record.ticker})`),
+    return renderAssetNameWithTooltip(record.name, record.ticker, () =>
       isFocusedTicker(record.ticker)
         ? h(
             Tag,
             {
-              color: 'orangered',
+              color: 'arcoblue',
               size: 'small',
               class: 'focus-tag',
               style: { marginLeft: '8px' },
             },
-            () => '重点'
+            () => t('pages.assetPriceLevels.focusedTag')
           )
-        : null,
-    ]);
+        : null
+    );
   };
 
-  const columns: TableColumnData[] = [
+  const columns = computed<TableColumnData[]>(() => [
     {
-      title: '资产',
+      title: t('pages.assetPriceLevels.columns.asset'),
       render: ({ record }) => {
         const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) {
@@ -156,78 +171,90 @@
       },
     },
     {
-      title: '当前参考价',
-      render: ({ record }) => {
-        const row = toTableRow<TableRow>(record);
-        if (isDividerRow(row)) return null;
-        return formatPrice(row.current_price);
-      },
-    },
-    {
-      title: '历史最高价',
-      render: ({ record }) => {
-        const row = toTableRow<TableRow>(record);
-        if (isDividerRow(row)) return null;
-        return formatPrice(row.all_time_high);
-      },
-    },
-    {
-      title: '距最高点',
+      title: t('pages.assetPriceLevels.columns.currentPrice'),
+      align: 'right',
       render: ({ record }) => {
         const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) return null;
         return h(
           'span',
-          { style: { color: getPercentColor(row.percentage_diff) } },
+          { class: `num-price ${numClass(row.current_price)}` },
+          formatPrice(row.current_price)
+        );
+      },
+    },
+    {
+      title: t('pages.assetPriceLevels.columns.athPrice'),
+      align: 'right',
+      render: ({ record }) => {
+        const row = toTableRow<TableRow>(record);
+        if (isDividerRow(row)) return null;
+        return h(
+          'span',
+          { class: numClass(row.all_time_high) },
+          formatPrice(row.all_time_high)
+        );
+      },
+    },
+    {
+      title: t('pages.assetPriceLevels.columns.athDiff'),
+      align: 'right',
+      render: ({ record }) => {
+        const row = toTableRow<TableRow>(record);
+        if (isDividerRow(row)) return null;
+        return h(
+          'span',
+          { class: getPercentClass(row.percentage_diff) },
           formatPercent(row.percentage_diff)
         );
       },
     },
     {
-      title: '距最高天数',
+      title: t('pages.assetPriceLevels.columns.athDays'),
+      align: 'right',
       render: ({ record }) => {
         const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) return null;
-        return row.ath_days ?? '--';
+        return h('span', { class: 'num' }, row.ath_days ?? '--');
       },
     },
     {
-      title: '日涨跌',
+      title: t('pages.assetPriceLevels.columns.dailyChange'),
+      align: 'right',
       render: ({ record }) => {
         const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) return null;
         return h(
           'span',
-          { style: { color: getPercentColor(row.daily_change) } },
+          { class: getPercentClass(row.daily_change) },
           formatPercent(row.daily_change)
         );
       },
     },
     {
-      title: '周涨跌',
+      title: t('pages.assetPriceLevels.columns.weeklyChange'),
+      align: 'right',
       render: ({ record }) => {
         const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) return null;
         return h(
           'span',
-          { style: { color: getPercentColor(row.weekly_change) } },
+          { class: getPercentClass(row.weekly_change) },
           formatPercent(row.weekly_change)
         );
       },
     },
     {
-      title: '结论',
+      title: t('pages.assetPriceLevels.columns.conclusion'),
       render: ({ record }) => {
         const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) return null;
-        return h(
-          Tag,
-          { color: conclusionColor(row.conclusion) },
-          () => row.conclusion
-        );
+        const conclusionKey = CONCLUSION_I18N_KEYS[row.conclusion];
+        const label = conclusionKey ? t(conclusionKey) : row.conclusion;
+        return h(Tag, { color: conclusionColor(row.conclusion) }, () => label);
       },
     },
-  ];
+  ]);
 
   const { spanMethod, rowClass } = useDividerTable(columns);
 
@@ -235,17 +262,3 @@
     loadLevels();
   });
 </script>
-
-<style scoped lang="less">
-  .asset-name-cell {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .focus-tag {
-    color: #fadb14;
-    font-size: 15px;
-    font-weight: 600;
-  }
-</style>

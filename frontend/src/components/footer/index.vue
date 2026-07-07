@@ -19,16 +19,19 @@
 
 <script lang="ts" setup>
   import { computed } from 'vue';
+  import { useI18n } from 'vue-i18n';
 
   const START_YEAR = 2020;
   const CURRENT_YEAR = new Date().getFullYear();
 
+  const { t } = useI18n();
+
   const copyright = computed(() => {
-    const yearRange =
+    const range =
       CURRENT_YEAR > START_YEAR
         ? `${START_YEAR}-${CURRENT_YEAR}`
         : `${START_YEAR}`;
-    return `${yearRange} 溯宁`;
+    return t('footer.copyright', { range });
   });
 
   const footerLinks = [
@@ -61,12 +64,13 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 16px 24px;
+    gap: 6px;
+    padding: 12px 24px;
     color: var(--color-text-3);
+    font-size: var(--fs-caption);
+    line-height: var(--lh-caption);
     text-align: center;
     background-color: var(--color-bg-2);
-    border-top: 1px solid var(--color-border);
   }
 
   .footer-links {
@@ -82,8 +86,8 @@
     align-items: center;
     padding: 0 12px;
     color: var(--color-text-3);
-    font-size: 14px;
-    line-height: 22px;
+    font-size: var(--fs-caption);
+    line-height: var(--lh-caption);
     text-decoration: none;
     transition: color 0.2s;
 
@@ -92,17 +96,17 @@
     }
 
     &:hover {
-      color: rgb(var(--primary-6));
+      color: var(--brand-6);
     }
 
     :deep(svg) {
-      font-size: 16px;
+      font-size: 14px;
     }
   }
 
   .footer-copyright {
     color: var(--color-text-3);
-    font-size: 14px;
-    line-height: 22px;
+    font-size: var(--fs-caption);
+    line-height: var(--lh-caption);
   }
 </style>

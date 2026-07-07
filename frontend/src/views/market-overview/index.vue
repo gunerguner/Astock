@@ -1,6 +1,6 @@
 <template>
   <div class="page-container">
-    <a-card title="全球市场概览" class="section-card">
+    <a-card :title="$t('pages.marketOverview.title')" class="section-card">
       <template #extra>
         <span v-if="metaText" class="meta-text">{{ metaText }}</span>
       </template>
@@ -9,7 +9,7 @@
         :data="tableRows"
         :loading="loading"
         :pagination="false"
-        :scroll="tableScrollX"
+        :scroll="tableScroll"
         :span-method="spanMethod"
         :row-class="rowClass"
         row-key="key"
@@ -20,6 +20,7 @@
 
 <script lang="ts" setup>
   import { computed, h, onMounted } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import type { TableColumnData } from '@arco-design/web-vue';
   import { fetchMarketOverview, type MarketOverviewItem } from '@/api/analysis';
   import useAsyncRequest from '@/hooks/async-request';
@@ -29,8 +30,17 @@
     useDividerTable,
     type BaseDividerRow,
   } from '@/hooks/grouped-table';
-  import { formatPercent, formatPrice, getPercentColor } from '@/utils/format';
-  import tableScrollX from '@/utils/table';
+  import {
+    formatPercent,
+    formatPrice,
+    getPercentClass,
+    numClass,
+  } from '@/utils/format';
+  import renderAssetNameWithTooltip from '@/utils/render-asset-cell';
+  import useTableScroll from '@/utils/table';
+
+  const { t } = useI18n();
+  const tableScroll = useTableScroll();
 
   defineOptions({
     name: 'MarketOverview',
@@ -52,13 +62,15 @@
 
   const metaText = computed(() => {
     if (!overview.value?.latest_trading_date) return '';
-    return `最新数据日期 ${overview.value.latest_trading_date}`;
+    return t('common.metaLatestDate', {
+      date: overview.value.latest_trading_date,
+    });
   });
 
   const formatPeriod = (start: string | null, end: string | null) => {
     if (!start || !end) return '';
     if (start === end) return start;
-    return `${start} 至 ${end}`;
+    return `${start} ${t('pages.marketOverview.periodTo')} ${end}`;
   };
 
   const tableRows = computed<TableRow[]>(() => {
@@ -98,9 +110,9 @@
     return rows;
   });
 
-  const columns: TableColumnData[] = [
+  const columns = computed<TableColumnData[]>(() => [
     {
-      title: '资产',
+      title: t('pages.marketOverview.columns.asset'),
       render: ({ record }) => {
         const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) {
@@ -111,46 +123,50 @@
             `${row.label}${suffix}`
           );
         }
-        return h('span', [
-          h('span', { class: 'asset-name-text' }, row.name),
-          h('span', { class: 'asset-code-text' }, ` (${row.code})`),
-        ]);
+        return renderAssetNameWithTooltip(row.name, row.code);
       },
     },
     {
-      title: '最新价',
+      title: t('pages.marketOverview.columns.currentPrice'),
+      align: 'right',
       render: ({ record }) => {
         const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) return null;
-        if (row.error) return '数据获取失败';
-        return formatPrice(row.current_price);
+        if (row.error) return t('pages.marketOverview.fetchError');
+        return h(
+          'span',
+          { class: `num-price ${numClass(row.current_price)}` },
+          formatPrice(row.current_price)
+        );
       },
     },
     {
-      title: '日涨跌',
+      title: t('pages.marketOverview.columns.dailyChange'),
+      align: 'right',
       render: ({ record }) => {
         const row = toTableRow<TableRow>(record);
         if (isDividerRow(row) || row.error) return null;
         return h(
           'span',
-          { style: { color: getPercentColor(row.daily_change) } },
+          { class: getPercentClass(row.daily_change) },
           formatPercent(row.daily_change)
         );
       },
     },
     {
-      title: '周涨跌',
+      title: t('pages.marketOverview.columns.weeklyChange'),
+      align: 'right',
       render: ({ record }) => {
         const row = toTableRow<TableRow>(record);
         if (isDividerRow(row) || row.error) return null;
         return h(
           'span',
-          { style: { color: getPercentColor(row.weekly_change) } },
+          { class: getPercentClass(row.weekly_change) },
           formatPercent(row.weekly_change)
         );
       },
     },
-  ];
+  ]);
 
   const { spanMethod, rowClass } = useDividerTable(columns);
 
@@ -158,14 +174,3 @@
     loadOverview();
   });
 </script>
-
-<style scoped lang="less">
-  .asset-name-text {
-    font-weight: 500;
-  }
-
-  .asset-code-text {
-    color: var(--color-text-3);
-    font-size: 12px;
-  }
-</style>

@@ -1,51 +1,30 @@
 <template>
   <div class="navbar">
     <div class="left-side">
-      <a-space>
+      <a-space :size="12">
         <icon-public class="brand-icon" />
-        <a-typography-title
-          :style="{ margin: 0, fontSize: '18px' }"
-          :heading="5"
-        >
-          全球投资信息平台
-        </a-typography-title>
-        <icon-menu-fold
-          v-if="!topMenu && appStore.device === 'mobile'"
-          style="font-size: 22px; cursor: pointer"
-          @click="toggleDrawerMenu"
-        />
+        <div class="brand-group">
+          <a-typography-title class="brand-title" :heading="5">
+            {{ $t('navbar.brand.title') }}
+          </a-typography-title>
+        </div>
       </a-space>
     </div>
-    <div class="center-side">
-      <Menu v-if="topMenu" />
+    <div v-if="showMenu" class="center-side">
+      <Menu />
     </div>
     <ul class="right-side">
       <li>
         <AdminRefreshButton />
       </li>
       <li>
-        <a-dropdown
-          trigger="click"
-          @select="(val) => changeLocale(val as string)"
-        >
-          <a-button class="nav-btn" type="outline" :shape="'circle'">
+        <a-tooltip :content="localeToggleHint">
+          <a-button class="nav-btn-ghost" type="text" @click="toggleLocale">
             <template #icon>
               <icon-language />
             </template>
           </a-button>
-          <template #content>
-            <a-doption
-              v-for="item in LOCALE_OPTIONS"
-              :key="item.value"
-              :value="item.value"
-            >
-              <template #icon>
-                <icon-check v-show="item.value === currentLocale" />
-              </template>
-              {{ item.label }}
-            </a-doption>
-          </template>
-        </a-dropdown>
+        </a-tooltip>
       </li>
       <li>
         <a-tooltip
@@ -56,9 +35,8 @@
           "
         >
           <a-button
-            class="nav-btn"
-            type="outline"
-            :shape="'circle'"
+            class="nav-btn-ghost"
+            type="text"
             @click="handleToggleTheme"
           >
             <template #icon>
@@ -73,18 +51,24 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, inject } from 'vue';
+  import { computed } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { useDark, useToggle } from '@vueuse/core';
   import { useAppStore } from '@/store';
   import useLocale from '@/hooks/locale';
-  import { LOCALE_OPTIONS } from '@/locale';
   import Menu from '@/components/menu/index.vue';
   import AdminRefreshButton from '@/components/admin-refresh-button/index.vue';
 
   const appStore = useAppStore();
-  const { currentLocale, changeLocale } = useLocale();
+  const { t } = useI18n();
+  const { currentLocale, toggleLocale } = useLocale();
   const theme = computed(() => appStore.theme);
-  const topMenu = computed(() => appStore.topMenu && appStore.menu);
+  const showMenu = computed(() => appStore.menu);
+  const localeToggleHint = computed(() =>
+    currentLocale.value === 'zh-CN'
+      ? t('navbar.action.switchToEn')
+      : t('navbar.action.switchToZh')
+  );
   const isDark = useDark({
     selector: 'body',
     attribute: 'arco-theme',
@@ -99,48 +83,68 @@
   const handleToggleTheme = () => {
     toggleTheme();
   };
-  const toggleDrawerMenu = inject('toggleDrawerMenu') as () => void;
 </script>
 
 <style scoped lang="less">
   .navbar {
     display: flex;
+    align-items: center;
     justify-content: space-between;
+    gap: 16px;
     height: 100%;
     background-color: var(--color-bg-2);
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border-2);
   }
 
   .left-side {
     display: flex;
+    flex-shrink: 0;
     align-items: center;
-    padding-left: 20px;
+    padding-left: 16px;
+  }
 
-    .brand-icon {
-      font-size: 22px;
-      color: rgb(var(--primary-6));
-    }
+  .brand-icon {
+    font-size: 20px;
+    color: var(--brand-6);
+  }
+
+  .brand-group {
+    display: flex;
+    align-items: center;
+  }
+
+  .brand-title {
+    margin: 0 !important;
+    font-size: var(--fs-h5) !important;
+    line-height: var(--lh-h5) !important;
+    font-weight: 600;
+    white-space: nowrap;
   }
 
   .center-side {
+    display: flex;
+    align-items: center;
     flex: 1;
+    min-width: 0;
+    height: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
   }
 
   .right-side {
     display: flex;
-    padding-right: 20px;
+    flex-shrink: 0;
+    padding-right: 16px;
     list-style: none;
 
     li {
       display: flex;
       align-items: center;
-      padding: 0 10px;
-    }
-
-    .nav-btn {
-      border-color: rgb(var(--gray-2));
-      color: rgb(var(--gray-8));
-      font-size: 16px;
+      padding: 0 6px;
     }
   }
 </style>

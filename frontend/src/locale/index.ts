@@ -13,6 +13,7 @@ const i18n = createI18n({
   fallbackLocale: 'en-US',
   legacy: false,
   allowComposition: true,
+  flatJson: true,
   messages: {
     'en-US': en,
     'zh-CN': cn,
