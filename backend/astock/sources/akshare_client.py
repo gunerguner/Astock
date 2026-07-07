@@ -1,29 +1,15 @@
 """akshare 数据源：美股复权历史、外盘期货历史。"""
 
-from __future__ import annotations
-
 import logging
-from datetime import date, datetime
-from typing import Any
 
 import akshare as ak
 import pandas as pd
 
 from astock.config import GLOBAL_ASSETS
+from astock.core.datetime_utils import normalize_date
 from astock.sources.fetch_result import SourceFetchResult
 
 logger = logging.getLogger(__name__)
-
-
-def _normalize_date(value: Any) -> str:
-    if isinstance(value, datetime):
-        return value.strftime("%Y-%m-%d")
-    if isinstance(value, date):
-        return value.isoformat()
-    text = str(value).strip()
-    if " " in text:
-        text = text.split(" ", 1)[0]
-    return text[:10]
 
 
 def _normalize_history_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -32,7 +18,7 @@ def _normalize_history_df(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     if "date" not in out.columns:
         return pd.DataFrame()
-    out["date"] = out["date"].map(_normalize_date)
+    out["date"] = out["date"].map(normalize_date)
     for col in ("open", "high", "low", "close"):
         if col in out.columns:
             out[col] = pd.to_numeric(out[col], errors="coerce")
@@ -71,7 +57,7 @@ def extract_ath(df: pd.DataFrame) -> tuple[float, str] | None:
         return None
     idx = df["high"].astype(float).idxmax()
     row = df.loc[idx]
-    return float(row["high"]), _normalize_date(row["date"])
+    return float(row["high"]), normalize_date(row["date"])
 
 
 def extract_recent_closes(df: pd.DataFrame, n: int = 10) -> dict[str, float]:
@@ -79,7 +65,7 @@ def extract_recent_closes(df: pd.DataFrame, n: int = 10) -> dict[str, float]:
         return {}
     tail = df.tail(n)
     return {
-        _normalize_date(row["date"]): float(row["close"])
+        normalize_date(row["date"]): float(row["close"])
         for _, row in tail.iterrows()
     }
 
@@ -87,27 +73,15 @@ def extract_recent_closes(df: pd.DataFrame, n: int = 10) -> dict[str, float]:
 def fetch_one_asset(asset: dict[str, str]) -> tuple[str, SourceFetchResult]:
     ticker = asset["ticker"]
     if asset.get("data_pending"):
-        return ticker, SourceFetchResult(
-            records=[],
-            ok=False,
-            errors=[f"{ticker}: 待接入数据源"],
-        )
+        return ticker, SourceFetchResult.failure(f"{ticker}: 待接入数据源")
     asset_type = asset["asset_type"]
     try:
         df = fetch_asset_history(ticker, asset_type)
         if df.empty:
-            return ticker, SourceFetchResult(
-                records=[],
-                ok=False,
-                errors=[f"{ticker} 历史数据为空"],
-            )
+            return ticker, SourceFetchResult.failure(f"{ticker} 历史数据为空")
         ath = extract_ath(df)
         if ath is None:
-            return ticker, SourceFetchResult(
-                records=[],
-                ok=False,
-                errors=[f"{ticker} 无法提取历史最高点"],
-            )
+            return ticker, SourceFetchResult.failure(f"{ticker} 无法提取历史最高点")
         all_time_high, ath_date = ath
         recent_closes = extract_recent_closes(df)
         return ticker, SourceFetchResult(
@@ -122,11 +96,7 @@ def fetch_one_asset(asset: dict[str, str]) -> tuple[str, SourceFetchResult]:
         )
     except Exception as e:
         logger.warning("抓取 %s 失败: %s", ticker, e)
-        return ticker, SourceFetchResult(
-            records=[],
-            ok=False,
-            errors=[f"{ticker}: {e}"],
-        )
+        return ticker, SourceFetchResult.failure(f"{ticker}: {e}")
 
 
 def fetch_all_assets(

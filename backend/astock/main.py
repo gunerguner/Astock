@@ -21,10 +21,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Astock 数据平台", version="1.0.0", lifespan=lifespan)
 
+allow_credentials = "*" not in CORS_ORIGINS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
-    allow_credentials="*" not in CORS_ORIGINS,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

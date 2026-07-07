@@ -1,22 +1,16 @@
 """应用日志：控制台输出全量；文件分「普通」与「错误」两级。"""
 
-from __future__ import annotations
-
 import logging
-import os
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from dotenv import load_dotenv
-
-load_dotenv()
+from astock.config import settings
 
 _LOG_FORMAT = "%(asctime)s %(levelname)s [%(name)s] %(message)s"
 _LOG_DATEFMT = "%Y-%m-%d %H:%M:%S"
 _MAX_BYTES = 10 * 1024 * 1024
 _BACKUP_COUNT = 5
-_FALLBACK_LOG_DIR = "logs"
 
 
 class _BelowErrorFilter(logging.Filter):
@@ -25,13 +19,13 @@ class _BelowErrorFilter(logging.Filter):
 
 
 def _parse_root_level() -> int:
-    name = os.getenv("LOG_LEVEL", "INFO").upper().strip()
+    name = settings.log_level.upper().strip()
     level = getattr(logging, name, None)
     return level if isinstance(level, int) else logging.INFO
 
 
 def setup_logging() -> None:
-    log_dir = Path(os.getenv("LOG_DIR", _FALLBACK_LOG_DIR))
+    log_dir = Path(settings.log_dir)
     log_dir.mkdir(parents=True, exist_ok=True)
 
     root = logging.getLogger()

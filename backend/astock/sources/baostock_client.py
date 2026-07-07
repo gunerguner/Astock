@@ -3,17 +3,21 @@
 import logging
 import re
 import socket
+from collections.abc import Callable
 from contextlib import contextmanager
-from datetime import datetime
+from typing import TypeVar
 
 import baostock as bs
 import baostock.common.context as bs_context
 import pandas as pd
 
 from astock.config import START_DATE
+from astock.core.datetime_utils import iso_now, today_local
 from astock.sources.fetch_result import SourceFetchResult
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 _CODE_RE = re.compile(r"^(sh|sz)\.(\d{6})$")
 
@@ -47,12 +51,41 @@ def _collect_rows(rs) -> list:
         raise BaostockRecvTimeoutError(str(e)) from e
 
 
-def _today() -> str:
-    return datetime.now().strftime("%Y-%m-%d")
+def _login_failure(lg) -> SourceFetchResult | None:
+    if lg.error_code != "0":
+        msg = f"baostock 登录失败: {lg.error_msg}"
+        logger.error(msg)
+        return SourceFetchResult.failure(msg)
+    return None
 
 
-def _iso_now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+def _query_failure(label: str, rs) -> SourceFetchResult | None:
+    if rs.error_code != "0":
+        msg = f"{label}: {rs.error_msg}"
+        logger.error(msg)
+        return SourceFetchResult.failure(msg)
+    return None
+
+
+def _read_failure(label: str, exc: BaostockRecvTimeoutError) -> SourceFetchResult:
+    msg = f"{label}: {exc}"
+    logger.error(msg)
+    return SourceFetchResult.failure(msg)
+
+def _safe_baostock_call[T](
+    label: str,
+    fn: Callable[[], T],
+    *,
+    log_level: str = "error",
+) -> T | SourceFetchResult:
+    try:
+        return fn()
+    except (socket.timeout, OSError) as e:
+        msg = f"{label}: {e}"
+        getattr(logger, log_level)(msg)
+        return SourceFetchResult.failure(msg)
+    except BaostockRecvTimeoutError as e:
+        return _read_failure(label, e)
 
 
 def _to_baostock_code(code: str) -> str:
@@ -68,23 +101,20 @@ def fetch_all_stock_codes(as_of_date: str) -> SourceFetchResult:
     baostock 若传入非交易日会返回空结果。
     """
     with baostock_session() as lg:
-        if lg.error_code != "0":
-            msg = f"baostock 登录失败: {lg.error_msg}"
-            logger.error(msg)
-            return SourceFetchResult(records=[], ok=False, errors=[msg])
+        if failed := _login_failure(lg):
+            return failed
 
         rs = bs.query_all_stock(day=as_of_date)
-        if rs.error_code != "0":
-            msg = f"全市场代码清单查询失败: {rs.error_msg}"
-            logger.error(msg)
-            return SourceFetchResult(records=[], ok=False, errors=[msg])
+        if failed := _query_failure("全市场代码清单查询失败", rs):
+            return failed
 
-        try:
-            rows = _collect_rows(rs)
-        except BaostockRecvTimeoutError as e:
-            msg = f"全市场代码清单读取超时: {e}"
-            logger.error(msg)
-            return SourceFetchResult(records=[], ok=False, errors=[msg])
+        result = _safe_baostock_call(
+            "全市场代码清单读取超时",
+            lambda: _collect_rows(rs),
+        )
+        if isinstance(result, SourceFetchResult):
+            return result
+        rows = result
 
         records = []
         for code, status, name in rows:
@@ -110,51 +140,45 @@ def fetch_stock_amount_history(
     """获取单只股票日线成交额。调用方需已处于 baostock 登录会话中（见 baostock_session）。"""
     start = start_date or START_DATE
     prefixed = _to_baostock_code(code)
-    try:
+
+    def _query() -> SourceFetchResult:
         rs = bs.query_history_k_data_plus(
             prefixed,
             "date,amount",
             start_date=start,
-            end_date=_today(),
+            end_date=today_local(),
             frequency="d",
         )
-    except (socket.timeout, OSError) as e:
-        msg = f"个股 {code} 日线查询超时/连接异常: {e}"
-        logger.warning(msg)
-        return SourceFetchResult(records=[], ok=False, errors=[msg])
-
-    if rs.error_code != "0":
-        msg = f"个股 {code} 日线查询失败: {rs.error_msg}"
-        return SourceFetchResult(records=[], ok=False, errors=[msg])
-
-    try:
+        if failed := _query_failure(f"个股 {code} 日线查询失败", rs):
+            return failed
         rows = _collect_rows(rs)
-    except BaostockRecvTimeoutError as e:
-        msg = f"个股 {code} 日线读取超时/连接异常: {e}"
-        logger.warning(msg)
-        return SourceFetchResult(records=[], ok=False, errors=[msg])
+        records = [
+            {"date": row[0], "amount": float(row[1])}
+            for row in rows
+            if row[1] not in ("", None)
+        ]
+        return SourceFetchResult(records=records)
 
-    records = [
-        {"date": row[0], "amount": float(row[1])}
-        for row in rows
-        if row[1] not in ("", None)
-    ]
-    return SourceFetchResult(records=records)
+    result = _safe_baostock_call(
+        f"个股 {code} 日线查询超时/连接异常",
+        _query,
+        log_level="warning",
+    )
+    if isinstance(result, SourceFetchResult):
+        return result
+    return result
 
 
 class BaostockClient:
     def fetch_point(self, start_date: str | None = None) -> SourceFetchResult:
         start = start_date or START_DATE
-        end = _today()
-        errors: list[str] = []
+        end = today_local()
 
         with baostock_session() as lg:
-            if lg.error_code != "0":
-                msg = f"baostock 登录失败: {lg.error_msg}"
-                logger.error(msg)
-                return SourceFetchResult(records=[], ok=False, errors=[msg])
+            if failed := _login_failure(lg):
+                return failed
 
-            try:
+            def _query() -> SourceFetchResult:
                 rs = bs.query_history_k_data_plus(
                     "sh.000001",
                     "date,close",
@@ -162,42 +186,33 @@ class BaostockClient:
                     end_date=end,
                     frequency="d",
                 )
-            except (socket.timeout, OSError) as e:
-                msg = f"上证点位查询超时/连接异常: {e}"
-                logger.error(msg)
-                return SourceFetchResult(records=[], ok=False, errors=[msg])
-
-            if rs.error_code != "0":
-                msg = f"上证点位查询失败: {rs.error_msg}"
-                logger.error(msg)
-                return SourceFetchResult(records=[], ok=False, errors=[msg])
-
-            try:
+                if failed := _query_failure("上证点位查询失败", rs):
+                    return failed
                 rows = _collect_rows(rs)
-            except BaostockRecvTimeoutError as e:
-                msg = f"上证点位读取超时/连接异常: {e}"
-                logger.error(msg)
-                return SourceFetchResult(records=[], ok=False, errors=[msg])
+                if not rows:
+                    logger.info("上证点位无新增数据: %s → %s", start, end)
+                    return SourceFetchResult.empty()
 
-            if not rows:
-                logger.info("上证点位无新增数据: %s → %s", start, end)
-                return SourceFetchResult()
+                df = pd.DataFrame(rows, columns=rs.fields)
+                df["close"] = df["close"].astype(float)
+                df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
 
-            df = pd.DataFrame(rows, columns=rs.fields)
-            df["close"] = df["close"].astype(float)
-            df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
+                cached_at = iso_now()
+                records = [
+                    {"date": row["date"], "close": row["close"], "cached_at": cached_at}
+                    for row in df.to_dict("records")
+                ]
+                logger.info("上证点位拉取完成: %s 条 (%s → %s)", len(records), start, end)
+                return SourceFetchResult(records=records)
 
-            cached_at = _iso_now()
-            records = [
-                {"date": row["date"], "close": row["close"], "cached_at": cached_at}
-                for row in df.to_dict("records")
-            ]
-            logger.info("上证点位拉取完成: %s 条 (%s → %s)", len(records), start, end)
-            return SourceFetchResult(records=records, ok=len(errors) == 0, errors=errors)
+            result = _safe_baostock_call("上证点位查询超时/连接异常", _query)
+            if isinstance(result, SourceFetchResult):
+                return result
+            return result
 
     def fetch_turnover(self, start_date: str | None = None) -> SourceFetchResult:
         start = start_date or START_DATE
-        end = _today()
+        end = today_local()
         errors: list[str] = []
 
         index_codes = {
@@ -207,14 +222,12 @@ class BaostockClient:
         }
 
         with baostock_session() as lg:
-            if lg.error_code != "0":
-                msg = f"baostock 登录失败: {lg.error_msg}"
-                logger.error(msg)
-                return SourceFetchResult(records=[], ok=False, errors=[msg])
+            if failed := _login_failure(lg):
+                return failed
 
             all_records: list[pd.DataFrame] = []
             for col_name, code in index_codes.items():
-                try:
+                def _fetch_one(col_name=col_name, code=code) -> pd.DataFrame | None:
                     rs = bs.query_history_k_data_plus(
                         code,
                         "date,amount",
@@ -222,40 +235,33 @@ class BaostockClient:
                         end_date=end,
                         frequency="d",
                     )
-                except (socket.timeout, OSError) as e:
-                    msg = f"{col_name} 查询超时/连接异常: {e}"
-                    logger.warning(msg)
-                    errors.append(msg)
-                    continue
-
-                if rs.error_code != "0":
-                    msg = f"{col_name} 查询失败: {rs.error_msg}"
-                    logger.warning(msg)
-                    errors.append(msg)
-                    continue
-
-                try:
+                    if rs.error_code != "0":
+                        raise RuntimeError(f"{col_name} 查询失败: {rs.error_msg}")
                     rows = _collect_rows(rs)
-                except BaostockRecvTimeoutError as e:
-                    msg = f"{col_name} 读取超时/连接异常: {e}"
-                    logger.warning(msg)
-                    errors.append(msg)
-                    continue
+                    if not rows:
+                        return None
+                    df = pd.DataFrame(rows, columns=rs.fields)
+                    df["amount"] = df["amount"].astype(float)
+                    df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
+                    df.rename(columns={"amount": col_name}, inplace=True)
+                    return df[["date", col_name]]
 
-                if not rows:
+                result = _safe_baostock_call(
+                    f"{col_name} 查询超时/连接异常",
+                    _fetch_one,
+                    log_level="warning",
+                )
+                if isinstance(result, SourceFetchResult):
+                    errors.append(result.errors[0])
                     continue
-
-                df = pd.DataFrame(rows, columns=rs.fields)
-                df["amount"] = df["amount"].astype(float)
-                df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
-                df.rename(columns={"amount": col_name}, inplace=True)
-                all_records.append(df[["date", col_name]])
+                if result is not None:
+                    all_records.append(result)
 
             if not all_records:
                 if errors:
                     return SourceFetchResult(records=[], ok=False, errors=errors)
                 logger.info("成交额无新增数据: %s → %s", start, end)
-                return SourceFetchResult()
+                return SourceFetchResult.empty()
 
             merged = pd.concat(all_records, axis=0).groupby("date", as_index=False).sum()
             for col in ["sh_amount", "sz_amount", "cyb_amount"]:
@@ -265,7 +271,7 @@ class BaostockClient:
             merged["turnover"] = merged[["sh_amount", "sz_amount", "cyb_amount"]].sum(axis=1)
             merged = merged.sort_values("date")
 
-            cached_at = _iso_now()
+            cached_at = iso_now()
             records = [
                 {
                     "date": row["date"],

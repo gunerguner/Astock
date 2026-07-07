@@ -7,6 +7,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlmodel import Session, select
 
 from astock.config import START_DATE
+from astock.core.sync_status import SyncStatus
 from astock.models.sync_meta import SyncMeta
 from astock.services.price_utils import iso_now
 
@@ -35,7 +36,7 @@ def upsert_sync_meta(
     table_name: str,
     *,
     last_synced_date: str | None,
-    status: str,
+    status: SyncStatus | str,
     error: str | None = None,
 ) -> str:
     meta = get_sync_meta(db, table_name) or SyncMeta(table_name=table_name)

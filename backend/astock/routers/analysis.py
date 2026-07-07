@@ -5,6 +5,8 @@ from astock.core.deps import DbSession
 from astock.core.exceptions import AppError
 from astock.schemas.analysis import (
     BullMarketStatsResponse,
+    MarketOverviewResponse,
+    PriceLevelsResponse,
     StockRankingResponse,
     TurnoverRankingResponse,
 )
@@ -73,7 +75,10 @@ def stock_ranking_api(
         raise AppError(str(e)) from e
 
 
-@router.get("/asset-price-levels")
+@router.get(
+    "/asset-price-levels",
+    response_model=ApiResponse[PriceLevelsResponse],
+)
 def asset_price_levels_api(
     db: DbSession,
     force_refresh: bool = Query(default=False),
@@ -84,7 +89,10 @@ def asset_price_levels_api(
         raise AppError(str(e)) from e
 
 
-@router.get("/market-overview")
+@router.get(
+    "/market-overview",
+    response_model=ApiResponse[MarketOverviewResponse],
+)
 def market_overview_api(
     force_refresh: bool = Query(default=False),
 ):

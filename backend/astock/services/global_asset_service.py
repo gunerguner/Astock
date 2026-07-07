@@ -1,14 +1,12 @@
 """全球资产价格水位：历史最高点刷新与页面查询。"""
 
-from __future__ import annotations
-
 import logging
-from datetime import date, datetime
-from typing import Any
+from datetime import date
 
 from sqlmodel import Session, select
 
 from astock.config import ASSET_PRICE_CACHE_TTL, GLOBAL_ASSETS
+from astock.core.datetime_utils import iso_now, now_local, synced_today
 from astock.core.redis_client import (
     LATEST_TRADING_DATE_KEY,
     get_json,
@@ -18,10 +16,11 @@ from astock.core.redis_client import (
     set_json,
     set_string,
 )
+from astock.core.sync_status import SyncStatus
 from astock.models.asset_high import AssetHigh
+from astock.schemas.analysis import PriceLevelItem, PriceLevelsResponse
 from astock.services.price_utils import (
     baseline_prices,
-    iso_now,
     latest_trading_date,
     pct_change,
     read_recent_closes_cache,
@@ -71,15 +70,6 @@ def _read_price_cache(ticker: str) -> dict[str, float]:
     return {}
 
 
-def _synced_today(last_synced_at: str | None) -> bool:
-    if not last_synced_at:
-        return False
-    try:
-        return datetime.fromisoformat(last_synced_at).date() == date.today()
-    except ValueError:
-        return False
-
-
 def _backfill_from_akshare(
     assets: list[dict[str, str]],
 ) -> tuple[dict[str, dict[str, float]], list[str]]:
@@ -108,12 +98,12 @@ def _backfill_from_akshare(
     return all_closes, errors
 
 
-def refresh_asset_highs(db: Session) -> dict[str, Any]:
+def refresh_asset_highs(db: Session) -> dict:
     meta = get_sync_meta(db, "asset_high")
     if (
         meta
-        and meta.last_status == "success"
-        and _synced_today(meta.last_synced_at)
+        and meta.last_status == SyncStatus.SUCCESS
+        and synced_today(meta.last_synced_at)
     ):
         total = len(db.exec(select(AssetHigh)).all())
         if total > 0:
@@ -126,12 +116,12 @@ def refresh_asset_highs(db: Session) -> dict[str, Any]:
                 "total": total,
                 "last_date": meta.last_synced_date,
                 "last_synced_at": meta.last_synced_at,
-                "status": "success",
+                "status": SyncStatus.SUCCESS,
                 "source_errors": {"global_assets": None},
             }
 
     cached_at = iso_now()
-    records: list[dict[str, Any]] = []
+    records: list[dict] = []
     errors: list[str] = []
     all_closes_for_latest: dict[str, dict[str, float]] = {}
 
@@ -175,7 +165,13 @@ def refresh_asset_highs(db: Session) -> dict[str, Any]:
     if latest:
         set_string(LATEST_TRADING_DATE_KEY, latest, ttl=ASSET_PRICE_CACHE_TTL)
 
-    status = "success" if not errors else ("partial_failure" if imported else "failed")
+    if not errors:
+        status = SyncStatus.SUCCESS
+    elif imported:
+        status = SyncStatus.PARTIAL_FAILURE
+    else:
+        status = SyncStatus.FAILED
+
     last_synced_at = upsert_sync_meta(
         db,
         "asset_high",
@@ -221,24 +217,17 @@ def _ensure_price_cache(
     return _backfill_from_akshare(assets)
 
 
-def _pending_item(asset: dict[str, str]) -> dict[str, Any]:
-    return {
-        "ticker": asset["ticker"],
-        "name": asset["name"],
-        "asset_type": asset["asset_type"],
-        "current_price": None,
-        "all_time_high": None,
-        "ath_date": None,
-        "percentage_diff": None,
-        "ath_days": None,
-        "daily_change": None,
-        "weekly_change": None,
-        "conclusion": "待接入",
-        "data_pending": True,
-    }
+def _pending_item(asset: dict[str, str]) -> PriceLevelItem:
+    return PriceLevelItem(
+        ticker=asset["ticker"],
+        name=asset["name"],
+        asset_type=asset["asset_type"],
+        conclusion="待接入",
+        data_pending=True,
+    )
 
 
-def get_price_levels(db: Session, *, force_refresh: bool = False) -> dict[str, Any]:
+def get_price_levels(db: Session, *, force_refresh: bool = False) -> PriceLevelsResponse:
     rows = db.exec(select(AssetHigh)).all()
     if not rows and not force_refresh:
         meta = get_sync_meta(db, "asset_high")
@@ -248,8 +237,8 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> dict[str, A
     all_closes, cache_errors = _ensure_price_cache(GLOBAL_ASSETS, force_refresh=force_refresh)
 
     row_map = {row.ticker: row for row in rows}
-    items: list[dict[str, Any]] = []
-    now = datetime.now()
+    items: list[PriceLevelItem] = []
+    now = now_local()
     as_of = iso_now()
 
     for asset in GLOBAL_ASSETS:
@@ -279,29 +268,29 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> dict[str, A
             ath_days = 0
 
         items.append(
-            {
-                "ticker": ticker,
-                "name": row.name,
-                "asset_type": row.asset_type,
-                "current_price": round(current, 4),
-                "all_time_high": round(all_time_high, 4),
-                "ath_date": ath_date,
-                "percentage_diff": round(percentage_diff, 2),
-                "ath_days": ath_days,
-                "daily_change": round(v, 2)
+            PriceLevelItem(
+                ticker=ticker,
+                name=row.name,
+                asset_type=row.asset_type,
+                current_price=round(current, 4),
+                all_time_high=round(all_time_high, 4),
+                ath_date=ath_date,
+                percentage_diff=round(percentage_diff, 2),
+                ath_days=ath_days,
+                daily_change=round(v, 2)
                 if (v := pct_change(current, prev_close)) is not None
                 else None,
-                "weekly_change": round(v, 2)
+                weekly_change=round(v, 2)
                 if (v := pct_change(current, week_ago_close)) is not None
                 else None,
-                "conclusion": _conclusion(percentage_diff),
-            }
+                conclusion=_conclusion(percentage_diff),
+            )
         )
 
     items.sort(
         key=lambda x: (
-            0 if x.get("data_pending") else 1,
-            x["percentage_diff"] if x["percentage_diff"] is not None else 0,
+            0 if x.data_pending else 1,
+            x.percentage_diff if x.percentage_diff is not None else 0,
         )
     )
 
@@ -310,10 +299,10 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> dict[str, A
         meta.last_synced_date if meta else None
     )
 
-    return {
-        "last_synced_at": meta.last_synced_at if meta else None,
-        "as_of": as_of,
-        "latest_trading_date": latest_trading_date_value,
-        "items": items,
-        "cache_errors": cache_errors[:5] if cache_errors else None,
-    }
+    return PriceLevelsResponse(
+        last_synced_at=meta.last_synced_at if meta else None,
+        as_of=as_of,
+        latest_trading_date=latest_trading_date_value,
+        items=items,
+        cache_errors=cache_errors[:5] if cache_errors else None,
+    )

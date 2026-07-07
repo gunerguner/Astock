@@ -10,11 +10,19 @@ class SourceFetchResult:
     ok: bool = True
     errors: list[str] = field(default_factory=list)
 
+    @classmethod
+    def failure(cls, msg: str) -> "SourceFetchResult":
+        return cls(records=[], ok=False, errors=[msg])
+
+    @classmethod
+    def empty(cls) -> "SourceFetchResult":
+        return cls()
+
     def error_summary(self, max_items: int = 5) -> str | None:
         if not self.errors:
             return None
         head = self.errors[:max_items]
-        suffix = "…" if len(self.errors) > max_items else ""
+        suffix = "..." if len(self.errors) > max_items else ""
         return "; ".join(head) + suffix
 
     def to_error_map(self, source_name: str, max_items: int = 5) -> dict[str, str | None]:

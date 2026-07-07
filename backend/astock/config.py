@@ -1,18 +1,54 @@
-"""配置：环境变量 + 业务常量。"""
+"""配置：环境变量（pydantic-settings）+ 业务常量 + YAML 懒加载。"""
 
-import os
+from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 import yaml
-from dotenv import load_dotenv
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-load_dotenv()
+_CONFIG_DIR = Path(__file__).resolve().parent / "config"
 
-DB_PATH = os.getenv("DB_PATH", "db/astock.db")
-DATABASE_URL = f"sqlite:///{DB_PATH}"
-FASTAPI_PORT = int(os.getenv("FASTAPI_PORT", 8000))
 
-# 默认阈值
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    db_path: str = "db/astock.db"
+    fastapi_port: int = 8000
+    redis_url: str = "redis://localhost:6379/0"
+    redis_retry_cooldown: int = 60
+    asset_price_cache_ttl: int = 86400
+    market_overview_failure_ttl: int = 300
+    log_level: str = "INFO"
+    log_dir: str = "logs"
+    cors_origins: list[str] = ["*"]
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def split_cors_origins(cls, value: Any) -> list[str]:
+        if isinstance(value, str):
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value
+
+    @property
+    def database_url(self) -> str:
+        return f"sqlite:///{self.db_path}"
+
+
+settings = Settings()
+
+# 向后兼容：保留模块级别名，旧 `from astock.config import XXX` 无需改动
+DB_PATH = settings.db_path
+DATABASE_URL = settings.database_url
+FASTAPI_PORT = settings.fastapi_port
+REDIS_URL = settings.redis_url
+REDIS_RETRY_COOLDOWN = settings.redis_retry_cooldown
+ASSET_PRICE_CACHE_TTL = settings.asset_price_cache_ttl
+MARKET_OVERVIEW_FAILURE_TTL = settings.market_overview_failure_ttl
+CORS_ORIGINS = settings.cors_origins
+
+# 默认阈值（非 env）
 THRESHOLD_POINT = 4000
 TURNOVER_THRESHOLD = 2_000_000_000_000  # 默认2万亿
 
@@ -24,51 +60,57 @@ STOCK_HISTORY_FETCH_WORKERS = 4  # 个股历史抓取并发进程数
 # 历史数据查询起始日期
 START_DATE = "2005-01-01"
 
-# 牛市时期定义（从 astock/config/bull_markets.yaml 加载）
-_CONFIG_DIR = Path(__file__).resolve().parent / "config"
-with open(_CONFIG_DIR / "bull_markets.yaml", "r", encoding="utf-8") as _f:
-    BULL_MARKETS = yaml.safe_load(_f)["bull_markets"]
-
-# 全球资产价格水位
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-REDIS_RETRY_COOLDOWN = int(os.getenv("REDIS_RETRY_COOLDOWN", "60"))
-ASSET_PRICE_CACHE_TTL = int(os.getenv("ASSET_PRICE_CACHE_TTL", "86400"))
 GLOBAL_ASSET_RECENT_DAYS = 10
-
-# CORS：逗号分隔域名，默认 * 仅适合本地开发
-CORS_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv("CORS_ORIGINS", "*").split(",")
-    if origin.strip()
-]
-
-with open(_CONFIG_DIR / "global_assets.yaml", "r", encoding="utf-8") as _f:
-    _GLOBAL_ASSETS_RAW: dict[str, dict[str, str]] = yaml.safe_load(_f)
-
-GLOBAL_ASSETS: list[dict[str, str]] = [
-    {"ticker": ticker, "name": name, "asset_type": asset_type}
-    for asset_type, items in _GLOBAL_ASSETS_RAW.items()
-    for name, ticker in items.items()
-]
-
-# 全球市场概览
 MARKET_OVERVIEW_RECENT_DAYS = 10
-MARKET_OVERVIEW_FAILURE_TTL = int(os.getenv("MARKET_OVERVIEW_FAILURE_TTL", "300"))
 
-with open(_CONFIG_DIR / "market_overview.yaml", "r", encoding="utf-8") as _f:
-    _MARKET_OVERVIEW_RAW: dict = yaml.safe_load(_f)
 
-MARKET_OVERVIEW_CATEGORIES: list[dict] = _MARKET_OVERVIEW_RAW["categories"]
+@lru_cache
+def _load_bull_markets() -> dict[str, dict[str, str]]:
+    raw = yaml.safe_load((_CONFIG_DIR / "bull_markets.yaml").read_text(encoding="utf-8"))
+    return raw["bull_markets"]
 
-MARKET_OVERVIEW_ITEMS: list[dict[str, str]] = [
-    {
-        "key": f"{cat['key']}:{item['code']}",
-        "category_key": cat["key"],
-        "category_name": cat["display_name"],
-        "name": item["name"],
-        "code": item["code"],
-        "source": item["source"],
-    }
-    for cat in MARKET_OVERVIEW_CATEGORIES
-    for item in cat["items"]
-]
+
+@lru_cache
+def _load_global_assets() -> list[dict[str, str]]:
+    raw: dict[str, dict[str, str]] = yaml.safe_load(
+        (_CONFIG_DIR / "global_assets.yaml").read_text(encoding="utf-8")
+    )
+    return [
+        {"ticker": ticker, "name": name, "asset_type": asset_type}
+        for asset_type, items in raw.items()
+        for name, ticker in items.items()
+    ]
+
+
+@lru_cache
+def _load_market_overview_categories() -> list[dict]:
+    raw = yaml.safe_load((_CONFIG_DIR / "market_overview.yaml").read_text(encoding="utf-8"))
+    return raw["categories"]
+
+
+@lru_cache
+def _load_market_overview_items() -> list[dict[str, str]]:
+    return [
+        {
+            "key": f"{cat['key']}:{item['code']}",
+            "category_key": cat["key"],
+            "category_name": cat["display_name"],
+            "name": item["name"],
+            "code": item["code"],
+            "source": item["source"],
+        }
+        for cat in _load_market_overview_categories()
+        for item in cat["items"]
+    ]
+
+
+def __getattr__(name: str) -> Any:
+    if name == "BULL_MARKETS":
+        return _load_bull_markets()
+    if name == "GLOBAL_ASSETS":
+        return _load_global_assets()
+    if name == "MARKET_OVERVIEW_CATEGORIES":
+        return _load_market_overview_categories()
+    if name == "MARKET_OVERVIEW_ITEMS":
+        return _load_market_overview_items()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

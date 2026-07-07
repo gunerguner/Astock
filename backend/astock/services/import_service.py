@@ -17,6 +17,7 @@ from astock.config import (
     STOCK_TURNOVER_SLICE_THRESHOLD,
 )
 from astock.core.exceptions import ExternalSourceAppError
+from astock.core.sync_status import SyncStatus
 from astock.models.point import Point
 from astock.models.stock_turnover import StockTurnover
 from astock.models.turnover import Turnover
@@ -70,12 +71,12 @@ def _fetch_stock_amount_worker(
         return code, SourceFetchResult(records=[], ok=False, errors=[str(e)])
 
 
-def _resolve_status(ok: bool, imported: int) -> str:
+def _resolve_status(ok: bool, imported: int) -> SyncStatus:
     if ok:
-        return "success"
+        return SyncStatus.SUCCESS
     if imported > 0:
-        return "partial_failure"
-    return "failed"
+        return SyncStatus.PARTIAL_FAILURE
+    return SyncStatus.FAILED
 
 
 def _build_result(
@@ -140,7 +141,7 @@ def _import_simple_dataset(
         last_synced_at=last_synced_at,
     )
 
-    if result["status"] == "failed":
+    if result["status"] == SyncStatus.FAILED:
         raise ExternalSourceAppError(
             f"{failure_message}: {result['source_errors'].get(source_key)}"
         )
@@ -206,7 +207,7 @@ def import_stock(db: Session) -> dict[str, Any]:
             db,
             "stock_turnover",
             last_synced_date=last_synced,
-            status="success",
+            status=SyncStatus.SUCCESS,
             error=None,
         )
         result = _build_result(
@@ -337,7 +338,7 @@ def import_stock(db: Session) -> dict[str, Any]:
         last_synced_at=last_synced_at,
     )
 
-    if result["status"] == "failed":
+    if result["status"] == SyncStatus.FAILED:
         raise ExternalSourceAppError(
             f"个股切片导入失败: {result['source_errors'].get('stock')}"
         )
@@ -369,12 +370,12 @@ def import_global_assets(db: Session) -> dict[str, Any]:
     return result
 
 
-def _aggregate_status(*statuses: str) -> str:
-    if all(s == "success" for s in statuses):
-        return "success"
-    if all(s == "failed" for s in statuses):
-        return "failed"
-    return "partial_failure"
+def _aggregate_status(*statuses: SyncStatus | str) -> SyncStatus:
+    if all(s == SyncStatus.SUCCESS for s in statuses):
+        return SyncStatus.SUCCESS
+    if all(s == SyncStatus.FAILED for s in statuses):
+        return SyncStatus.FAILED
+    return SyncStatus.PARTIAL_FAILURE
 
 
 _SYNC_STATUS_TABLES: dict[str, str] = {

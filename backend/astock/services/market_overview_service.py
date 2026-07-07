@@ -1,9 +1,6 @@
 """全球市场概览：Redis 缓存 + 日/周涨跌计算。"""
 
-from __future__ import annotations
-
 import logging
-from typing import Any
 
 from astock.config import (
     ASSET_PRICE_CACHE_TTL,
@@ -20,6 +17,11 @@ from astock.core.redis_client import (
     market_overview_recent_key,
     set_json,
     set_string,
+)
+from astock.schemas.analysis import (
+    MarketOverviewCategory,
+    MarketOverviewItem,
+    MarketOverviewResponse,
 )
 from astock.services.price_utils import (
     baseline_prices,
@@ -118,47 +120,42 @@ def _ensure_closes(
     return all_closes, errors
 
 
-def _build_item(item: dict[str, str], closes: dict[str, float]) -> dict[str, Any]:
+def _build_item(item: dict[str, str], closes: dict[str, float]) -> MarketOverviewItem:
     current, prev_close, week_ago_close = baseline_prices(closes)
     daily = pct_change(current, prev_close) if current is not None else None
     weekly = pct_change(current, week_ago_close) if current is not None else None
     dates = sorted_dates(closes)
-    return {
-        "key": item["key"],
-        "name": item["name"],
-        "code": item["code"],
-        "current_price": round(current, 4) if current is not None else None,
-        "daily_change": round(daily, 2) if daily is not None else None,
-        "weekly_change": round(weekly, 2) if weekly is not None else None,
-        "period_start": dates[-2] if len(dates) >= 2 else dates[-1] if dates else None,
-        "period_end": dates[-1] if dates else None,
-        "error": None,
-    }
+    return MarketOverviewItem(
+        key=item["key"],
+        name=item["name"],
+        code=item["code"],
+        current_price=round(current, 4) if current is not None else None,
+        daily_change=round(daily, 2) if daily is not None else None,
+        weekly_change=round(weekly, 2) if weekly is not None else None,
+        period_start=dates[-2] if len(dates) >= 2 else dates[-1] if dates else None,
+        period_end=dates[-1] if dates else None,
+        error=None,
+    )
 
 
-def _error_item(item: dict[str, str], message: str) -> dict[str, Any]:
-    return {
-        "key": item["key"],
-        "name": item["name"],
-        "code": item["code"],
-        "current_price": None,
-        "daily_change": None,
-        "weekly_change": None,
-        "period_start": None,
-        "period_end": None,
-        "error": message,
-    }
+def _error_item(item: dict[str, str], message: str) -> MarketOverviewItem:
+    return MarketOverviewItem(
+        key=item["key"],
+        name=item["name"],
+        code=item["code"],
+        error=message,
+    )
 
 
-def get_market_overview(*, force_refresh: bool = False) -> dict[str, Any]:
+def get_market_overview(*, force_refresh: bool = False) -> MarketOverviewResponse:
     all_closes, cache_errors = _ensure_closes(force_refresh=force_refresh)
     as_of = iso_now()
 
     item_map = {item["key"]: item for item in MARKET_OVERVIEW_ITEMS}
-    categories: list[dict[str, Any]] = []
+    categories: list[MarketOverviewCategory] = []
 
     for cat in MARKET_OVERVIEW_CATEGORIES:
-        cat_items: list[dict[str, Any]] = []
+        cat_items: list[MarketOverviewItem] = []
         for raw_item in cat["items"]:
             item_key = f"{cat['key']}:{raw_item['code']}"
             item = item_map.get(item_key)
@@ -171,20 +168,20 @@ def get_market_overview(*, force_refresh: bool = False) -> dict[str, Any]:
                 cat_items.append(_error_item(item, "数据获取失败"))
 
         categories.append(
-            {
-                "key": cat["key"],
-                "name": cat["display_name"],
-                "items": cat_items,
-            }
+            MarketOverviewCategory(
+                key=cat["key"],
+                name=cat["display_name"],
+                items=cat_items,
+            )
         )
 
     latest_trading_date_value = get_string(MARKET_OVERVIEW_LATEST_DATE_KEY) or latest_trading_date(
         all_closes
     )
 
-    return {
-        "as_of": as_of,
-        "latest_trading_date": latest_trading_date_value,
-        "categories": categories,
-        "errors": cache_errors[:10] if cache_errors else None,
-    }
+    return MarketOverviewResponse(
+        as_of=as_of,
+        latest_trading_date=latest_trading_date_value,
+        categories=categories,
+        errors=cache_errors[:10] if cache_errors else None,
+    )

@@ -1,27 +1,24 @@
 """全球市场概览数据源：akshare 抓取并归一化为 recent_closes。"""
 
-from __future__ import annotations
-
 import logging
 import time
-from datetime import date, datetime, timedelta
-from typing import Any, Callable, TypeVar
+from collections.abc import Callable
+from datetime import datetime, timedelta
 
 import akshare as ak
 import httpx
 import pandas as pd
 
 from astock.config import MARKET_OVERVIEW_RECENT_DAYS
+from astock.core.datetime_utils import normalize_date, now_local
 
 logger = logging.getLogger(__name__)
-
-T = TypeVar("T")
 
 _FETCH_RETRIES = 4
 _FETCH_RETRY_DELAY = 2.0
 
 
-def _retry_call(label: str, fn: Callable[[], T]) -> T:
+def _retry_call[T](label: str, fn: Callable[[], T]) -> T:
     last: Exception | None = None
     for attempt in range(_FETCH_RETRIES):
         try:
@@ -49,17 +46,6 @@ _GLOBAL_INDEX_SINA_FALLBACK = {
 _GLOBAL_INDEX_EM_ONLY = {"美元指数"}
 
 _CN_INDEX_LOOKBACK_DAYS = 180
-
-
-def _normalize_date(value: Any) -> str:
-    if isinstance(value, datetime):
-        return value.strftime("%Y-%m-%d")
-    if isinstance(value, date):
-        return value.isoformat()
-    text = str(value).strip()
-    if " " in text:
-        text = text.split(" ", 1)[0]
-    return text[:10]
 
 
 def _tail_closes(date_close_pairs: list[tuple[str, float]], n: int) -> dict[str, float]:
@@ -97,7 +83,7 @@ def _parse_em_kline_lines(klines: list[str]) -> list[tuple[str, float]]:
         parts = line.split(",")
         if len(parts) < 3:
             continue
-        d = _normalize_date(parts[0])
+        d = normalize_date(parts[0])
         close = pd.to_numeric(parts[2], errors="coerce")
         if d and pd.notna(close):
             pairs.append((d, float(close)))
@@ -165,7 +151,7 @@ def _fetch_usd_index_spot() -> dict[str, float]:
             resp = client.get(f"{_EM_DELAY_HOST}/api/qt/clist/get", params=params)
             resp.raise_for_status()
             diff = (resp.json().get("data") or {}).get("diff")
-            row: dict[str, Any] | None = None
+            row: dict | None = None
             if isinstance(diff, dict) and diff:
                 row = next(iter(diff.values()))
             elif isinstance(diff, list) and diff:
@@ -182,7 +168,7 @@ def _fetch_usd_index_spot() -> dict[str, float]:
             if ts_raw:
                 today = datetime.fromtimestamp(int(ts_raw)).strftime("%Y-%m-%d")
             else:
-                today = datetime.now().strftime("%Y-%m-%d")
+                today = now_local().strftime("%Y-%m-%d")
 
             pairs: list[tuple[str, float]] = [(today, float(current) / 100.0)]
             if pd.notna(prev):
@@ -231,7 +217,7 @@ def _fetch_us_index_sina(symbol: str, n: int) -> dict[str, float]:
         return {}
     pairs: list[tuple[str, float]] = []
     for _, row in df.iterrows():
-        d = _normalize_date(row.get("date"))
+        d = normalize_date(row.get("date"))
         close = pd.to_numeric(row.get("close"), errors="coerce")
         if d and pd.notna(close):
             pairs.append((d, float(close)))
@@ -240,7 +226,7 @@ def _fetch_us_index_sina(symbol: str, n: int) -> dict[str, float]:
 
 def _fetch_cn_index(code: str, n: int) -> dict[str, float]:
     sina_symbol = _cn_index_sina_symbol(code)
-    cutoff = datetime.now() - timedelta(days=_CN_INDEX_LOOKBACK_DAYS)
+    cutoff = now_local() - timedelta(days=_CN_INDEX_LOOKBACK_DAYS)
     try:
         raw = ak.stock_zh_index_daily(symbol=sina_symbol)
     except Exception as e:
@@ -270,7 +256,7 @@ def _fetch_foreign_futures(code: str, n: int) -> dict[str, float]:
         return {}
     pairs: list[tuple[str, float]] = []
     for _, row in df.iterrows():
-        d = _normalize_date(row["date"])
+        d = normalize_date(row["date"])
         close = pd.to_numeric(row["close"], errors="coerce")
         if d and pd.notna(close):
             pairs.append((d, float(close)))
@@ -278,7 +264,7 @@ def _fetch_foreign_futures(code: str, n: int) -> dict[str, float]:
 
 
 def _fetch_boc_forex(symbol: str, n: int) -> dict[str, float]:
-    end = datetime.now()
+    end = now_local()
     start = end - timedelta(days=_CN_INDEX_LOOKBACK_DAYS)
     try:
         df = ak.currency_boc_sina(
@@ -293,7 +279,7 @@ def _fetch_boc_forex(symbol: str, n: int) -> dict[str, float]:
         return {}
     pairs: list[tuple[str, float]] = []
     for _, row in df.iterrows():
-        d = _normalize_date(row.get("日期"))
+        d = normalize_date(row.get("日期"))
         # 央行中间价，单位：100 外币兑人民币，换算为元
         mid = pd.to_numeric(row.get("央行中间价"), errors="coerce")
         if d and pd.notna(mid):
@@ -315,7 +301,7 @@ def _fetch_us_bond_rates() -> dict[str, dict[str, float]]:
     for code, col in _US_BOND_COLUMN_MAP.items():
         pairs: list[tuple[str, float]] = []
         for _, row in df.iterrows():
-            d = _normalize_date(row.get("日期"))
+            d = normalize_date(row.get("日期"))
             val = pd.to_numeric(row.get(col), errors="coerce")
             if d and pd.notna(val):
                 pairs.append((d, float(val)))
