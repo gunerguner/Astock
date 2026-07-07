@@ -43,3 +43,25 @@ GLOBAL_ASSETS: list[dict[str, str]] = [
     for asset_type, items in _GLOBAL_ASSETS_RAW.items()
     for name, ticker in items.items()
 ]
+
+# 全球市场概览
+MARKET_OVERVIEW_RECENT_DAYS = 10
+MARKET_OVERVIEW_FAILURE_TTL = int(os.getenv("MARKET_OVERVIEW_FAILURE_TTL", "300"))
+
+with open(_CONFIG_DIR / "market_overview.yaml", "r", encoding="utf-8") as _f:
+    _MARKET_OVERVIEW_RAW: dict = yaml.safe_load(_f)
+
+MARKET_OVERVIEW_CATEGORIES: list[dict] = _MARKET_OVERVIEW_RAW["categories"]
+
+MARKET_OVERVIEW_ITEMS: list[dict[str, str]] = [
+    {
+        "key": f"{cat['key']}:{item['code']}",
+        "category_key": cat["key"],
+        "category_name": cat["display_name"],
+        "name": item["name"],
+        "code": item["code"],
+        "source": item["source"],
+    }
+    for cat in MARKET_OVERVIEW_CATEGORIES
+    for item in cat["items"]
+]

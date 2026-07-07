@@ -1,0 +1,71 @@
+# 全球市场概览 - 资产清单（不含数字货币）
+# source: global_index | cn_index | foreign_futures | boc_forex | us_bond
+categories:
+  - key: us_stocks
+    display_name: 美股
+    items:
+      - name: 道琼斯
+        code: 道琼斯
+        source: global_index
+      - name: 标普500
+        code: 标普500
+        source: global_index
+      - name: 纳斯达克
+        code: 纳斯达克
+        source: global_index
+
+  - key: cn_stocks
+    display_name: A股
+    items:
+      - name: 上证指数
+        code: "000001"
+        source: cn_index
+      - name: 沪深300
+        code: "000300"
+        source: cn_index
+      - name: 创业板
+        code: "399006"
+        source: cn_index
+      - name: 科创板
+        code: "000688"
+        source: cn_index
+
+  - key: precious_metals
+    display_name: 贵金属
+    items:
+      - name: 黄金
+        code: GC
+        source: foreign_futures
+      - name: 白银
+        code: SI
+        source: foreign_futures
+
+  - key: forex
+    display_name: 汇率
+    items:
+      - name: 美元指数
+        code: 美元指数
+        source: global_index
+      - name: 美元/人民币
+        code: 美元
+        source: boc_forex
+
+  - key: commodities
+    display_name: 大宗商品
+    items:
+      - name: WTI原油
+        code: CL
+        source: foreign_futures
+
+  - key: bonds
+    display_name: 债券
+    items:
+      - name: 美债5年
+        code: us_bond_5y
+        source: us_bond
+      - name: 美债10年
+        code: us_bond_10y
+        source: us_bond
+      - name: 美债30年
+        code: us_bond_30y
+        source: us_bond

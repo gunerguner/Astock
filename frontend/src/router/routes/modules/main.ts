@@ -45,6 +45,17 @@ const MAIN: AppRouteRecordRaw = {
         order: 3,
       },
     },
+    {
+      path: 'market-overview',
+      name: 'MarketOverview',
+      component: () => import('@/views/market-overview/index.vue'),
+      meta: {
+        locale: 'menu.marketOverview',
+        requiresAuth: false,
+        icon: 'icon-apps',
+        order: 4,
+      },
+    },
   ],
 };
 

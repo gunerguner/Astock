@@ -110,6 +110,15 @@ def _baseline_prices(closes: dict[str, float]) -> tuple[float | None, float | No
     return current, prev, week_ago
 
 
+def _synced_today(last_synced_at: str | None) -> bool:
+    if not last_synced_at:
+        return False
+    try:
+        return datetime.fromisoformat(last_synced_at).date() == date.today()
+    except ValueError:
+        return False
+
+
 def _backfill_from_akshare(
     assets: list[dict[str, str]],
 ) -> tuple[dict[str, dict[str, float]], list[str]]:
@@ -139,7 +148,28 @@ def _backfill_from_akshare(
 
 
 def refresh_asset_highs(db: Session) -> dict[str, Any]:
-    from astock.services.import_service import _batch_upsert, upsert_sync_meta
+    from astock.services.import_service import _batch_upsert, get_sync_meta, upsert_sync_meta
+
+    meta = get_sync_meta(db, "asset_high")
+    if (
+        meta
+        and meta.last_status == "success"
+        and _synced_today(meta.last_synced_at)
+    ):
+        total = len(db.exec(select(AssetHigh)).all())
+        if total > 0:
+            logger.info(
+                "全球资产最高点刷新跳过: 今日已成功同步 (last_synced_at=%s)",
+                meta.last_synced_at,
+            )
+            return {
+                "imported": 0,
+                "total": total,
+                "last_date": meta.last_synced_date,
+                "last_synced_at": meta.last_synced_at,
+                "status": "success",
+                "source_errors": {"global_assets": None},
+            }
 
     cached_at = _iso_now()
     records: list[dict[str, Any]] = []

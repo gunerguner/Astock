@@ -101,3 +101,34 @@ export function fetchAssetPriceLevels(forceRefresh = false) {
     params: { force_refresh: forceRefresh || undefined },
   });
 }
+
+export interface MarketOverviewItem {
+  key: string;
+  name: string;
+  code: string;
+  current_price: number | null;
+  daily_change: number | null;
+  weekly_change: number | null;
+  period_start: string | null;
+  period_end: string | null;
+  error: string | null;
+}
+
+export interface MarketOverviewCategory {
+  key: string;
+  name: string;
+  items: MarketOverviewItem[];
+}
+
+export interface MarketOverview {
+  as_of: string;
+  latest_trading_date: string | null;
+  categories: MarketOverviewCategory[];
+  errors?: string[] | null;
+}
+
+export function fetchMarketOverview(forceRefresh = false) {
+  return axios.get<MarketOverview>('/analysis/market-overview', {
+    params: { force_refresh: forceRefresh || undefined },
+  });
+}
