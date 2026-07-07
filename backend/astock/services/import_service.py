@@ -2,9 +2,9 @@
 
 import logging
 import time
+from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 import baostock as bs
 import baostock.common.context as bs_context
@@ -24,6 +24,7 @@ from astock.models.stock_turnover import StockTurnover
 from astock.models.sync_meta import SyncMeta
 from astock.models.turnover import Turnover
 from astock.schemas.imports import ImportDataset
+from astock.services.price_utils import iso_now
 from astock.sources.baostock_client import (
     BaostockClient,
     _SOCKET_TIMEOUT_SECONDS,
@@ -37,6 +38,9 @@ logger = logging.getLogger(__name__)
 
 baostock_client = BaostockClient()
 tencent_client = TencentQuoteClient()
+
+STOCK_UPSERT_FLUSH_SIZE = 5000
+CommitMode = Literal["per_batch", "single"]
 
 
 def _baostock_worker_init() -> None:
@@ -59,10 +63,6 @@ def _fetch_stock_amount_worker(
         return code, fr
     except Exception as e:
         return code, SourceFetchResult(records=[], ok=False, errors=[str(e)])
-
-
-def _iso_now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
 
 
 def get_last_date(db: Session, model: type) -> str | None:
@@ -91,7 +91,7 @@ def upsert_sync_meta(
     error: str | None = None,
 ) -> str:
     meta = get_sync_meta(db, table_name) or SyncMeta(table_name=table_name)
-    synced_at = _iso_now()
+    synced_at = iso_now()
     meta.last_synced_date = last_synced_date
     meta.last_synced_at = synced_at
     meta.last_status = status
@@ -110,28 +110,37 @@ def _batch_upsert(
     model: type,
     records: list[dict[str, Any]],
     conflict_cols: list[str],
+    *,
     batch_size: int = 500,
+    commit_mode: CommitMode = "per_batch",
 ) -> int:
     if not records:
         return 0
 
     total = 0
     table = model.__table__
-    for i in range(0, len(records), batch_size):
-        batch = records[i : i + batch_size]
-        stmt = sqlite_insert(table).values(batch)
-        update_cols = {
-            col.name: stmt.excluded[col.name]
-            for col in table.columns
-            if col.name not in conflict_cols
-        }
-        stmt = stmt.on_conflict_do_update(
-            index_elements=conflict_cols,
-            set_=update_cols,
-        )
-        db.exec(stmt)
-        db.commit()
-        total += len(batch)
+    try:
+        for i in range(0, len(records), batch_size):
+            batch = records[i : i + batch_size]
+            stmt = sqlite_insert(table).values(batch)
+            update_cols = {
+                col.name: stmt.excluded[col.name]
+                for col in table.columns
+                if col.name not in conflict_cols
+            }
+            stmt = stmt.on_conflict_do_update(
+                index_elements=conflict_cols,
+                set_=update_cols,
+            )
+            db.exec(stmt)
+            if commit_mode == "per_batch":
+                db.commit()
+            total += len(batch)
+        if commit_mode == "single":
+            db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return total
 
 
@@ -163,18 +172,34 @@ def _build_result(
     }
 
 
-def import_turnover(db: Session) -> dict[str, Any]:
+def _import_simple_dataset(
+    db: Session,
+    *,
+    table_name: str,
+    model: type,
+    conflict_cols: list[str],
+    fetch: Callable[[str], SourceFetchResult],
+    source_key: str,
+    failure_message: str,
+    log_label: str,
+) -> dict[str, Any]:
     start_ts = time.perf_counter()
-    start_date = get_sync_start_date(db, "turnover")
+    start_date = get_sync_start_date(db, table_name)
 
-    fr = baostock_client.fetch_turnover(start_date)
-    imported = _batch_upsert(db, Turnover, fr.records, ["date"])
+    fr = fetch(start_date)
+    imported = _batch_upsert(
+        db,
+        model,
+        fr.records,
+        conflict_cols,
+        commit_mode="single",
+    )
 
-    last_date = get_last_date(db, Turnover)
+    last_date = get_last_date(db, model)
     status = _resolve_status(fr.ok, imported)
     last_synced_at = upsert_sync_meta(
         db,
-        "turnover",
+        table_name,
         last_synced_date=last_date,
         status=status,
         error=fr.error_summary() if not fr.ok else None,
@@ -182,21 +207,22 @@ def import_turnover(db: Session) -> dict[str, Any]:
 
     result = _build_result(
         imported=imported,
-        total=_count_rows(db, Turnover),
+        total=_count_rows(db, model),
         last_date=last_date,
         ok=fr.ok,
-        source_errors=fr.to_error_map("turnover"),
+        source_errors=fr.to_error_map(source_key),
         last_synced_at=last_synced_at,
     )
 
     if result["status"] == "failed":
         raise ExternalSourceAppError(
-            f"成交额导入失败: {result['source_errors'].get('turnover')}"
+            f"{failure_message}: {result['source_errors'].get(source_key)}"
         )
 
     elapsed = time.perf_counter() - start_ts
     logger.info(
-        "成交额导入完成: imported=%s total=%s status=%s elapsed=%.2fs",
+        "%s导入完成: imported=%s total=%s status=%s elapsed=%.2fs",
+        log_label,
         imported,
         result["total"],
         result["status"],
@@ -204,49 +230,32 @@ def import_turnover(db: Session) -> dict[str, Any]:
     )
     result["elapsed"] = round(elapsed, 2)
     return result
+
+
+def import_turnover(db: Session) -> dict[str, Any]:
+    return _import_simple_dataset(
+        db,
+        table_name="turnover",
+        model=Turnover,
+        conflict_cols=["date"],
+        fetch=baostock_client.fetch_turnover,
+        source_key="turnover",
+        failure_message="成交额导入失败",
+        log_label="成交额",
+    )
 
 
 def import_point(db: Session) -> dict[str, Any]:
-    start_ts = time.perf_counter()
-    start_date = get_sync_start_date(db, "point")
-
-    fr = baostock_client.fetch_point(start_date)
-    imported = _batch_upsert(db, Point, fr.records, ["date"])
-
-    last_date = get_last_date(db, Point)
-    status = _resolve_status(fr.ok, imported)
-    last_synced_at = upsert_sync_meta(
+    return _import_simple_dataset(
         db,
-        "point",
-        last_synced_date=last_date,
-        status=status,
-        error=fr.error_summary() if not fr.ok else None,
+        table_name="point",
+        model=Point,
+        conflict_cols=["date"],
+        fetch=baostock_client.fetch_point,
+        source_key="point",
+        failure_message="上证点位导入失败",
+        log_label="上证点位",
     )
-
-    result = _build_result(
-        imported=imported,
-        total=_count_rows(db, Point),
-        last_date=last_date,
-        ok=fr.ok,
-        source_errors=fr.to_error_map("point"),
-        last_synced_at=last_synced_at,
-    )
-
-    if result["status"] == "failed":
-        raise ExternalSourceAppError(
-            f"上证点位导入失败: {result['source_errors'].get('point')}"
-        )
-
-    elapsed = time.perf_counter() - start_ts
-    logger.info(
-        "上证点位导入完成: imported=%s total=%s status=%s elapsed=%.2fs",
-        imported,
-        result["total"],
-        result["status"],
-        elapsed,
-    )
-    result["elapsed"] = round(elapsed, 2)
-    return result
 
 
 def import_stock(db: Session) -> dict[str, Any]:
@@ -320,11 +329,25 @@ def import_stock(db: Session) -> dict[str, Any]:
     )
 
     hist_start_date = last_synced or START_DATE
-    cached_at = _iso_now()
+    cached_at = iso_now()
     stock_errors: list[str] = []
     imported = 0
+    record_buffer: list[dict[str, Any]] = []
     total_stocks = len(big_cap_codes)
     tasks = [(code, hist_start_date) for code in big_cap_codes]
+
+    def flush_buffer() -> None:
+        nonlocal imported, record_buffer
+        if not record_buffer:
+            return
+        imported += _batch_upsert(
+            db,
+            StockTurnover,
+            record_buffer,
+            ["date", "code"],
+            commit_mode="single",
+        )
+        record_buffer = []
 
     with ProcessPoolExecutor(
         max_workers=STOCK_HISTORY_FETCH_WORKERS,
@@ -349,7 +372,7 @@ def import_stock(db: Session) -> dict[str, Any]:
                 continue
 
             name = code_to_name.get(code, "")
-            code_records = [
+            record_buffer.extend(
                 {
                     "date": row["date"],
                     "code": code,
@@ -359,11 +382,14 @@ def import_stock(db: Session) -> dict[str, Any]:
                 }
                 for row in hist_fr.records
                 if row["amount"] >= STOCK_TURNOVER_SLICE_THRESHOLD
-            ]
-            imported += _batch_upsert(db, StockTurnover, code_records, ["date", "code"])
+            )
+            if len(record_buffer) >= STOCK_UPSERT_FLUSH_SIZE:
+                flush_buffer()
 
             if i % 20 == 0:
                 logger.info("个股日线进度: %s/%s", i, total_stocks)
+
+    flush_buffer()
 
     all_errors = errors + stock_errors
     ok = len(all_errors) == 0

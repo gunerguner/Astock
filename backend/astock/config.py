@@ -31,9 +31,16 @@ with open(_CONFIG_DIR / "bull_markets.yaml", "r", encoding="utf-8") as _f:
 
 # 全球资产价格水位
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+REDIS_RETRY_COOLDOWN = int(os.getenv("REDIS_RETRY_COOLDOWN", "60"))
 ASSET_PRICE_CACHE_TTL = int(os.getenv("ASSET_PRICE_CACHE_TTL", "86400"))
 GLOBAL_ASSET_RECENT_DAYS = 10
-GLOBAL_ASSET_FETCH_WORKERS = int(os.getenv("GLOBAL_ASSET_FETCH_WORKERS", "8"))
+
+# CORS：逗号分隔域名，默认 * 仅适合本地开发
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "*").split(",")
+    if origin.strip()
+]
 
 with open(_CONFIG_DIR / "global_assets.yaml", "r", encoding="utf-8") as _f:
     _GLOBAL_ASSETS_RAW: dict[str, dict[str, str]] = yaml.safe_load(_f)

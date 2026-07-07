@@ -1,9 +1,10 @@
 """分析服务：牛市区间统计与排名查询。"""
 
-import pandas as pd
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from astock.config import BULL_MARKETS
+from astock.core.exceptions import AppError
 from astock.models.point import Point
 from astock.models.stock_turnover import StockTurnover
 from astock.models.turnover import Turnover
@@ -18,65 +19,59 @@ def _get_bull_market_period(bull_market: str | None) -> tuple[str, str] | None:
     return period["start"], period["end"]
 
 
-def analyze_bull_markets(df: pd.DataFrame, value_col: str, threshold: float) -> dict:
-    results = {}
-    for market_name, period in BULL_MARKETS.items():
-        start_date = pd.to_datetime(period["start"])
-        end_date = pd.to_datetime(period["end"])
-        mask = (
-            (df["date"] >= start_date)
-            & (df["date"] <= end_date)
-            & (df[value_col] > threshold)
-        )
-        period_data = df[mask]
-        results[market_name] = {
-            "days": len(period_data),
-            "max_value": period_data[value_col].max() if len(period_data) > 0 else None,
-        }
-    return results
-
-
 def build_bull_market_stats(
-    df: pd.DataFrame, value_col: str, threshold: float
+    db: Session,
+    model: type,
+    value_col_name: str,
+    threshold: float,
 ) -> dict:
-    raw = analyze_bull_markets(df, value_col, threshold)
+    value_col = getattr(model, value_col_name)
     items = []
+    total_days = 0
+
     for market_name, period in BULL_MARKETS.items():
-        info = raw[market_name]
+        count, max_value = db.exec(
+            select(func.count(), func.max(value_col)).where(
+                model.date >= period["start"],
+                model.date <= period["end"],
+                value_col > threshold,
+            )
+        ).one()
+        days = int(count or 0)
+        total_days += days
         items.append(
             {
                 "market": market_name,
                 "start": period["start"],
                 "end": period["end"],
                 "description": period.get("description"),
-                "days": info["days"],
-                "max_value": info["max_value"],
+                "days": days,
+                "max_value": float(max_value) if max_value is not None else None,
             }
         )
+
     items.sort(key=lambda x: x["end"], reverse=True)
     return {
         "threshold": threshold,
         "items": items,
-        "total_days": sum(item["days"] for item in items),
+        "total_days": total_days,
     }
 
 
-def get_turnover_dataframe(db: Session) -> pd.DataFrame:
-    rows = db.exec(select(Turnover).order_by(Turnover.date)).all()
-    if not rows:
-        return pd.DataFrame()
-    df = pd.DataFrame([row.model_dump() for row in rows])
-    df["date"] = pd.to_datetime(df["date"])
-    return df
+def _require_rows(db: Session, model: type, empty_message: str) -> None:
+    exists = db.exec(select(model).limit(1)).first()
+    if exists is None:
+        raise AppError(empty_message)
 
 
-def get_point_dataframe(db: Session) -> pd.DataFrame:
-    rows = db.exec(select(Point).order_by(Point.date)).all()
-    if not rows:
-        return pd.DataFrame()
-    df = pd.DataFrame([row.model_dump() for row in rows])
-    df["date"] = pd.to_datetime(df["date"])
-    return df
+def bull_market_point_stats(db: Session, threshold: float) -> dict:
+    _require_rows(db, Point, "上证点位数据为空，请先导入数据")
+    return build_bull_market_stats(db, Point, "close", threshold)
+
+
+def bull_market_turnover_stats(db: Session, threshold: float) -> dict:
+    _require_rows(db, Turnover, "成交额数据为空，请先导入数据")
+    return build_bull_market_stats(db, Turnover, "turnover", threshold)
 
 
 def turnover_ranking(

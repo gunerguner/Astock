@@ -134,8 +134,9 @@ def fetch_all_assets(
 ) -> dict[str, SourceFetchResult]:
     assets = assets or GLOBAL_ASSETS
     results: dict[str, SourceFetchResult] = {}
-    # 串行抓取：akshare 底层依赖 mini_racer（V8），
+    # 故意串行、不启用并发：akshare 底层依赖 mini_racer（V8），
     # 多线程并发初始化 V8 configurable pool 会在 macOS 上触发 fatal crash。
+    # 请勿添加 GLOBAL_ASSET_FETCH_WORKERS 类配置，当前架构不支持并行抓取。
     for asset in assets:
         ticker, result = fetch_one_asset(asset)
         results[ticker] = result

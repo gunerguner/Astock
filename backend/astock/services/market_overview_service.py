@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 from typing import Any
 
 from astock.config import (
@@ -22,67 +21,31 @@ from astock.core.redis_client import (
     set_json,
     set_string,
 )
+from astock.services.price_utils import (
+    baseline_prices,
+    iso_now,
+    latest_trading_date,
+    pct_change,
+    read_recent_closes_cache,
+    sorted_dates,
+    write_recent_closes_cache,
+)
 from astock.sources.market_overview_client import fetch_all_items
 
 logger = logging.getLogger(__name__)
 
 
-def _iso_now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
-
-
-def _sorted_dates(closes: dict[str, float]) -> list[str]:
-    return sorted(closes.keys())
-
-
-def _pct_change(cur: float, base: float | None) -> float | None:
-    if base and base > 0:
-        return (cur - base) / base * 100
-    return None
-
-
-def _baseline_prices(closes: dict[str, float]) -> tuple[float | None, float | None, float | None]:
-    """返回 (当前价, 昨收基准, 约5个交易日前基准)。"""
-    dates = _sorted_dates(closes)
-    if not dates:
-        return None, None, None
-    current = closes[dates[-1]]
-    prev = closes[dates[-2]] if len(dates) >= 2 else None
-    week_ago = closes[dates[-6]] if len(dates) >= 6 else None
-    return current, prev, week_ago
-
-
-def _latest_trading_date(all_closes: dict[str, dict[str, float]]) -> str | None:
-    dates: set[str] = set()
-    for closes in all_closes.values():
-        dates.update(closes.keys())
-    return max(dates) if dates else None
-
-
 def _write_cache(item_key: str, closes: dict[str, float]) -> None:
-    if not closes:
-        return
-    sorted_items = sorted(closes.items())
-    set_json(
+    write_recent_closes_cache(
+        set_json,
         market_overview_recent_key(item_key),
-        [{"date": d, "close": price} for d, price in sorted_items],
+        closes,
         ttl=ASSET_PRICE_CACHE_TTL,
     )
 
 
 def _read_cache(item_key: str) -> dict[str, float]:
-    cached = get_json(market_overview_recent_key(item_key))
-    if not isinstance(cached, list):
-        return {}
-    closes: dict[str, float] = {}
-    for item in cached:
-        if not isinstance(item, dict):
-            continue
-        d = item.get("date")
-        close = item.get("close")
-        if d and close is not None:
-            closes[str(d)] = float(close)
-    return closes
+    return read_recent_closes_cache(get_json, market_overview_recent_key(item_key))
 
 
 def _has_failure_marker(item_key: str) -> bool:
@@ -127,7 +90,7 @@ def _ensure_closes(
     if not missing:
         latest = get_string(MARKET_OVERVIEW_LATEST_DATE_KEY)
         if latest is None:
-            latest = _latest_trading_date(all_closes)
+            latest = latest_trading_date(all_closes)
             if latest:
                 set_string(
                     MARKET_OVERVIEW_LATEST_DATE_KEY,
@@ -149,17 +112,17 @@ def _ensure_closes(
         else:
             _write_failure_marker(key)
 
-    latest = _latest_trading_date(all_closes)
+    latest = latest_trading_date(all_closes)
     if latest:
         set_string(MARKET_OVERVIEW_LATEST_DATE_KEY, latest, ttl=ASSET_PRICE_CACHE_TTL)
     return all_closes, errors
 
 
 def _build_item(item: dict[str, str], closes: dict[str, float]) -> dict[str, Any]:
-    current, prev_close, week_ago_close = _baseline_prices(closes)
-    daily = _pct_change(current, prev_close) if current is not None else None
-    weekly = _pct_change(current, week_ago_close) if current is not None else None
-    dates = _sorted_dates(closes)
+    current, prev_close, week_ago_close = baseline_prices(closes)
+    daily = pct_change(current, prev_close) if current is not None else None
+    weekly = pct_change(current, week_ago_close) if current is not None else None
+    dates = sorted_dates(closes)
     return {
         "key": item["key"],
         "name": item["name"],
@@ -189,7 +152,7 @@ def _error_item(item: dict[str, str], message: str) -> dict[str, Any]:
 
 def get_market_overview(*, force_refresh: bool = False) -> dict[str, Any]:
     all_closes, cache_errors = _ensure_closes(force_refresh=force_refresh)
-    as_of = _iso_now()
+    as_of = iso_now()
 
     item_map = {item["key"]: item for item in MARKET_OVERVIEW_ITEMS}
     categories: list[dict[str, Any]] = []
@@ -215,13 +178,13 @@ def get_market_overview(*, force_refresh: bool = False) -> dict[str, Any]:
             }
         )
 
-    latest_trading_date = get_string(MARKET_OVERVIEW_LATEST_DATE_KEY) or _latest_trading_date(
+    latest_trading_date_value = get_string(MARKET_OVERVIEW_LATEST_DATE_KEY) or latest_trading_date(
         all_closes
     )
 
     return {
         "as_of": as_of,
-        "latest_trading_date": latest_trading_date,
+        "latest_trading_date": latest_trading_date_value,
         "categories": categories,
         "errors": cache_errors[:10] if cache_errors else None,
     }

@@ -37,6 +37,11 @@ def _error_response(status_code: int, message: str, code: int) -> JSONResponse:
 
 
 def register_exception_handlers(app: FastAPI) -> None:
+    @app.exception_handler(ExternalSourceAppError)
+    async def external_source_error_handler(_: Request, exc: ExternalSourceAppError):
+        logger.warning("external source failed: %s", exc.message)
+        return _error_response(exc.status_code, exc.message, EXTERNAL_SOURCE_ERROR)
+
     @app.exception_handler(AppError)
     async def app_error_handler(_: Request, exc: AppError):
         return _error_response(exc.status_code, exc.message, exc.code)

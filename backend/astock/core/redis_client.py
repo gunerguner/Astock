@@ -2,31 +2,36 @@
 
 import json
 import logging
+import time
 from typing import Any
 
 import redis
 
-from astock.config import REDIS_URL
+from astock.config import REDIS_URL, REDIS_RETRY_COOLDOWN
 
 logger = logging.getLogger(__name__)
 
 _client: redis.Redis | None = None
-_client_failed = False
+_client_failed_at: float | None = None
 
 
 def _get_client() -> redis.Redis | None:
-    global _client, _client_failed
-    if _client_failed:
-        return None
+    global _client, _client_failed_at
     if _client is not None:
         return _client
+    if _client_failed_at is not None:
+        if time.monotonic() - _client_failed_at < REDIS_RETRY_COOLDOWN:
+            return None
+        logger.info("Redis 冷却结束，尝试重新连接")
+        _client_failed_at = None
     try:
         _client = redis.from_url(REDIS_URL, decode_responses=True)
         _client.ping()
         return _client
     except Exception as e:
         logger.warning("Redis 不可用，将降级直连数据源: %s", e)
-        _client_failed = True
+        _client_failed_at = time.monotonic()
+        _client = None
         return None
 
 

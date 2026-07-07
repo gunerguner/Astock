@@ -1,5 +1,5 @@
 <template>
-  <div class="container">
+  <div class="page-container">
     <a-row :gutter="16">
       <a-col :span="12">
         <a-card title="大盘成交额排名" class="section-card">
@@ -49,6 +49,10 @@
   import { fetchSyncStatusApi, type SyncStatus } from '@/api/admin';
   import { formatAmount } from '@/utils/format';
   import formatSyncMeta from '@/utils/sync-meta';
+
+  defineOptions({
+    name: 'TurnoverRank',
+  });
 
   const DEFAULT_TOP = 20;
   const marketLoading = ref(false);
@@ -123,24 +127,3 @@
     Promise.all([loadMarketRanking(), loadStockRanking(), loadSyncStatus()]);
   });
 </script>
-
-<script lang="ts">
-  export default {
-    name: 'TurnoverRank',
-  };
-</script>
-
-<style scoped lang="less">
-  .container {
-    padding: 16px 20px 20px;
-  }
-
-  .section-card {
-    height: 100%;
-  }
-
-  .meta-text {
-    color: var(--color-text-3);
-    font-size: 13px;
-  }
-</style>

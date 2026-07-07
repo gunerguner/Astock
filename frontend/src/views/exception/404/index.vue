@@ -20,12 +20,10 @@
   </div>
 </template>
 
-<script lang="ts" setup></script>
-
-<script lang="ts">
-  export default {
+<script lang="ts" setup>
+  defineOptions({
     name: '404',
-  };
+  });
 </script>
 
 <style scoped lang="less">

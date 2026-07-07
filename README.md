@@ -54,7 +54,7 @@ cp .env.example .env
 
 ```bash
 cd backend
-python main.py
+python -m astock.main
 ```
 
 默认监听 `http://0.0.0.0:8000`，可通过 `.env` 中 `FASTAPI_PORT` 修改。
@@ -142,17 +142,15 @@ curl "http://localhost:8000/api/v1/meta/bull-markets"
 ```text
 .
 ├── backend/
-│   ├── main.py             # uvicorn 启动入口
 │   ├── astock/
-│   │   ├── main.py         # FastAPI app
+│   │   ├── main.py         # FastAPI app + 本地开发启动入口
 │   │   ├── config.py       # 环境变量 + 业务常量
 │   │   ├── core/           # 数据库、异常、日志、装饰器
 │   │   ├── models/         # SQLModel 表定义
 │   │   ├── schemas/        # Pydantic 请求/响应
 │   │   ├── sources/        # 外部数据源客户端
 │   │   ├── services/       # 业务逻辑
-│   │   ├── routers/        # HTTP 路由
-│   │   └── common/         # 类型定义
+│   │   └── routers/        # HTTP 路由
 │   ├── db/astock.db        # SQLite 数据库
 │   ├── logs/               # 应用日志
 │   └── requirements.txt

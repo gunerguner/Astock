@@ -1,5 +1,5 @@
 <template>
-  <div class="container">
+  <div class="page-container">
     <a-card title="A股牛市数据总览" class="section-card">
       <template #extra>
         <span v-if="metaText" class="meta-text">{{ metaText }}</span>
@@ -58,6 +58,10 @@
   import { fetchSyncStatusApi, type SyncStatus } from '@/api/admin';
   import { formatAmount, formatPeriod, formatPoint } from '@/utils/format';
   import formatSyncMeta from '@/utils/sync-meta';
+
+  defineOptions({
+    name: 'BullMarket',
+  });
 
   interface MergedRow {
     market: string;
@@ -174,24 +178,13 @@
   });
 </script>
 
-<script lang="ts">
-  export default {
-    name: 'BullMarket',
-  };
-</script>
-
 <style scoped lang="less">
-  .container {
-    padding: 16px 20px 20px;
-  }
-
   .section-card {
+    height: auto;
     margin-bottom: 16px;
   }
 
   .meta-text {
-    color: var(--color-text-3);
-    font-size: 13px;
     margin-right: 16px;
   }
 

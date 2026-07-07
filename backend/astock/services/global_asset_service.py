@@ -8,11 +8,7 @@ from typing import Any
 
 from sqlmodel import Session, select
 
-from astock.config import (
-    ASSET_PRICE_CACHE_TTL,
-    GLOBAL_ASSET_RECENT_DAYS,
-    GLOBAL_ASSETS,
-)
+from astock.config import ASSET_PRICE_CACHE_TTL, GLOBAL_ASSETS
 from astock.core.redis_client import (
     LATEST_TRADING_DATE_KEY,
     get_json,
@@ -23,26 +19,20 @@ from astock.core.redis_client import (
     set_string,
 )
 from astock.models.asset_high import AssetHigh
-from astock.sources.akshare_client import (
-    extract_ath,
-    extract_recent_closes,
-    fetch_all_assets,
-    fetch_asset_history,
+from astock.services.price_utils import (
+    baseline_prices,
+    iso_now,
+    latest_trading_date,
+    pct_change,
+    read_recent_closes_cache,
+    sorted_dates,
+    write_recent_closes_cache,
 )
+from astock.sources.akshare_client import fetch_all_assets
 
 logger = logging.getLogger(__name__)
 
 _CONCLUSIONS = [(5, "接近历史高点"), (20, "适度回调"), (50, "显著回调")]
-
-
-def _iso_now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
-
-
-def _pct_change(cur: float, base: float | None) -> float | None:
-    if base and base > 0:
-        return (cur - base) / base * 100
-    return None
 
 
 def _conclusion(percentage_diff: float) -> str:
@@ -53,36 +43,24 @@ def _conclusion(percentage_diff: float) -> str:
     return "深度回调"
 
 
-def _sorted_dates(closes: dict[str, float]) -> list[str]:
-    return sorted(closes.keys())
-
-
 def _write_price_cache(ticker: str, closes: dict[str, float]) -> None:
     if not closes:
         return
     sorted_items = sorted(closes.items())
     for d, price in sorted_items:
         set_string(price_key(ticker, d), str(price), ttl=ASSET_PRICE_CACHE_TTL)
-    set_json(
+    write_recent_closes_cache(
+        set_json,
         recent_closes_key(ticker),
-        [{"date": d, "close": price} for d, price in sorted_items],
+        closes,
         ttl=ASSET_PRICE_CACHE_TTL,
     )
 
 
 def _read_price_cache(ticker: str) -> dict[str, float]:
-    cached = get_json(recent_closes_key(ticker))
-    if isinstance(cached, list):
-        closes: dict[str, float] = {}
-        for item in cached:
-            if not isinstance(item, dict):
-                continue
-            d = item.get("date")
-            close = item.get("close")
-            if d and close is not None:
-                closes[str(d)] = float(close)
-        if closes:
-            return closes
+    closes = read_recent_closes_cache(get_json, recent_closes_key(ticker))
+    if closes:
+        return closes
 
     latest = get_string(LATEST_TRADING_DATE_KEY)
     if latest:
@@ -90,24 +68,6 @@ def _read_price_cache(ticker: str) -> dict[str, float]:
         if raw is not None:
             return {latest: float(raw)}
     return {}
-
-
-def _latest_global_trading_date(all_closes: dict[str, dict[str, float]]) -> str | None:
-    dates: set[str] = set()
-    for closes in all_closes.values():
-        dates.update(closes.keys())
-    return max(dates) if dates else None
-
-
-def _baseline_prices(closes: dict[str, float]) -> tuple[float | None, float | None, float | None]:
-    """返回 (当前价, 昨收基准, 约5个交易日前基准)。"""
-    dates = _sorted_dates(closes)
-    if not dates:
-        return None, None, None
-    current = closes[dates[-1]]
-    prev = closes[dates[-2]] if len(dates) >= 2 else None
-    week_ago = closes[dates[-6]] if len(dates) >= 6 else None
-    return current, prev, week_ago
 
 
 def _synced_today(last_synced_at: str | None) -> bool:
@@ -141,7 +101,7 @@ def _backfill_from_akshare(
             continue
         all_closes[ticker] = closes
         _write_price_cache(ticker, closes)
-    latest = _latest_global_trading_date(all_closes)
+    latest = latest_trading_date(all_closes)
     if latest:
         set_string(LATEST_TRADING_DATE_KEY, latest, ttl=ASSET_PRICE_CACHE_TTL)
     return all_closes, errors
@@ -171,7 +131,7 @@ def refresh_asset_highs(db: Session) -> dict[str, Any]:
                 "source_errors": {"global_assets": None},
             }
 
-    cached_at = _iso_now()
+    cached_at = iso_now()
     records: list[dict[str, Any]] = []
     errors: list[str] = []
     all_closes_for_latest: dict[str, dict[str, float]] = {}
@@ -207,8 +167,12 @@ def refresh_asset_highs(db: Session) -> dict[str, Any]:
             }
         )
 
-    imported = _batch_upsert(db, AssetHigh, records, ["ticker"]) if records else 0
-    latest = _latest_global_trading_date(all_closes_for_latest)
+    imported = (
+        _batch_upsert(db, AssetHigh, records, ["ticker"], commit_mode="single")
+        if records
+        else 0
+    )
+    latest = latest_trading_date(all_closes_for_latest)
     if latest:
         set_string(LATEST_TRADING_DATE_KEY, latest, ttl=ASSET_PRICE_CACHE_TTL)
 
@@ -247,7 +211,7 @@ def _ensure_price_cache(
         if not missing:
             latest = get_string(LATEST_TRADING_DATE_KEY)
             if latest is None:
-                latest = _latest_global_trading_date(all_closes)
+                latest = latest_trading_date(all_closes)
                 if latest:
                     set_string(LATEST_TRADING_DATE_KEY, latest, ttl=ASSET_PRICE_CACHE_TTL)
             return all_closes, []
@@ -289,12 +253,12 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> dict[str, A
     row_map = {row.ticker: row for row in rows}
     items: list[dict[str, Any]] = []
     now = datetime.now()
-    as_of = _iso_now()
+    as_of = iso_now()
 
     for asset in GLOBAL_ASSETS:
         ticker = asset["ticker"]
         closes = all_closes.get(ticker, {})
-        current, prev_close, week_ago_close = _baseline_prices(closes)
+        current, prev_close, week_ago_close = baseline_prices(closes)
         if current is None:
             if asset.get("data_pending"):
                 items.append(_pending_item(asset))
@@ -302,44 +266,14 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> dict[str, A
 
         row = row_map.get(ticker)
         if row is None:
-            try:
-                df = fetch_asset_history(ticker, asset["asset_type"])
-                ath = extract_ath(df)
-                if ath is None:
-                    continue
-                all_time_high, ath_date = ath
-                closes_from_hist = extract_recent_closes(df, GLOBAL_ASSET_RECENT_DAYS)
-                _write_price_cache(ticker, closes_from_hist)
-                row = AssetHigh(
-                    ticker=ticker,
-                    name=asset["name"],
-                    asset_type=asset["asset_type"],
-                    all_time_high=all_time_high,
-                    ath_date=ath_date,
-                    cached_at=as_of,
-                )
-                db.merge(row)
-                db.commit()
-                row_map[ticker] = row
-                current, prev_close, week_ago_close = _baseline_prices(
-                    closes_from_hist or closes
-                )
-                if current is None:
-                    continue
-            except Exception as e:
-                logger.warning("懒加载 %s ATH 失败: %s", ticker, e)
-                continue
+            logger.debug("跳过 %s：数据库无 ATH 记录，请通过 admin 刷新导入", ticker)
+            continue
 
         all_time_high = float(row.all_time_high)
         ath_date = row.ath_date
         if current > all_time_high:
             all_time_high = current
-            ath_date = _sorted_dates(closes)[-1] if closes else ath_date
-            row.all_time_high = all_time_high
-            row.ath_date = ath_date
-            row.cached_at = as_of
-            db.merge(row)
-            db.commit()
+            ath_date = sorted_dates(closes)[-1] if closes else ath_date
 
         percentage_diff = (current - all_time_high) / all_time_high * 100
         try:
@@ -358,10 +292,10 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> dict[str, A
                 "percentage_diff": round(percentage_diff, 2),
                 "ath_days": ath_days,
                 "daily_change": round(v, 2)
-                if (v := _pct_change(current, prev_close)) is not None
+                if (v := pct_change(current, prev_close)) is not None
                 else None,
                 "weekly_change": round(v, 2)
-                if (v := _pct_change(current, week_ago_close)) is not None
+                if (v := pct_change(current, week_ago_close)) is not None
                 else None,
                 "conclusion": _conclusion(percentage_diff),
             }
@@ -375,14 +309,14 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> dict[str, A
     )
 
     meta = get_sync_meta(db, "asset_high")
-    latest_trading_date = get_string(LATEST_TRADING_DATE_KEY) or (
+    latest_trading_date_value = get_string(LATEST_TRADING_DATE_KEY) or (
         meta.last_synced_date if meta else None
     )
 
     return {
         "last_synced_at": meta.last_synced_at if meta else None,
         "as_of": as_of,
-        "latest_trading_date": latest_trading_date,
+        "latest_trading_date": latest_trading_date_value,
         "items": items,
         "cache_errors": cache_errors[:5] if cache_errors else None,
     }

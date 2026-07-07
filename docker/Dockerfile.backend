@@ -20,7 +20,6 @@ COPY backend/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY backend/astock /app/astock
-COPY backend/main.py /app/main.py
 COPY docker/gunicorn.docker.conf.py /app/gunicorn.docker.conf.py
 
 EXPOSE 8000

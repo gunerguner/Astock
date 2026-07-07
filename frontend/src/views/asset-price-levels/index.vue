@@ -1,5 +1,5 @@
 <template>
-  <div class="container">
+  <div class="page-container">
     <a-card title="全球资产价格水位" class="section-card">
       <template #extra>
         <span v-if="metaText" class="meta-text">{{ metaText }}</span>
@@ -26,6 +26,10 @@
     type AssetPriceLevelItem,
     type AssetPriceLevels,
   } from '@/api/analysis';
+
+  defineOptions({
+    name: 'AssetPriceLevels',
+  });
 
   /** 七姐妹 + SpaceX */
   const FOCUSED_TICKERS = new Set([
@@ -132,26 +136,6 @@
     ]);
   };
 
-  const spanMethod = ({
-    record,
-    columnIndex,
-  }: {
-    record: TableData;
-    columnIndex: number;
-  }) => {
-    const row = toTableRow(record);
-    if (isDividerRow(row)) {
-      if (columnIndex === 0) {
-        return { rowspan: 1, colspan: columns.length };
-      }
-      return { rowspan: 0, colspan: 0 };
-    }
-    return { rowspan: 1, colspan: 1 };
-  };
-
-  const rowClass = (record: TableData) =>
-    isDividerRow(toTableRow(record)) ? 'section-divider-row' : '';
-
   const columns: TableColumnData[] = [
     {
       title: '资产',
@@ -237,6 +221,26 @@
     },
   ];
 
+  const spanMethod = ({
+    record,
+    columnIndex,
+  }: {
+    record: TableData;
+    columnIndex: number;
+  }) => {
+    const row = toTableRow(record);
+    if (isDividerRow(row)) {
+      if (columnIndex === 0) {
+        return { rowspan: 1, colspan: columns.length };
+      }
+      return { rowspan: 0, colspan: 0 };
+    }
+    return { rowspan: 1, colspan: 1 };
+  };
+
+  const rowClass = (record: TableData) =>
+    isDividerRow(toTableRow(record)) ? 'section-divider-row' : '';
+
   const loadLevels = async (forceRefresh = false) => {
     loading.value = true;
     try {
@@ -252,26 +256,7 @@
   });
 </script>
 
-<script lang="ts">
-  export default {
-    name: 'AssetPriceLevels',
-  };
-</script>
-
 <style scoped lang="less">
-  .container {
-    padding: 16px 20px 20px;
-  }
-
-  .section-card {
-    height: 100%;
-  }
-
-  .meta-text {
-    color: var(--color-text-3);
-    font-size: 13px;
-  }
-
   .asset-name-cell {
     display: inline-flex;
     align-items: center;
@@ -282,22 +267,5 @@
     color: #fadb14;
     font-size: 15px;
     font-weight: 600;
-  }
-
-  :deep(.section-divider-row) {
-    td {
-      background: var(--color-fill-2);
-      border-top: 1px solid var(--color-border-2);
-      border-bottom: 1px solid var(--color-border-2);
-      padding-top: 10px;
-      padding-bottom: 10px;
-    }
-  }
-
-  .section-divider-label {
-    color: var(--color-text-2);
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
   }
 </style>
