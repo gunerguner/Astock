@@ -149,15 +149,6 @@ class ApiResponse(BaseModel, Generic[T]):
 }
 ```
 
-### Meta 路由（prefix `/api/v1/meta`）
-
-#### GET `/bull-markets`
-
-```jsonc
-{ "items": [{ "name": "2024", "start": "...", "end": "...", "description": "..." }] }
-```
-按 `end` 倒序；供前端下拉。
-
 ### Admin 路由（prefix `/api/v1/admin`）
 
 #### POST `/data/import`
@@ -267,7 +258,6 @@ class ApiResponse(BaseModel, Generic[T]):
 - `axios.defaults.baseURL = '/api/v1'`（**硬编码**，未读 `VITE_API_BASE_URL`）
 - `src/api/analysis.ts`：分析接口 + TS interface
 - `src/api/admin.ts`：`refreshAllDataApi()`(5min 超时)、`refreshGlobalAssetsApi()`、`fetchSyncStatusApi()`
-- `src/api/meta.ts`：`fetchBullMarkets()`
 
 ### 路由（`router/routes/modules/main.ts`）
 

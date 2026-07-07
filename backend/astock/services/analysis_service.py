@@ -125,16 +125,3 @@ def stock_ranking(
         "items": items,
     }
 
-
-def get_bull_markets_meta() -> dict:
-    items = [
-        {
-            "name": name,
-            "start": period["start"],
-            "end": period["end"],
-            "description": period.get("description"),
-        }
-        for name, period in BULL_MARKETS.items()
-    ]
-    items.sort(key=lambda x: x["end"], reverse=True)
-    return {"items": items}

@@ -8,7 +8,7 @@ from astock.config import CORS_ORIGINS, FASTAPI_PORT
 from astock.core.database import init_db
 from astock.core.exception_handlers import register_exception_handlers
 from astock.core.logging_config import setup_logging
-from astock.routers import admin, analysis, meta
+from astock.routers import admin, analysis
 
 setup_logging()
 
@@ -31,7 +31,6 @@ app.add_middleware(
 
 app.include_router(admin.router)
 app.include_router(analysis.router)
-app.include_router(meta.router)
 register_exception_handlers(app)
 
 if __name__ == "__main__":

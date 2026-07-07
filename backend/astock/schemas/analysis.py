@@ -43,13 +43,3 @@ class StockRankingResponse(BaseModel):
     bull_market: str | None = None
     items: list[StockRankingItem]
 
-
-class BullMarketMetaItem(BaseModel):
-    name: str
-    start: str
-    end: str
-    description: str | None = None
-
-
-class BullMarketsMetaResponse(BaseModel):
-    items: list[BullMarketMetaItem]

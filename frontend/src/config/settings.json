@@ -9,9 +9,5 @@
   "footer": true,
   "themeColor": "#165DFF",
   "menuWidth": 220,
-  "globalSettings": false,
-  "device": "desktop",
-  "tabBar": false,
-  "menuFromServer": false,
-  "serverMenu": []
+  "device": "desktop"
 }

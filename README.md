@@ -126,9 +126,6 @@ curl "http://localhost:8000/api/v1/analysis/turnover/ranking?top=20&bull_market=
 
 # 个股成交额 TopN
 curl "http://localhost:8000/api/v1/analysis/stock/ranking?top=20"
-
-# 牛市区间元数据（供前端下拉）
-curl "http://localhost:8000/api/v1/meta/bull-markets"
 ```
 
 
