@@ -402,12 +402,50 @@ def import_stock(db: Session) -> dict[str, Any]:
     return result
 
 
+def import_global_assets(db: Session) -> dict[str, Any]:
+    from astock.services.global_asset_service import refresh_asset_highs
+
+    start_ts = time.perf_counter()
+    result = refresh_asset_highs(db)
+    elapsed = time.perf_counter() - start_ts
+    result["elapsed"] = round(elapsed, 2)
+    logger.info(
+        "全球资产最高点刷新完成: imported=%s total=%s status=%s elapsed=%.2fs",
+        result["imported"],
+        result["total"],
+        result["status"],
+        elapsed,
+    )
+    return result
+
+
 def _aggregate_status(*statuses: str) -> str:
     if all(s == "success" for s in statuses):
         return "success"
     if all(s == "failed" for s in statuses):
         return "failed"
     return "partial_failure"
+
+
+_SYNC_STATUS_TABLES: dict[str, str] = {
+    "turnover": "turnover",
+    "point": "point",
+    "stock_turnover": "stock",
+    "asset_high": "global_assets",
+}
+
+
+def get_sync_status(db: Session) -> dict[str, Any]:
+    """返回各数据集最近一次刷新的时间，供页面展示"最后更新时间"。"""
+    status: dict[str, Any] = {}
+    for table_name, dataset_key in _SYNC_STATUS_TABLES.items():
+        meta = get_sync_meta(db, table_name)
+        status[dataset_key] = {
+            "last_synced_date": meta.last_synced_date if meta else None,
+            "last_synced_at": meta.last_synced_at if meta else None,
+            "status": meta.last_status if meta else None,
+        }
+    return status
 
 
 def import_dataset(db: Session, dataset: ImportDataset) -> dict[str, Any]:
@@ -418,18 +456,23 @@ def import_dataset(db: Session, dataset: ImportDataset) -> dict[str, Any]:
             return import_point(db)
         case ImportDataset.stock:
             return import_stock(db)
+        case ImportDataset.global_assets:
+            return import_global_assets(db)
         case ImportDataset.all:
             turnover_result = import_turnover(db)
             point_result = import_point(db)
             stock_result = import_stock(db)
+            global_assets_result = import_global_assets(db)
             statuses = [
                 turnover_result["status"],
                 point_result["status"],
                 stock_result["status"],
+                global_assets_result["status"],
             ]
             return {
                 "turnover": turnover_result,
                 "point": point_result,
                 "stock": stock_result,
+                "global_assets": global_assets_result,
                 "status": _aggregate_status(*statuses),
             }

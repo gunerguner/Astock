@@ -11,6 +11,7 @@ from astock.services.analysis_service import (
     stock_ranking,
     turnover_ranking,
 )
+from astock.services.global_asset_service import get_price_levels
 
 router = APIRouter(prefix="/api/v1/analysis", tags=["analysis"])
 
@@ -61,5 +62,17 @@ def stock_ranking_api(
 ):
     try:
         return stock_ranking(db, top=top, bull_market=bull_market)
+    except ValueError as e:
+        raise AppError(str(e)) from e
+
+
+@router.get("/asset-price-levels")
+@handle_success_response
+def asset_price_levels_api(
+    db: DbSession,
+    force_refresh: bool = Query(default=False),
+):
+    try:
+        return get_price_levels(db, force_refresh=force_refresh)
     except ValueError as e:
         raise AppError(str(e)) from e

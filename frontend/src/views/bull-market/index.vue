@@ -2,6 +2,7 @@
   <div class="container">
     <a-card title="A股牛市数据总览" class="section-card">
       <template #extra>
+        <span v-if="metaText" class="meta-text">{{ metaText }}</span>
         <span class="total-summary">
           点位达标：<strong>{{ pointStats?.total_days ?? '-' }}</strong> 天
         </span>
@@ -54,7 +55,9 @@
     fetchBullMarketTurnoverStats,
     type BullMarketStats,
   } from '@/api/analysis';
+  import { fetchSyncStatusApi, type SyncStatus } from '@/api/admin';
   import { formatAmount, formatPeriod, formatPoint } from '@/utils/format';
+  import formatSyncMeta from '@/utils/sync-meta';
 
   interface MergedRow {
     market: string;
@@ -74,6 +77,11 @@
   const loading = ref(false);
   const pointStats = ref<BullMarketStats | null>(null);
   const turnoverStats = ref<BullMarketStats | null>(null);
+  const syncStatus = ref<SyncStatus | null>(null);
+
+  const metaText = computed(() =>
+    formatSyncMeta(syncStatus.value?.point, syncStatus.value?.turnover)
+  );
 
   const formatDays = (value: number | null | undefined) => {
     if (value === null || value === undefined) {
@@ -151,8 +159,18 @@
     }
   };
 
+  const loadSyncStatus = async () => {
+    try {
+      const res = await fetchSyncStatusApi();
+      syncStatus.value = res.data;
+    } catch {
+      // 静默失败，不影响主要数据展示
+    }
+  };
+
   onMounted(() => {
     loadStats();
+    loadSyncStatus();
   });
 </script>
 
@@ -169,6 +187,12 @@
 
   .section-card {
     margin-bottom: 16px;
+  }
+
+  .meta-text {
+    color: var(--color-text-3);
+    font-size: 13px;
+    margin-right: 16px;
   }
 
   .total-summary {

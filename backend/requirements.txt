@@ -6,3 +6,5 @@ baostock>=0.9.2
 httpx>=0.27.0
 python-dotenv>=1.0.0
 PyYAML>=6.0
+akshare>=1.18.0
+redis>=5.0.0

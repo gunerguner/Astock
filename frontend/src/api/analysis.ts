@@ -72,3 +72,32 @@ export function fetchStockRanking(top: number, bullMarket?: string) {
     },
   });
 }
+
+export interface AssetPriceLevelItem {
+  ticker: string;
+  name: string;
+  asset_type: 'stock' | 'metal';
+  current_price: number | null;
+  all_time_high: number | null;
+  ath_date: string | null;
+  percentage_diff: number | null;
+  ath_days: number | null;
+  daily_change: number | null;
+  weekly_change: number | null;
+  conclusion: string;
+  data_pending?: boolean;
+}
+
+export interface AssetPriceLevels {
+  last_synced_at: string | null;
+  as_of: string;
+  latest_trading_date: string | null;
+  items: AssetPriceLevelItem[];
+  cache_errors?: string[] | null;
+}
+
+export function fetchAssetPriceLevels(forceRefresh = false) {
+  return axios.get<AssetPriceLevels>('/analysis/asset-price-levels', {
+    params: { force_refresh: forceRefresh || undefined },
+  });
+}

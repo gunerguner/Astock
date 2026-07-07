@@ -3,6 +3,11 @@
     <a-row :gutter="16">
       <a-col :span="12">
         <a-card title="大盘成交额排名" class="section-card">
+          <template #extra>
+            <span v-if="turnoverMetaText" class="meta-text">{{
+              turnoverMetaText
+            }}</span>
+          </template>
           <a-table
             :columns="marketColumns"
             :data="marketRanking?.items ?? []"
@@ -14,6 +19,11 @@
       </a-col>
       <a-col :span="12">
         <a-card title="个股成交额排名" class="section-card">
+          <template #extra>
+            <span v-if="stockMetaText" class="meta-text">{{
+              stockMetaText
+            }}</span>
+          </template>
           <a-table
             :columns="stockColumns"
             :data="stockRanking?.items ?? []"
@@ -28,7 +38,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { onMounted, ref } from 'vue';
+  import { computed, onMounted, ref } from 'vue';
   import type { TableColumnData } from '@arco-design/web-vue';
   import {
     fetchStockRanking,
@@ -36,13 +46,21 @@
     type StockRanking,
     type TurnoverRanking,
   } from '@/api/analysis';
+  import { fetchSyncStatusApi, type SyncStatus } from '@/api/admin';
   import { formatAmount } from '@/utils/format';
+  import formatSyncMeta from '@/utils/sync-meta';
 
   const DEFAULT_TOP = 20;
   const marketLoading = ref(false);
   const stockLoading = ref(false);
   const marketRanking = ref<TurnoverRanking | null>(null);
   const stockRanking = ref<StockRanking | null>(null);
+  const syncStatus = ref<SyncStatus | null>(null);
+
+  const turnoverMetaText = computed(() =>
+    formatSyncMeta(syncStatus.value?.turnover)
+  );
+  const stockMetaText = computed(() => formatSyncMeta(syncStatus.value?.stock));
 
   const marketColumns: TableColumnData[] = [
     { title: '排名', dataIndex: 'rank', width: 80 },
@@ -92,8 +110,17 @@
     }
   };
 
+  const loadSyncStatus = async () => {
+    try {
+      const res = await fetchSyncStatusApi();
+      syncStatus.value = res.data;
+    } catch {
+      // 静默失败，不影响主要数据展示
+    }
+  };
+
   onMounted(() => {
-    Promise.all([loadMarketRanking(), loadStockRanking()]);
+    Promise.all([loadMarketRanking(), loadStockRanking(), loadSyncStatus()]);
   });
 </script>
 
@@ -110,5 +137,10 @@
 
   .section-card {
     height: 100%;
+  }
+
+  .meta-text {
+    color: var(--color-text-3);
+    font-size: 13px;
   }
 </style>

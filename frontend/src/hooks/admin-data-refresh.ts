@@ -10,16 +10,16 @@ const DATASET_LABELS: Record<keyof Omit<ImportAllResult, 'status'>, string> = {
   turnover: '成交额',
   point: '上证点位',
   stock: '个股切片',
+  global_assets: '全球资产',
 };
 
 function collectSourceNotes(result: ImportAllResult): string[] {
   const lines: string[] = [];
   (Object.keys(DATASET_LABELS) as Array<keyof typeof DATASET_LABELS>).forEach(
     (key) => {
-      const item = result[key] as ImportResultItem;
-      const errors = item.source_errors;
-      if (!errors) return;
-      Object.entries(errors).forEach(([source, message]) => {
+      const item = result[key] as ImportResultItem | undefined;
+      if (!item?.source_errors) return;
+      Object.entries(item.source_errors).forEach(([source, message]) => {
         if (message) {
           lines.push(`${DATASET_LABELS[key]}(${source}): ${message}`);
         }

@@ -28,3 +28,18 @@ START_DATE = "2005-01-01"
 _CONFIG_DIR = Path(__file__).resolve().parent / "config"
 with open(_CONFIG_DIR / "bull_markets.yaml", "r", encoding="utf-8") as _f:
     BULL_MARKETS = yaml.safe_load(_f)["bull_markets"]
+
+# 全球资产价格水位
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+ASSET_PRICE_CACHE_TTL = int(os.getenv("ASSET_PRICE_CACHE_TTL", "86400"))
+GLOBAL_ASSET_RECENT_DAYS = 10
+GLOBAL_ASSET_FETCH_WORKERS = int(os.getenv("GLOBAL_ASSET_FETCH_WORKERS", "8"))
+
+with open(_CONFIG_DIR / "global_assets.yaml", "r", encoding="utf-8") as _f:
+    _GLOBAL_ASSETS_RAW: dict[str, dict[str, str]] = yaml.safe_load(_f)
+
+GLOBAL_ASSETS: list[dict[str, str]] = [
+    {"ticker": ticker, "name": name, "asset_type": asset_type}
+    for asset_type, items in _GLOBAL_ASSETS_RAW.items()
+    for name, ticker in items.items()
+]

@@ -34,6 +34,17 @@ const MAIN: AppRouteRecordRaw = {
         order: 2,
       },
     },
+    {
+      path: 'asset-price-levels',
+      name: 'AssetPriceLevels',
+      component: () => import('@/views/asset-price-levels/index.vue'),
+      meta: {
+        locale: 'menu.assetPriceLevels',
+        requiresAuth: false,
+        icon: 'icon-fire',
+        order: 3,
+      },
+    },
   ],
 };
 

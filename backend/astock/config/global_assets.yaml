@@ -1,0 +1,26 @@
+# 全球资产价格水位 - 资产清单（不含加密货币）
+# 格式：中文名: 代码，按 stock(美股) / metal(贵金属) 分组
+stock:
+  苹果: AAPL
+  微软: MSFT
+  谷歌: GOOGL
+  亚马逊: AMZN
+  英伟达: NVDA
+  Meta: META
+  特斯拉: TSLA
+  SpaceX: SPCX
+  台积电: TSM
+  英特尔: INTC
+  AMD: AMD
+  高通: QCOM
+  美光: MU
+  IBM: IBM
+  博通: AVGO
+  甲骨文: ORCL
+  阿斯麦: ASML
+  Adobe: ADBE
+  奈飞: NFLX
+  思科: CSCO
+metal:
+  黄金: GC
+  白银: SI
