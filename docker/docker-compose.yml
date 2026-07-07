@@ -1,0 +1,59 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: astock-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    image: astock-backend:local
+    container_name: astock-backend
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      DB_PATH: ${DB_PATH:-/app/data/astock.db}
+      FASTAPI_PORT: "8000"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_DIR: ${LOG_DIR:-/var/log/astock}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      ASSET_PRICE_CACHE_TTL: ${ASSET_PRICE_CACHE_TTL:-86400}
+      GLOBAL_ASSET_FETCH_WORKERS: ${GLOBAL_ASSET_FETCH_WORKERS:-8}
+      MARKET_OVERVIEW_FAILURE_TTL: ${MARKET_OVERVIEW_FAILURE_TTL:-300}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-}
+      GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-300}
+      GUNICORN_LOG_LEVEL: ${GUNICORN_LOG_LEVEL:-info}
+    volumes:
+      - ${SQLITE_HOST_DIR:-./sqlite-data}:/app/data
+      - log_data:/var/log/astock
+    ports:
+      - "${BACKEND_PUBLISH_PORT:-8002}:8000"
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        VITE_ADMIN_REFRESH_PASSWORD: ${VITE_ADMIN_REFRESH_PASSWORD:-change-me}
+    image: astock-frontend:local
+    container_name: astock-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PUBLISH_PORT:-8082}:8080"
+
+volumes:
+  redis_data:
+  log_data:

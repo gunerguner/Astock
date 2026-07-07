@@ -8,3 +8,4 @@ python-dotenv>=1.0.0
 PyYAML>=6.0
 akshare>=1.18.0
 redis>=5.0.0
+gunicorn>=22.0.0
