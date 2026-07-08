@@ -7,6 +7,7 @@ from astock.config import (
     MARKET_OVERVIEW_CATEGORIES,
     MARKET_OVERVIEW_FAILURE_TTL,
     MARKET_OVERVIEW_ITEMS,
+    WEEKLY_BASELINE_OFFSET,
 )
 from astock.core.datetime_utils import today_local
 from astock.core.redis_client import (
@@ -86,7 +87,12 @@ def _ensure_closes(
         key = item["key"]
         closes = _read_cache(key)
         if closes:
-            all_closes[key] = closes
+            # 为了满足口径：T / T-1 / T-5 至少需要 WEEKLY_BASELINE_OFFSET=6 个交易日点位
+            # 否则 daily/weekly 会自然为 null，应该触发补齐而不是继续复用旧缓存。
+            if len(closes) >= WEEKLY_BASELINE_OFFSET:
+                all_closes[key] = closes
+            else:
+                missing.append(item)
         elif not force_refresh and _has_failure_marker(key):
             continue
         else:

@@ -10,12 +10,13 @@ import pandas as pd
 from astock.config import (
     EM_DELAY_HOST,
     EM_HIST_HOST,
+    WEEKLY_BASELINE_OFFSET,
     MARKET_OVERVIEW_IGNORE_SYSTEM_PROXY,
     MARKET_OVERVIEW_RECENT_DAYS,
     USD_HISTORY_TIMEOUT,
     USD_SPOT_TIMEOUT,
 )
-from astock.core.datetime_utils import now_local
+from astock.core.datetime_utils import now_local, today_local
 from astock.sources.market_overview._common import (
     _em_udi_headers,
     _merge_close_dicts,
@@ -34,13 +35,25 @@ def _previous_weekday(date_str: str) -> str:
     return dt.isoformat()
 
 
+def _anchor_date_excluding_today_for_closes(closes: dict[str, float]) -> str | None:
+    """对单个标的，取 < today 的最后一个交易日，用于对齐服务层 anchor_date。"""
+    if not closes:
+        return None
+    today = today_local()
+    dates = [d for d in closes.keys() if d < today]
+    if dates:
+        return max(dates)
+    return max(closes.keys())
+
+
 def _fetch_usd_index_history(n: int) -> dict[str, float]:
     """东财 push2his 日线历史（偶发断连，Connection: close 可提高成功率）。"""
     params = {
         "secid": "100.UDI",
         "klt": "101",
         "fqt": "1",
-        "lmt": str(n + 5),
+        # 多取一些，避免刚好落在 T 附近导致后续按 anchor_date 过滤后点数不够
+        "lmt": str(n + 15),
         "end": "20500000",
         "iscca": "1",
         "fields1": "f1,f2,f3,f4,f5,f6,f7,f8",
@@ -48,7 +61,7 @@ def _fetch_usd_index_history(n: int) -> dict[str, float]:
         "ut": "f057cbcbce2a86e2866ab8877db1d059",
         "forcect": "1",
     }
-    for attempt in range(2):
+    for attempt in range(4):
         try:
             with httpx.Client(
                 timeout=USD_HISTORY_TIMEOUT,
@@ -65,7 +78,7 @@ def _fetch_usd_index_history(n: int) -> dict[str, float]:
         except Exception as e:
             logger.warning("美元指数历史第 %s 次失败: %s", attempt + 1, e)
             if attempt < 1:
-                time.sleep(1.0)
+                time.sleep(1.0 * (attempt + 1))
     return {}
 
 
@@ -128,13 +141,31 @@ def _fetch_usd_index_spot() -> dict[str, float]:
 
 
 def fetch_usd_index(n: int) -> dict[str, float]:
-    # 现货源更稳定：先拿当前+昨收，保障至少能展示当前价与日变化。
     spot = _fetch_usd_index_spot()
-    # 历史源用于补齐 5 个交易日前基准，支持周变化计算。
-    history = _fetch_usd_index_history(max(n, 10))
-    if not spot and not history:
-        return {}
-    merged = _merge_close_dicts(history, spot, n=n)
-    if merged:
-        return merged
-    return history or spot
+
+    # 按你的口径：T(上次交易日) / T-1(前一交易日) / T-5(5个交易日之前)。
+    # 因此美元指数需要至少 WEEKLY_BASELINE_OFFSET=6 个交易日点位，才能计算日/周涨跌。
+    required_points = WEEKLY_BASELINE_OFFSET
+    history_n = max(n, required_points + 5)
+
+    last_history: dict[str, float] = {}
+    for _ in range(2):
+        history = _fetch_usd_index_history(history_n)
+        last_history = history
+        if not spot and not history:
+            return {}
+
+        merged = _merge_close_dicts(history, spot, n=n)
+        anchor = _anchor_date_excluding_today_for_closes(merged)
+        if anchor is None:
+            continue
+        dates = [d for d in sorted(merged.keys()) if d <= anchor]
+        if len(dates) >= required_points:
+            return merged
+
+        # 历史点位仍不足：加大历史请求规模再试一次
+        history_n += 10
+
+    # 最终兜底：尽可能返回合并结果（若仍不足，则涨跌字段会自然为 null）
+    merged = _merge_close_dicts(last_history, spot, n=n)
+    return merged
