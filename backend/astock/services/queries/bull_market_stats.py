@@ -58,7 +58,7 @@ def build_bull_market_stats(
         total_days += days
         max_val = float(max_value) if max_value is not None else None
         if days > 0 and max_val is None:
-            raise AppError(f"牛市区间 {market_name} 存在达标天数但缺少极值，请重新导入数据")
+            raise AppError(message=f"牛市区间 {market_name} 存在达标天数但缺少极值，请重新导入数据")
         items.append(
             BullMarketItem(
                 market=market_name,
@@ -83,14 +83,14 @@ def bull_market_point_stats(
 ) -> BullMarketStatsResponse:
     config = POINT_INDEX_CONFIG.get(index_code)
     if config is None:
-        raise AppError(f"未知指数代码: {index_code}")
+        raise AppError(message=f"未知指数代码: {index_code}")
 
     index_name = str(config["name"])
     exists = db.exec(
         select(Point).where(Point.index_code == index_code).limit(1)
     ).first()
     if exists is None:
-        raise AppError(f"{index_name}点位数据为空，请先导入数据")
+        raise AppError(message=f"{index_name}点位数据为空，请先导入数据")
 
     return build_bull_market_stats(
         db,

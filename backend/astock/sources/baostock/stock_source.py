@@ -5,7 +5,7 @@ import re
 
 import baostock as bs
 
-from astock.config import START_DATE
+from astock.config import START_DATE, STOCK_CODE_PREFIXES
 from astock.core.datetime_utils import today_local
 from astock.sources.baostock.session import (
     _collect_rows,
@@ -57,9 +57,8 @@ def fetch_all_stock_codes(as_of_date: str) -> SourceFetchResult:
             if not m:
                 continue
             exchange, digits = m.groups()
-            if exchange == "sh" and not digits.startswith(("60", "68")):
-                continue
-            if exchange == "sz" and not digits.startswith(("00", "30")):
+            prefixes = tuple(STOCK_CODE_PREFIXES.get(exchange, ()))
+            if prefixes and not digits.startswith(prefixes):
                 continue
             records.append({"code": digits, "name": name})
 

@@ -75,13 +75,13 @@
       title: t('pages.turnoverRank.columns.sh'),
       align: 'right',
       render: ({ record }) =>
-        h('span', { class: 'num' }, formatAmount(record.sh_amount)),
+        h('span', { class: 'num' }, formatAmount(record.sse_amount)),
     },
     {
       title: t('pages.turnoverRank.columns.sz'),
       align: 'right',
       render: ({ record }) =>
-        h('span', { class: 'num' }, formatAmount(record.sz_amount)),
+        h('span', { class: 'num' }, formatAmount(record.szse_amount)),
     },
     {
       title: t('pages.turnoverRank.columns.total'),

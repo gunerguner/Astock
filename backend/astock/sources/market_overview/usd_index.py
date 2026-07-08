@@ -7,11 +7,16 @@ from datetime import datetime, timedelta
 import httpx
 import pandas as pd
 
-from astock.config import MARKET_OVERVIEW_RECENT_DAYS
+from astock.config import (
+    EM_DELAY_HOST,
+    EM_HIST_HOST,
+    MARKET_OVERVIEW_IGNORE_SYSTEM_PROXY,
+    MARKET_OVERVIEW_RECENT_DAYS,
+    USD_HISTORY_TIMEOUT,
+    USD_SPOT_TIMEOUT,
+)
 from astock.core.datetime_utils import now_local
 from astock.sources.market_overview._common import (
-    _EM_DELAY_HOST,
-    _EM_HIST_HOST,
     _em_udi_headers,
     _merge_close_dicts,
     _parse_em_kline_lines,
@@ -19,6 +24,14 @@ from astock.sources.market_overview._common import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _previous_weekday(date_str: str) -> str:
+    """返回前一个工作日（跳过周末），用于现货快照昨收日期。"""
+    dt = datetime.strptime(date_str, "%Y-%m-%d").date() - timedelta(days=1)
+    while dt.weekday() >= 5:
+        dt -= timedelta(days=1)
+    return dt.isoformat()
 
 
 def _fetch_usd_index_history(n: int) -> dict[str, float]:
@@ -37,8 +50,13 @@ def _fetch_usd_index_history(n: int) -> dict[str, float]:
     }
     for attempt in range(2):
         try:
-            with httpx.Client(timeout=12, headers=_em_udi_headers(), http2=False) as client:
-                resp = client.get(f"{_EM_HIST_HOST}/api/qt/stock/kline/get", params=params)
+            with httpx.Client(
+                timeout=USD_HISTORY_TIMEOUT,
+                headers=_em_udi_headers(),
+                http2=False,
+                trust_env=not MARKET_OVERVIEW_IGNORE_SYSTEM_PROXY,
+            ) as client:
+                resp = client.get(f"{EM_HIST_HOST}/api/qt/stock/kline/get", params=params)
                 resp.raise_for_status()
                 klines = (resp.json().get("data") or {}).get("klines") or []
                 closes = _tail_closes(_parse_em_kline_lines(klines), n)
@@ -71,8 +89,13 @@ def _fetch_usd_index_spot() -> dict[str, float]:
         "Referer": "https://quote.eastmoney.com/center/gridlist.html",
     }
     try:
-        with httpx.Client(timeout=15, headers=headers, http2=False) as client:
-            resp = client.get(f"{_EM_DELAY_HOST}/api/qt/clist/get", params=params)
+        with httpx.Client(
+            timeout=USD_SPOT_TIMEOUT,
+            headers=headers,
+            http2=False,
+            trust_env=not MARKET_OVERVIEW_IGNORE_SYSTEM_PROXY,
+        ) as client:
+            resp = client.get(f"{EM_DELAY_HOST}/api/qt/clist/get", params=params)
             resp.raise_for_status()
             diff = (resp.json().get("data") or {}).get("diff")
             row: dict | None = None
@@ -96,9 +119,7 @@ def _fetch_usd_index_spot() -> dict[str, float]:
 
             pairs: list[tuple[str, float]] = [(today, float(current) / 100.0)]
             if pd.notna(prev):
-                prev_date = (
-                    datetime.strptime(today, "%Y-%m-%d").date() - timedelta(days=1)
-                ).isoformat()
+                prev_date = _previous_weekday(today)
                 pairs.insert(0, (prev_date, float(prev) / 100.0))
             return _tail_closes(pairs, MARKET_OVERVIEW_RECENT_DAYS)
     except Exception as e:
@@ -107,13 +128,13 @@ def _fetch_usd_index_spot() -> dict[str, float]:
 
 
 def fetch_usd_index(n: int) -> dict[str, float]:
-    history = _fetch_usd_index_history(n)
-    if len(history) >= 6:
-        return history
+    # 现货源更稳定：先拿当前+昨收，保障至少能展示当前价与日变化。
     spot = _fetch_usd_index_spot()
-    if not history and not spot:
+    # 历史源用于补齐 5 个交易日前基准，支持周变化计算。
+    history = _fetch_usd_index_history(max(n, 10))
+    if not spot and not history:
         return {}
     merged = _merge_close_dicts(history, spot, n=n)
     if merged:
         return merged
-    return spot or history
+    return history or spot

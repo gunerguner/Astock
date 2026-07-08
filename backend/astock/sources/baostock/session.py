@@ -9,13 +9,12 @@ from typing import TypeVar
 import baostock as bs
 import baostock.common.context as bs_context
 
+from astock.config import BAOSTOCK_SOCKET_TIMEOUT
 from astock.sources.fetch_result import SourceFetchResult
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
-
-_SOCKET_TIMEOUT_SECONDS = 30
 
 
 class BaostockRecvTimeoutError(Exception):
@@ -26,7 +25,7 @@ def configure_worker_socket() -> None:
     """ProcessPool worker 初始化：为 baostock 底层 socket 设置超时。"""
     sock = getattr(bs_context, "default_socket", None)
     if sock is not None:
-        sock.settimeout(_SOCKET_TIMEOUT_SECONDS)
+        sock.settimeout(BAOSTOCK_SOCKET_TIMEOUT)
 
 
 @contextmanager

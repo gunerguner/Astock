@@ -1,36 +1,69 @@
 """market_overview 抓取公共工具。"""
 
 import logging
+import os
+import threading
 import time
 from collections.abc import Callable
+from contextlib import contextmanager
 from datetime import timedelta
 
 import pandas as pd
 
+from astock.config import (
+    CN_INDEX_LOOKBACK_DAYS,
+    EM_UDI_REFERER,
+    EM_USER_AGENT,
+    FETCH_RETRIES,
+    FETCH_RETRY_DELAY,
+    MARKET_OVERVIEW_IGNORE_SYSTEM_PROXY,
+)
 from astock.core.datetime_utils import normalize_date, now_local
 
 logger = logging.getLogger(__name__)
+_PROXY_ENV_KEYS = (
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+    "SOCKS_PROXY",
+    "SOCKS5_PROXY",
+    "socks_proxy",
+    "socks5_proxy",
+)
+_PROXY_ENV_LOCK = threading.Lock()
 
-_FETCH_RETRIES = 4
-_FETCH_RETRY_DELAY = 2.0
 
-_CN_INDEX_LOOKBACK_DAYS = 180
+@contextmanager
+def _without_system_proxy():
+    """按配置临时屏蔽代理环境变量，避免抓取链路被本机代理干扰。"""
+    if not MARKET_OVERVIEW_IGNORE_SYSTEM_PROXY:
+        yield
+        return
 
-_EM_HIST_HOST = "https://push2his.eastmoney.com"
-_EM_DELAY_HOST = "https://push2delay.eastmoney.com"
-_EM_UDI_REFERER = "https://quote.eastmoney.com/gb/zsUDI.html"
+    with _PROXY_ENV_LOCK:
+        old_values = {k: os.environ.pop(k, None) for k in _PROXY_ENV_KEYS}
+        try:
+            yield
+        finally:
+            for key, value in old_values.items():
+                if value is not None:
+                    os.environ[key] = value
 
 
 def _retry_call[T](label: str, fn: Callable[[], T]) -> T:
     last: Exception | None = None
-    for attempt in range(_FETCH_RETRIES):
+    for attempt in range(FETCH_RETRIES):
         try:
-            return fn()
+            with _without_system_proxy():
+                return fn()
         except Exception as e:
             last = e
-            if attempt < _FETCH_RETRIES - 1:
+            if attempt < FETCH_RETRIES - 1:
                 logger.warning("%s 第 %s 次失败，重试: %s", label, attempt + 1, e)
-                time.sleep(_FETCH_RETRY_DELAY * (attempt + 1))
+                time.sleep(FETCH_RETRY_DELAY * (attempt + 1))
     assert last is not None
     raise last
 
@@ -50,11 +83,8 @@ def _cn_index_sina_symbol(code: str) -> str:
 
 def _em_udi_headers() -> dict[str, str]:
     return {
-        "User-Agent": (
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        ),
-        "Referer": _EM_UDI_REFERER,
+        "User-Agent": EM_USER_AGENT,
+        "Referer": EM_UDI_REFERER,
         "Connection": "close",
     }
 
@@ -80,4 +110,4 @@ def _merge_close_dicts(*sources: dict[str, float], n: int) -> dict[str, float]:
 
 
 def _cn_index_cutoff():
-    return now_local() - timedelta(days=_CN_INDEX_LOOKBACK_DAYS)
+    return now_local() - timedelta(days=CN_INDEX_LOOKBACK_DAYS)

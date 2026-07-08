@@ -8,6 +8,7 @@ import pandas as pd
 from astock.sources.market_overview._common import (
     _cn_index_cutoff,
     _cn_index_sina_symbol,
+    _retry_call,
     _tail_closes,
 )
 
@@ -18,7 +19,10 @@ def fetch_cn_index(code: str, n: int) -> dict[str, float]:
     sina_symbol = _cn_index_sina_symbol(code)
     cutoff = _cn_index_cutoff()
     try:
-        raw = ak.stock_zh_index_daily(symbol=sina_symbol)
+        raw = _retry_call(
+            f"stock_zh_index_daily:{sina_symbol}",
+            lambda: ak.stock_zh_index_daily(symbol=sina_symbol),
+        )
     except Exception as e:
         logger.warning("A股指数 %s 抓取失败: %s", code, e)
         return {}

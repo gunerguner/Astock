@@ -5,17 +5,12 @@ import logging
 import akshare as ak
 import pandas as pd
 
+from astock.config import GLOBAL_INDEX_SINA_FALLBACK
 from astock.core.datetime_utils import normalize_date
 from astock.sources.market_overview._common import _retry_call, _tail_closes
 from astock.sources.market_overview.usd_index import fetch_usd_index
 
 logger = logging.getLogger(__name__)
-
-_GLOBAL_INDEX_SINA_FALLBACK = {
-    "道琼斯": ".DJI",
-    "标普500": ".INX",
-    "纳斯达克": ".IXIC",
-}
 
 _GLOBAL_INDEX_EM_ONLY = {"美元指数"}
 
@@ -38,7 +33,7 @@ def _fetch_us_index_sina(symbol: str, n: int) -> dict[str, float]:
 
 
 def fetch_global_index(symbol: str, n: int) -> dict[str, float]:
-    sina_symbol = _GLOBAL_INDEX_SINA_FALLBACK.get(symbol)
+    sina_symbol = GLOBAL_INDEX_SINA_FALLBACK.get(symbol)
     if sina_symbol:
         return _fetch_us_index_sina(sina_symbol, n)
 

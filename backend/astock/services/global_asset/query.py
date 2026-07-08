@@ -127,7 +127,7 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> PriceLevels
         meta.last_synced_date if meta else None
     )
     if latest_trading_date_value is None:
-        raise AppError("无法确定最新交易日，请先刷新全球资产数据")
+        raise AppError(message="无法确定最新交易日，请先刷新全球资产数据")
 
     return PriceLevelsResponse(
         last_synced_at=meta.last_synced_at if meta else None,

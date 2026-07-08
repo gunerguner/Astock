@@ -77,11 +77,11 @@ export function formatPeriod(start: string, end: string): string {
   return `${start} ~ ${end}`;
 }
 
-/** 后端固定返回中文结论文案 → 稳定 i18n key */
+/** 后端返回结论 code，前端做 i18n 映射 */
 export const CONCLUSION_I18N_KEYS: Record<string, string> = {
-  待接入: 'pages.assetPriceLevels.conclusion.pending',
-  接近历史高点: 'pages.assetPriceLevels.conclusion.nearAth',
-  适度回调: 'pages.assetPriceLevels.conclusion.moderatePullback',
-  显著回调: 'pages.assetPriceLevels.conclusion.significantPullback',
-  深度回调: 'pages.assetPriceLevels.conclusion.deepPullback',
+  pending: 'pages.assetPriceLevels.conclusion.pending',
+  nearAth: 'pages.assetPriceLevels.conclusion.nearAth',
+  moderatePullback: 'pages.assetPriceLevels.conclusion.moderatePullback',
+  significantPullback: 'pages.assetPriceLevels.conclusion.significantPullback',
+  deepPullback: 'pages.assetPriceLevels.conclusion.deepPullback',
 };

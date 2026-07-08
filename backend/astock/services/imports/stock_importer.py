@@ -16,6 +16,7 @@ from astock.config import (
     START_DATE,
     STOCK_HISTORY_FETCH_WORKERS,
     STOCK_TURNOVER_SLICE_THRESHOLD,
+    STOCK_UPSERT_FLUSH_SIZE,
 )
 from astock.core.exceptions import ExternalSourceAppError
 from astock.core.progress import ProgressReporter, SSEBridge
@@ -41,8 +42,6 @@ from astock.sources.fetch_result import SourceFetchResult
 from astock.sources.tencent_client import TencentQuoteClient
 
 logger = logging.getLogger(__name__)
-
-STOCK_UPSERT_FLUSH_SIZE = 5000
 
 tencent_client = TencentQuoteClient()
 

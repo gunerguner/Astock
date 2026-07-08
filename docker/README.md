@@ -9,7 +9,7 @@
 | 组件 | 说明 |
 |------|------|
 | Redis | `redis:7-alpine`，持久化卷 `redis_data`；不可用时后端自动降级直连数据源 |
-| 后端 | 镜像由 `docker/Dockerfile.backend` 构建；SQLite 挂载至 `SQLITE_HOST_DIR`；启动时 `init_db()` 自动建表 |
+| 后端 | 镜像由 `docker/Dockerfile.backend` 构建；SQLite 挂载至 `SQLITE_HOST_DIR`；启动时 `init_db()` 自动建表（**生产环境可直接替换为预置好的 `astock.db`**） |
 | 前端 | 镜像由 `docker/Dockerfile.frontend` 构建：`pnpm build` + Nginx 监听 **8080** |
 
 **前后端分工**：业务 SPA 仅存在于 **frontend** 镜像；axios 基址写死为同源 `/api/v1`，Nginx 将 `/api` 反代至 `backend:8000`。改前端后须 `build frontend`，仅重建 backend **不会**更新页面。
@@ -68,7 +68,7 @@
    - **`VITE_ADMIN_REFRESH_PASSWORD`**：页面「刷新全部数据」二次确认码（构建时写入前端，**务必改成非默认值**）
    - 若端口冲突，调整 **`FRONTEND_PUBLISH_PORT`** / **`BACKEND_PUBLISH_PORT`**
 
-3. SQLite 数据文件默认位于 `docker/sqlite-data/astock.db`（首次启动自动创建空库与表结构）。
+3. SQLite 数据文件默认位于 `docker/sqlite-data/astock.db`。首次启动会创建空库；**已有数据的库文件可直接拷贝到该目录覆盖**，无需迁移脚本。
 
 ## 启动与停止
 
@@ -113,15 +113,13 @@ docker compose -f docker/docker-compose.yml --env-file docker/.env up -d
 ## 数据初始化
 
 1. 启动栈后访问前端页面，或通过 Swagger 调用管理接口。
-2. 首次使用需执行数据导入（耗时较长，Gunicorn `timeout` 默认 300s）：
-
+2. 首次使用需执行数据导入（耗时较长，个股阶段最久）：
+   - **推荐**：页面右上角「刷新全部数据」→ 输入 `VITE_ADMIN_REFRESH_PASSWORD` → SSE 四阶段进度弹窗（`POST /api/v1/admin/data/import/stream`）
    ```bash
-   curl -X POST http://127.0.0.1:8002/api/v1/admin/data/import
+   curl -N -X POST http://127.0.0.1:8002/api/v1/admin/data/import/stream?dataset=all
    ```
 
-   或通过页面右上角「刷新全部数据」按钮（需输入 `VITE_ADMIN_REFRESH_PASSWORD`）。
-
-3. OpenAPI 文档：`http://127.0.0.1:8002/docs`（或通过前端同源 `/api` 访问）。
+3. 导入完成后各业务页会自动 reload 数据；OpenAPI 文档：`http://127.0.0.1:8002/docs`（或通过前端同源 `/api` 访问）。
 
 ## 自检
 
@@ -138,9 +136,9 @@ curl -fsS http://127.0.0.1:8002/api/v1/admin/data/sync-status
 | 症状 | 处理 |
 |------|------|
 | 改了前端页面线上没变化 | `docker compose build frontend && docker compose up -d frontend` |
-| 数据导入超时 | 增大 `GUNICORN_TIMEOUT`（默认 300）后重建 backend |
+| 数据导入超时 | 优先用页面 SSE 流式刷新或 `/data/import/stream`；仍超时则增大 `GUNICORN_TIMEOUT` 后重建 backend |
 | 与 carSales/stockManager 端口冲突 | 修改 `FRONTEND_PUBLISH_PORT` / `BACKEND_PUBLISH_PORT`，并同步更新 tencentDocker 的 `ASTOCK_FRONTEND_UPSTREAM` |
-| SQLite 需重置 | 停止栈后删除 `docker/sqlite-data/astock.db`，再 `up -d`（会丢数据） |
+| SQLite 需重置 | 停止栈后替换或删除 `docker/sqlite-data/astock.db`，再 `up -d`（会丢数据；也可从本机拷贝预置库） |
 
 ## 接入 tencentDocker 边缘网关
 

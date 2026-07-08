@@ -34,8 +34,8 @@ class MultiIndexPointStatsResponse(BaseModel):
 class TurnoverRankingItem(BaseModel):
     rank: int
     date: str
-    sh_amount: float
-    sz_amount: float
+    sse_amount: float
+    szse_amount: float
     turnover: float
 
 

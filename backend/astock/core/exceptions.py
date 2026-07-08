@@ -19,7 +19,7 @@ class AppError(Exception):
 class ValidationAppError(AppError):
     message: str = "参数校验失败"
     code: int = ErrorCode.VALIDATION_ERROR
-    status_code: int = status.HTTP_422_UNPROCESSABLE_ENTITY
+    status_code: int = status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 @dataclass(eq=False, kw_only=True)

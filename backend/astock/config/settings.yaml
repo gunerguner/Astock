@@ -1,0 +1,44 @@
+# 业务阈值与运行参数（常调）
+business:
+  start_date: "2005-01-01"
+  turnover_threshold: 2000000000000
+  market_cap_threshold: 100000000000
+  stock_turnover_slice_threshold: 30000000000
+  stock_history_fetch_workers: 4
+  market_overview_recent_days: 10
+  weekly_baseline_offset: 6
+  price_level_conclusions:
+    - [5, "nearAth"]
+    - [20, "moderatePullback"]
+    - [50, "significantPullback"]
+  price_level_default: "deepPullback"
+
+# 外部数据源（端点、超时、重试）
+api:
+  tencent:
+    quote_url: "http://qt.gtimg.cn/q="
+    batch_size: 60
+    timeout: 10
+  baostock:
+    socket_timeout: 30
+  eastmoney:
+    hist_host: "https://push2his.eastmoney.com"
+    delay_host: "https://push2delay.eastmoney.com"
+    usd_history_timeout: 12
+    usd_spot_timeout: 15
+  fetch_retries: 4
+  fetch_retry_delay: 2.0
+  cn_index_lookback_days: 180
+  market_overview_ignore_system_proxy: true
+
+# 批量写入
+batch:
+  default_upsert_batch_size: 500
+  stock_upsert_flush_size: 5000
+
+# 领域映射（与数据源字段/代码对应）
+mappings:
+  # 上证综指 / 深证综指 amount ≈ 上交所、深交所全市场成交额
+  exchange_turnover_codes:
+    sse_amount: "sh.000001"
+    szse_amount: "sz.399106"

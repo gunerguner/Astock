@@ -9,14 +9,17 @@ import re
 
 import httpx
 
+from astock.config import (
+    TENCENT_BATCH_SIZE,
+    TENCENT_MARKET_CAP_FIELD_INDEX,
+    TENCENT_QUOTE_URL,
+    TENCENT_TIMEOUT,
+)
 from astock.sources.fetch_result import SourceFetchResult
 
 logger = logging.getLogger(__name__)
 
-_QUOTE_URL = "http://qt.gtimg.cn/q="
-_BATCH_SIZE = 60
 _LINE_RE = re.compile(r'v_(sh|sz)(\d{6})="([^"]*)"')
-_MARKET_CAP_FIELD_INDEX = 44  # 总市值字段，单位：亿元
 
 
 def _to_tencent_code(code: str) -> str:
@@ -26,10 +29,10 @@ def _to_tencent_code(code: str) -> str:
 
 def _parse_market_cap(raw: str) -> float | None:
     fields = raw.split("~")
-    if len(fields) <= _MARKET_CAP_FIELD_INDEX:
+    if len(fields) <= TENCENT_MARKET_CAP_FIELD_INDEX:
         return None
     try:
-        return float(fields[_MARKET_CAP_FIELD_INDEX]) * 1e8
+        return float(fields[TENCENT_MARKET_CAP_FIELD_INDEX]) * 1e8
     except ValueError:
         return None
 
@@ -43,12 +46,12 @@ class TencentQuoteClient:
         records: list[dict] = []
         errors: list[str] = []
 
-        with httpx.Client(timeout=10, headers={"User-Agent": "Mozilla/5.0"}) as client:
-            for i in range(0, len(codes), _BATCH_SIZE):
-                batch = codes[i : i + _BATCH_SIZE]
+        with httpx.Client(timeout=TENCENT_TIMEOUT, headers={"User-Agent": "Mozilla/5.0"}) as client:
+            for i in range(0, len(codes), TENCENT_BATCH_SIZE):
+                batch = codes[i : i + TENCENT_BATCH_SIZE]
                 query = ",".join(_to_tencent_code(c) for c in batch)
                 try:
-                    resp = client.get(_QUOTE_URL + query)
+                    resp = client.get(TENCENT_QUOTE_URL + query)
                     resp.encoding = "gbk"
                     text = resp.text
                 except Exception as e:

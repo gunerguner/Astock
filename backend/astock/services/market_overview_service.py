@@ -8,6 +8,7 @@ from astock.config import (
     MARKET_OVERVIEW_FAILURE_TTL,
     MARKET_OVERVIEW_ITEMS,
 )
+from astock.core.datetime_utils import today_local
 from astock.core.redis_client import (
     MARKET_OVERVIEW_LATEST_DATE_KEY,
     delete_key,
@@ -18,7 +19,6 @@ from astock.core.redis_client import (
     set_json,
     set_string,
 )
-from astock.core.exceptions import AppError
 from astock.schemas.analysis import (
     MarketOverviewCategory,
     MarketOverviewErrorItem,
@@ -26,7 +26,8 @@ from astock.schemas.analysis import (
     MarketOverviewResponse,
 )
 from astock.services.price_utils import (
-    baseline_prices,
+    anchor_date_excluding_today,
+    baseline_prices_at_anchor,
     iso_now,
     latest_trading_date,
     pct_change,
@@ -123,14 +124,18 @@ def _ensure_closes(
 
 
 def _build_item(
-    item: dict[str, str], closes: dict[str, float]
+    item: dict[str, str],
+    closes: dict[str, float],
+    anchor_date: str,
 ) -> MarketOverviewItem | MarketOverviewErrorItem:
-    current, prev_close, week_ago_close = baseline_prices(closes)
+    current, prev_close, week_ago_close = baseline_prices_at_anchor(closes, anchor_date)
     if current is None:
         return _error_item(item, f"{item['name']}({item['code']}): 当前价格缺失")
     daily = pct_change(current, prev_close)
     weekly = pct_change(current, week_ago_close)
-    dates = sorted_dates(closes)
+    dates = [d for d in sorted_dates(closes) if d <= anchor_date]
+    period_end = dates[-1] if dates else None
+    period_start = dates[-2] if len(dates) >= 2 else period_end
     return MarketOverviewItem(
         key=item["key"],
         name=item["name"],
@@ -138,8 +143,8 @@ def _build_item(
         current_price=round(current, 4),
         daily_change=round(daily, 2) if daily is not None else None,
         weekly_change=round(weekly, 2) if weekly is not None else None,
-        period_start=dates[-2] if len(dates) >= 2 else dates[-1] if dates else None,
-        period_end=dates[-1] if dates else None,
+        period_start=period_start,
+        period_end=period_end,
     )
 
 
@@ -155,6 +160,7 @@ def _error_item(item: dict[str, str], message: str) -> MarketOverviewErrorItem:
 def get_market_overview(*, force_refresh: bool = False) -> MarketOverviewResponse:
     all_closes, cache_errors = _ensure_closes(force_refresh=force_refresh)
     as_of = iso_now()
+    anchor_date = anchor_date_excluding_today(all_closes)
 
     item_map = {item["key"]: item for item in MARKET_OVERVIEW_ITEMS}
     categories: list[MarketOverviewCategory] = []
@@ -170,7 +176,10 @@ def get_market_overview(*, force_refresh: bool = False) -> MarketOverviewRespons
             if not closes:
                 cat_items.append(_error_item(item, "数据获取失败"))
                 continue
-            cat_items.append(_build_item(item, closes))
+            if anchor_date is None:
+                cat_items.append(_error_item(item, "无法确定最新交易日"))
+                continue
+            cat_items.append(_build_item(item, closes, anchor_date))
 
         categories.append(
             MarketOverviewCategory(
@@ -180,11 +189,18 @@ def get_market_overview(*, force_refresh: bool = False) -> MarketOverviewRespons
             )
         )
 
-    latest_trading_date_value = get_string(MARKET_OVERVIEW_LATEST_DATE_KEY) or latest_trading_date(
-        all_closes
-    )
+    latest_trading_date_value = anchor_date
     if latest_trading_date_value is None:
-        raise AppError("无法确定最新交易日，请先刷新市场概览数据")
+        latest_trading_date_value = get_string(MARKET_OVERVIEW_LATEST_DATE_KEY) or latest_trading_date(
+            all_closes
+        )
+    if latest_trading_date_value is None:
+        # 没有可用行情时也返回结构化空结果，避免前端进入页面直接报服务错误
+        latest_trading_date_value = today_local()
+        cache_errors = [
+            *(cache_errors or []),
+            "无法确定最新交易日，请先刷新市场概览数据",
+        ]
 
     return MarketOverviewResponse(
         as_of=as_of,

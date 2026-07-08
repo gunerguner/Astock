@@ -1,11 +1,11 @@
-"""baostock 三市成交额抓取。"""
+"""baostock 沪深交易所全市场成交额抓取。"""
 
 import logging
 
 import baostock as bs
 import pandas as pd
 
-from astock.config import START_DATE
+from astock.config import EXCHANGE_TURNOVER_CODES, START_DATE
 from astock.core.datetime_utils import iso_now, today_local
 from astock.sources.baostock.session import (
     _collect_rows,
@@ -23,11 +23,7 @@ def fetch_turnover(start_date: str | None = None) -> SourceFetchResult:
     end = today_local()
     errors: list[str] = []
 
-    index_codes = {
-        "sh_amount": "sh.000001",
-        "sz_amount": "sz.399001",
-        "cyb_amount": "sz.399006",
-    }
+    index_codes = EXCHANGE_TURNOVER_CODES
 
     with baostock_session() as lg:
         if failed := _login_failure(lg):
@@ -75,20 +71,19 @@ def fetch_turnover(start_date: str | None = None) -> SourceFetchResult:
             return SourceFetchResult.empty()
 
         merged = pd.concat(all_records, axis=0).groupby("date", as_index=False).sum()
-        for col in ["sh_amount", "sz_amount", "cyb_amount"]:
+        for col in index_codes:
             if col not in merged.columns:
                 merged[col] = 0.0
 
-        merged["turnover"] = merged[["sh_amount", "sz_amount", "cyb_amount"]].sum(axis=1)
+        merged["turnover"] = merged[list(index_codes.keys())].sum(axis=1)
         merged = merged.sort_values("date")
 
         cached_at = iso_now()
         records = [
             {
                 "date": row["date"],
-                "sh_amount": row["sh_amount"],
-                "sz_amount": row["sz_amount"],
-                "cyb_amount": row["cyb_amount"],
+                "sse_amount": row["sse_amount"],
+                "szse_amount": row["szse_amount"],
                 "turnover": row["turnover"],
                 "cached_at": cached_at,
             }

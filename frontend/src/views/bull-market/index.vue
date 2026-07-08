@@ -108,9 +108,21 @@
       nameKey: 'pages.bullMarket.indexSh',
       filterKey: 'pages.bullMarket.filterSh',
     },
-    { code: '000300', nameKey: 'pages.bullMarket.indexHS300', filterKey: 'pages.bullMarket.filterHS300' },
-    { code: '399006', nameKey: 'pages.bullMarket.indexCYB', filterKey: 'pages.bullMarket.filterCYB' },
-    { code: '000688', nameKey: 'pages.bullMarket.indexKCB50', filterKey: 'pages.bullMarket.filterKCB50' },
+    {
+      code: '000300',
+      nameKey: 'pages.bullMarket.indexHS300',
+      filterKey: 'pages.bullMarket.filterHS300',
+    },
+    {
+      code: '399006',
+      nameKey: 'pages.bullMarket.indexCYB',
+      filterKey: 'pages.bullMarket.filterCYB',
+    },
+    {
+      code: '000688',
+      nameKey: 'pages.bullMarket.indexKCB50',
+      filterKey: 'pages.bullMarket.filterKCB50',
+    },
   ] as const;
 
   const formatPeriodCompact = (start: string, end: string) => `${start}~${end}`;
@@ -201,9 +213,7 @@
 
   const mergedRows = computed<MergedRow[]>(() => {
     const base =
-      pointStats.value?.indices[0]?.items ??
-      turnoverStats.value?.items ??
-      [];
+      pointStats.value?.indices[0]?.items ?? turnoverStats.value?.items ?? [];
     const turnoverByMarket = new Map(
       (turnoverStats.value?.items ?? []).map((item) => [item.market, item])
     );

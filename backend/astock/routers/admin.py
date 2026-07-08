@@ -4,15 +4,10 @@ from fastapi.responses import StreamingResponse
 from astock.core.deps import DbSession
 from astock.schemas.imports import ImportDataset
 from astock.schemas.response import success
-from astock.services.import_orchestrator import import_dataset, import_dataset_stream
+from astock.services.import_orchestrator import import_dataset_stream
 from astock.services.sync_status_service import get_sync_status
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
-
-
-@router.post("/data/import")
-def trigger_import(db: DbSession, dataset: ImportDataset = ImportDataset.all):
-    return success(import_dataset(db, dataset))
 
 
 @router.post("/data/import/stream")

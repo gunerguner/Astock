@@ -1,6 +1,6 @@
 """全球资产价格缓存读写。"""
 
-from astock.config import ASSET_PRICE_CACHE_TTL
+from astock.config import ASSET_PRICE_CACHE_TTL, PRICE_LEVEL_CONCLUSIONS, PRICE_LEVEL_DEFAULT
 from astock.core.redis_client import (
     LATEST_TRADING_DATE_KEY,
     get_json,
@@ -18,15 +18,12 @@ from astock.services.price_utils import (
 )
 from astock.sources.akshare_client import fetch_all_assets
 
-_CONCLUSIONS = [(5, "接近历史高点"), (20, "适度回调"), (50, "显著回调")]
-
-
 def conclusion(percentage_diff: float) -> str:
     abs_diff = abs(percentage_diff)
-    for threshold, label in _CONCLUSIONS:
+    for threshold, label in PRICE_LEVEL_CONCLUSIONS:
         if abs_diff < threshold:
             return label
-    return "深度回调"
+    return PRICE_LEVEL_DEFAULT
 
 
 def write_price_cache(ticker: str, closes: dict[str, float]) -> None:
@@ -89,5 +86,5 @@ def pending_item(asset: dict[str, str]) -> PriceLevelPendingItem:
         ticker=asset["ticker"],
         name=asset["name"],
         asset_type=asset["asset_type"],
-        conclusion="待接入",
+        conclusion="pending",
     )

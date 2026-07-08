@@ -79,7 +79,7 @@ def turnover_ranking_api(
     try:
         return success(turnover_ranking(db, top=top, bull_market=bull_market))
     except ValueError as e:
-        raise AppError(str(e)) from e
+        raise AppError(message=str(e)) from e
 
 
 @router.get(
@@ -94,7 +94,7 @@ def stock_ranking_api(
     try:
         return success(stock_ranking(db, top=top, bull_market=bull_market))
     except ValueError as e:
-        raise AppError(str(e)) from e
+        raise AppError(message=str(e)) from e
 
 
 @router.get(
@@ -108,7 +108,7 @@ def asset_price_levels_api(
     try:
         return success(get_price_levels(db, force_refresh=force_refresh))
     except ValueError as e:
-        raise AppError(str(e)) from e
+        raise AppError(message=str(e)) from e
 
 
 @router.get(

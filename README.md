@@ -78,35 +78,31 @@ pnpm dev
 
 
 
-### 数据导入
+### 数据导入（SSE 流式）
 
 ```bash
-# 导入全部数据集（turnover → point → stock）
-curl -X POST "http://localhost:8000/api/v1/admin/data/import?dataset=all"
+# 导入全部数据集（turnover → point → stock → global_assets）
+curl -N -X POST "http://localhost:8000/api/v1/admin/data/import/stream?dataset=all"
 
 # 仅导入全市场成交额
-curl -X POST "http://localhost:8000/api/v1/admin/data/import?dataset=turnover"
+curl -N -X POST "http://localhost:8000/api/v1/admin/data/import/stream?dataset=turnover"
 
-# 仅导入上证点位
-curl -X POST "http://localhost:8000/api/v1/admin/data/import?dataset=point"
+# 仅导入指数点位
+curl -N -X POST "http://localhost:8000/api/v1/admin/data/import/stream?dataset=point"
 
 # 仅导入个股成交额切片
-curl -X POST "http://localhost:8000/api/v1/admin/data/import?dataset=stock"
+curl -N -X POST "http://localhost:8000/api/v1/admin/data/import/stream?dataset=stock"
 ```
 
-响应格式：
+`done` 事件 payload 示例（单 dataset）：
 
 ```json
 {
-  "code": 0,
-  "message": "success",
-  "data": {
-    "imported": 123,
-    "total": 4567,
-    "last_date": "2026-07-04",
-    "status": "success",
-    "elapsed": 12.34
-  }
+  "imported": 123,
+  "total": 4567,
+  "last_date": "2026-07-04",
+  "status": "success",
+  "elapsed": 12.34
 }
 ```
 

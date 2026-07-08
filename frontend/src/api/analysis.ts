@@ -45,8 +45,8 @@ export const DEFAULT_POINT_THRESHOLDS: Record<string, number> = {
 export interface TurnoverRankingItem {
   rank: number;
   date: string;
-  sh_amount: number;
-  sz_amount: number;
+  sse_amount: number;
+  szse_amount: number;
   turnover: number;
 }
 

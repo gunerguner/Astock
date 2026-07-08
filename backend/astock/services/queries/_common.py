@@ -20,7 +20,7 @@ def get_bull_market_period(bull_market: str | None) -> tuple[str, str] | None:
 def require_rows(db: Session, model: type[SQLModel], empty_message: str) -> None:
     exists = db.exec(select(model).limit(1)).first()
     if exists is None:
-        raise AppError(empty_message)
+        raise AppError(message=empty_message)
 
 
 def empty_index_items(available_from: str | None = None) -> list[BullMarketItem]:

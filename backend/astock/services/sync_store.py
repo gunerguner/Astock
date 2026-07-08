@@ -6,7 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlmodel import Session, select
 
-from astock.config import START_DATE
+from astock.config import DEFAULT_UPSERT_BATCH_SIZE, START_DATE
 from astock.core.sync_status import SyncStatus
 from astock.models.sync_meta import SyncMeta
 from astock.services.price_utils import iso_now
@@ -60,7 +60,7 @@ def batch_upsert(
     records: list[dict[str, Any]],
     conflict_cols: list[str],
     *,
-    batch_size: int = 500,
+    batch_size: int = DEFAULT_UPSERT_BATCH_SIZE,
     commit_mode: CommitMode = "per_batch",
 ) -> int:
     if not records:

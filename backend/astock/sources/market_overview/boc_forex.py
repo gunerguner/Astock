@@ -6,23 +6,24 @@ from datetime import timedelta
 import akshare as ak
 import pandas as pd
 
+from astock.config import CN_INDEX_LOOKBACK_DAYS
 from astock.core.datetime_utils import normalize_date, now_local
-from astock.sources.market_overview._common import (
-    _CN_INDEX_LOOKBACK_DAYS,
-    _tail_closes,
-)
+from astock.sources.market_overview._common import _retry_call, _tail_closes
 
 logger = logging.getLogger(__name__)
 
 
 def fetch_boc_forex(symbol: str, n: int) -> dict[str, float]:
     end = now_local()
-    start = end - timedelta(days=_CN_INDEX_LOOKBACK_DAYS)
+    start = end - timedelta(days=CN_INDEX_LOOKBACK_DAYS)
     try:
-        df = ak.currency_boc_sina(
-            symbol=symbol,
-            start_date=start.strftime("%Y%m%d"),
-            end_date=end.strftime("%Y%m%d"),
+        df = _retry_call(
+            f"currency_boc_sina:{symbol}",
+            lambda: ak.currency_boc_sina(
+                symbol=symbol,
+                start_date=start.strftime("%Y%m%d"),
+                end_date=end.strftime("%Y%m%d"),
+            ),
         )
     except Exception as e:
         logger.warning("中行汇率 %s 抓取失败: %s", symbol, e)

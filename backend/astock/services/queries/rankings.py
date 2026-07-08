@@ -25,8 +25,8 @@ def turnover_ranking(
         TurnoverRankingItem(
             rank=idx,
             date=row.date,
-            sh_amount=row.sh_amount,
-            sz_amount=row.sz_amount,
+            sse_amount=row.sse_amount,
+            szse_amount=row.szse_amount,
             turnover=row.turnover,
         )
         for idx, row in enumerate(rows, start=1)

@@ -86,10 +86,10 @@
   });
 
   const conclusionColor = (conclusion: string) => {
-    if (conclusion === '待接入') return 'gray';
-    if (conclusion === '接近历史高点') return 'arcoblue';
-    if (conclusion === '适度回调') return 'gold';
-    if (conclusion === '显著回调') return 'orangered';
+    if (conclusion === 'pending') return 'gray';
+    if (conclusion === 'nearAth') return 'arcoblue';
+    if (conclusion === 'moderatePullback') return 'gold';
+    if (conclusion === 'significantPullback') return 'orangered';
     return 'red';
   };
 

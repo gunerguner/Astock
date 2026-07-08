@@ -3,9 +3,20 @@
 from collections.abc import Callable
 from typing import Any
 
-from astock.core.datetime_utils import iso_now
+from astock.config import WEEKLY_BASELINE_OFFSET
+from astock.core.datetime_utils import iso_now, today_local
 
-__all__ = ["iso_now", "sorted_dates", "pct_change", "baseline_prices", "latest_trading_date", "read_recent_closes_cache", "write_recent_closes_cache"]
+__all__ = [
+    "iso_now",
+    "sorted_dates",
+    "pct_change",
+    "baseline_prices",
+    "baseline_prices_at_anchor",
+    "anchor_date_excluding_today",
+    "latest_trading_date",
+    "read_recent_closes_cache",
+    "write_recent_closes_cache",
+]
 
 
 def sorted_dates(closes: dict[str, float]) -> list[str]:
@@ -27,8 +38,40 @@ def baseline_prices(
         return None, None, None
     current = closes[dates[-1]]
     prev = closes[dates[-2]] if len(dates) >= 2 else None
-    week_ago = closes[dates[-6]] if len(dates) >= 6 else None
+    week_ago = closes[dates[-WEEKLY_BASELINE_OFFSET]] if len(dates) >= WEEKLY_BASELINE_OFFSET else None
     return current, prev, week_ago
+
+
+def baseline_prices_at_anchor(
+    closes: dict[str, float],
+    anchor_date: str,
+) -> tuple[float | None, float | None, float | None]:
+    """返回给定锚点交易日的 (当前价, 昨收基准, 约5个交易日前基准)。"""
+    dates = [d for d in sorted_dates(closes) if d <= anchor_date]
+    if not dates:
+        return None, None, None
+    current = closes[dates[-1]]
+    prev = closes[dates[-2]] if len(dates) >= 2 else None
+    week_ago = (
+        closes[dates[-WEEKLY_BASELINE_OFFSET]]
+        if len(dates) >= WEEKLY_BASELINE_OFFSET
+        else None
+    )
+    return current, prev, week_ago
+
+
+def anchor_date_excluding_today(all_closes: dict[str, dict[str, float]]) -> str | None:
+    """返回小于 today 的最后交易日；若不存在则回退到全量最大日期。"""
+    today = today_local()
+    dates: set[str] = set()
+    for closes in all_closes.values():
+        dates.update(closes.keys())
+    if not dates:
+        return None
+    before_today = [d for d in dates if d < today]
+    if before_today:
+        return max(before_today)
+    return max(dates)
 
 
 def latest_trading_date(all_closes: dict[str, dict[str, float]]) -> str | None:

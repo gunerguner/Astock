@@ -5,17 +5,11 @@ import logging
 import akshare as ak
 import pandas as pd
 
-from astock.config import MARKET_OVERVIEW_RECENT_DAYS
+from astock.config import MARKET_OVERVIEW_RECENT_DAYS, US_BOND_COLUMNS
 from astock.core.datetime_utils import normalize_date
 from astock.sources.market_overview._common import _retry_call, _tail_closes
 
 logger = logging.getLogger(__name__)
-
-_US_BOND_COLUMN_MAP = {
-    "us_bond_5y": "美国国债收益率5年",
-    "us_bond_10y": "美国国债收益率10年",
-    "us_bond_30y": "美国国债收益率30年",
-}
 
 
 def fetch_us_bond_rates() -> dict[str, dict[str, float]]:
@@ -29,7 +23,7 @@ def fetch_us_bond_rates() -> dict[str, dict[str, float]]:
         return {}
 
     result: dict[str, dict[str, float]] = {}
-    for code, col in _US_BOND_COLUMN_MAP.items():
+    for code, col in US_BOND_COLUMNS.items():
         pairs: list[tuple[str, float]] = []
         for _, row in df.iterrows():
             d = normalize_date(row.get("日期"))
