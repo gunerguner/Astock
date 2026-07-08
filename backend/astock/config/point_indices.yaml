@@ -1,0 +1,23 @@
+# 牛市点位统计支持的 A 股指数
+# available_from: 指数正式发布/可交易起始日，用于判断历史牛市区间是否覆盖该指数
+point_indices:
+  "000001":
+    name: 上证指数
+    baostock_code: sh.000001
+    default_threshold: 4000
+    available_from: "1991-07-15"
+  "000300":
+    name: 沪深300
+    baostock_code: sh.000300
+    default_threshold: 4500
+    available_from: "2005-04-08"
+  "399006":
+    name: 创业板指
+    baostock_code: sz.399006
+    default_threshold: 2500
+    available_from: "2010-06-01"
+  "000688":
+    name: 科创50
+    source: akshare
+    default_threshold: 1200
+    available_from: "2020-07-23"

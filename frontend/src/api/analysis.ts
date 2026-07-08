@@ -7,6 +7,7 @@ export interface BullMarketItem {
   description?: string | null;
   days: number;
   max_value: number | null;
+  not_available?: boolean;
 }
 
 export interface BullMarketStats {
@@ -14,6 +15,32 @@ export interface BullMarketStats {
   items: BullMarketItem[];
   total_days: number;
 }
+
+export interface IndexPointStats {
+  index_code: string;
+  index_name: string;
+  threshold: number;
+  items: BullMarketItem[];
+  total_days: number;
+}
+
+export interface MultiIndexPointStats {
+  indices: IndexPointStats[];
+}
+
+export const POINT_INDEX_CODES = [
+  '000001',
+  '000300',
+  '399006',
+  '000688',
+] as const;
+
+export const DEFAULT_POINT_THRESHOLDS: Record<string, number> = {
+  '000001': 4000,
+  '000300': 4500,
+  '399006': 2500,
+  '000688': 1200,
+};
 
 export interface TurnoverRankingItem {
   rank: number;
@@ -44,10 +71,15 @@ export interface StockRanking {
 }
 
 export function fetchBullMarketPointStats(
-  threshold: number
-): Promise<BullMarketStats> {
+  thresholds: Record<string, number>
+): Promise<MultiIndexPointStats> {
   return request.get('/analysis/bull-markets/point', {
-    params: { threshold },
+    params: {
+      threshold_000001: thresholds['000001'],
+      threshold_000300: thresholds['000300'],
+      threshold_399006: thresholds['399006'],
+      threshold_000688: thresholds['000688'],
+    },
   });
 }
 

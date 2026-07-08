@@ -1,6 +1,5 @@
+import { streamPost } from '@/utils/sse-stream';
 import request from './request';
-
-const REFRESH_TIMEOUT = 5 * 60 * 1000;
 
 export type ImportStatus = 'failed' | 'partial_failure' | 'success';
 
@@ -22,17 +21,40 @@ export interface ImportAllResult {
   status: ImportStatus;
 }
 
-export function refreshAllDataApi(): Promise<ImportAllResult> {
-  return request.post('/admin/data/import', null, {
-    timeout: REFRESH_TIMEOUT,
-  });
+export type ImportPhaseKey = 'turnover' | 'point' | 'stock' | 'global_assets';
+
+export interface ImportProgressEvent {
+  phase: ImportPhaseKey;
+  label: string;
+  status: 'running' | 'done' | 'failed';
+  current: number;
+  total: number;
+  imported: number;
+  detail?: string;
+  elapsed?: number;
+  source_errors?: Record<string, string | null> | null;
 }
 
-export function refreshGlobalAssetsApi(): Promise<ImportResultItem> {
-  return request.post('/admin/data/import', null, {
-    params: { dataset: 'global_assets' },
-    timeout: REFRESH_TIMEOUT,
-  });
+export interface ImportStreamError {
+  message: string;
+  phase?: string;
+}
+
+export interface ImportStreamHandlers {
+  onProgress?: (event: ImportProgressEvent) => void;
+  onDone?: (result: ImportAllResult) => void;
+  onError?: (error: ImportStreamError) => void;
+}
+
+const STREAM_URL = '/api/v1/admin/data/import/stream';
+
+export function refreshAllDataStream(
+  handlers: ImportStreamHandlers
+): AbortController {
+  return streamPost<ImportProgressEvent, ImportAllResult, ImportStreamError>(
+    STREAM_URL,
+    handlers
+  );
 }
 
 export interface SyncStatusItem {

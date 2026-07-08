@@ -10,12 +10,25 @@ class BullMarketItem(BaseModel):
     description: str | None = None
     days: int
     max_value: float | None = None
+    not_available: bool = False
 
 
 class BullMarketStatsResponse(BaseModel):
     threshold: float
     items: list[BullMarketItem]
     total_days: int
+
+
+class IndexPointStats(BaseModel):
+    index_code: str
+    index_name: str
+    threshold: float
+    items: list[BullMarketItem]
+    total_days: int
+
+
+class MultiIndexPointStatsResponse(BaseModel):
+    indices: list[IndexPointStats]
 
 
 class TurnoverRankingItem(BaseModel):

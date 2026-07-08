@@ -23,7 +23,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, h, onMounted, ref, type Ref } from 'vue';
+  import { computed, h, onMounted, onUnmounted, ref, type Ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { TableColumnData } from '@arco-design/web-vue';
   import {
@@ -37,6 +37,7 @@
   import { formatAmount } from '@/utils/format';
   import useTableScroll from '@/utils/table';
   import formatSyncMeta from '@/utils/sync-meta';
+  import { offDataRefresh, onDataRefresh } from '@/utils/data-refresh';
 
   const { t } = useI18n();
   const tableScroll = useTableScroll();
@@ -154,10 +155,19 @@
     }
   };
 
-  onMounted(() => {
+  const reloadPageData = () => {
     Promise.all([
       ...panels.value.map((panel) => panel.run()),
       loadSyncStatus(),
     ]);
+  };
+
+  onMounted(() => {
+    onDataRefresh(reloadPageData);
+    reloadPageData();
+  });
+
+  onUnmounted(() => {
+    offDataRefresh(reloadPageData);
   });
 </script>

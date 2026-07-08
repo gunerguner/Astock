@@ -48,9 +48,14 @@ ASSET_PRICE_CACHE_TTL = settings.asset_price_cache_ttl
 MARKET_OVERVIEW_FAILURE_TTL = settings.market_overview_failure_ttl
 CORS_ORIGINS = settings.cors_origins
 
-# 默认阈值（非 env）
-THRESHOLD_POINT = 4000
+# 指数点位配置见 config/point_indices.yaml（懒加载为 POINT_INDEX_CONFIG）
+
 TURNOVER_THRESHOLD = 2_000_000_000_000  # 默认2万亿
+
+
+def point_sync_meta_key(index_code: str) -> str:
+    """各指数点位同步水位在 sync_meta 中的 table_name。"""
+    return f"point_{index_code}"
 
 # 个股成交额配置
 MARKET_CAP_THRESHOLD = 100_000_000_000  # 默认市值阈值1000亿（单位：元）
@@ -62,6 +67,14 @@ START_DATE = "2005-01-01"
 
 GLOBAL_ASSET_RECENT_DAYS = 10
 MARKET_OVERVIEW_RECENT_DAYS = 10
+
+
+@lru_cache
+def _load_point_index_config() -> dict[str, dict[str, str | float | int]]:
+    raw = yaml.safe_load(
+        (_CONFIG_DIR / "point_indices.yaml").read_text(encoding="utf-8")
+    )
+    return raw["point_indices"]
 
 
 @lru_cache
@@ -105,6 +118,10 @@ def _load_market_overview_items() -> list[dict[str, str]]:
 
 
 def __getattr__(name: str) -> Any:
+    if name == "POINT_INDEX_CONFIG":
+        return _load_point_index_config()
+    if name == "THRESHOLD_POINT":
+        return int(_load_point_index_config()["000001"]["default_threshold"])
     if name == "BULL_MARKETS":
         return _load_bull_markets()
     if name == "GLOBAL_ASSETS":

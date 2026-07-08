@@ -19,7 +19,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, h, onMounted } from 'vue';
+  import { computed, h, onMounted, onUnmounted } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { Tag } from '@arco-design/web-vue';
   import type { TableColumnData } from '@arco-design/web-vue';
@@ -45,6 +45,7 @@
   } from '@/utils/format';
   import renderAssetNameWithTooltip from '@/utils/render-asset-cell';
   import useTableScroll from '@/utils/table';
+  import { offDataRefresh, onDataRefresh } from '@/utils/data-refresh';
 
   const { t } = useI18n();
   const tableScroll = useTableScroll();
@@ -272,7 +273,14 @@
 
   const { spanMethod, rowClass } = useDividerTable(columns);
 
+  const reloadLevels = () => loadLevels(true);
+
   onMounted(() => {
+    onDataRefresh(reloadLevels);
     loadLevels();
+  });
+
+  onUnmounted(() => {
+    offDataRefresh(reloadLevels);
   });
 </script>

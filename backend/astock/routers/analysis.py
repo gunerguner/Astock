@@ -1,18 +1,19 @@
 from fastapi import APIRouter, Query
 
-from astock.config import THRESHOLD_POINT, TURNOVER_THRESHOLD
+from astock.config import POINT_INDEX_CONFIG, TURNOVER_THRESHOLD
 from astock.core.deps import DbSession
 from astock.core.exceptions import AppError
 from astock.schemas.analysis import (
     BullMarketStatsResponse,
     MarketOverviewResponse,
+    MultiIndexPointStatsResponse,
     PriceLevelsResponse,
     StockRankingResponse,
     TurnoverRankingResponse,
 )
 from astock.schemas.response import ApiResponse, success
 from astock.services.analysis_service import (
-    bull_market_point_stats,
+    bull_market_multi_index_point_stats,
     bull_market_turnover_stats,
     stock_ranking,
     turnover_ranking,
@@ -25,13 +26,34 @@ router = APIRouter(prefix="/api/v1/analysis", tags=["analysis"])
 
 @router.get(
     "/bull-markets/point",
-    response_model=ApiResponse[BullMarketStatsResponse],
+    response_model=ApiResponse[MultiIndexPointStatsResponse],
 )
 def bull_market_point_stats_api(
     db: DbSession,
-    threshold: float = Query(default=THRESHOLD_POINT, gt=0),
+    threshold_000001: float = Query(
+        default=float(POINT_INDEX_CONFIG["000001"]["default_threshold"]),  # type: ignore[arg-type]
+        gt=0,
+    ),
+    threshold_000300: float = Query(
+        default=float(POINT_INDEX_CONFIG["000300"]["default_threshold"]),  # type: ignore[arg-type]
+        gt=0,
+    ),
+    threshold_399006: float = Query(
+        default=float(POINT_INDEX_CONFIG["399006"]["default_threshold"]),  # type: ignore[arg-type]
+        gt=0,
+    ),
+    threshold_000688: float = Query(
+        default=float(POINT_INDEX_CONFIG["000688"]["default_threshold"]),  # type: ignore[arg-type]
+        gt=0,
+    ),
 ):
-    return success(bull_market_point_stats(db, threshold))
+    thresholds = {
+        "000001": threshold_000001,
+        "000300": threshold_000300,
+        "399006": threshold_399006,
+        "000688": threshold_000688,
+    }
+    return success(bull_market_multi_index_point_stats(db, thresholds))
 
 
 @router.get(

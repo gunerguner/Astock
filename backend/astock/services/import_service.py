@@ -2,21 +2,25 @@
 
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Any
 
 import baostock as bs
 import baostock.common.context as bs_context
-from sqlmodel import Session
+from sqlalchemy import func
+from sqlmodel import Session, select
 
 from astock.config import (
     MARKET_CAP_THRESHOLD,
+    POINT_INDEX_CONFIG,
     START_DATE,
     STOCK_HISTORY_FETCH_WORKERS,
     STOCK_TURNOVER_SLICE_THRESHOLD,
+    point_sync_meta_key,
 )
 from astock.core.exceptions import ExternalSourceAppError
+from astock.core.progress import ProgressReporter, SSEBridge
 from astock.core.sync_status import SyncStatus
 from astock.models.point import Point
 from astock.models.stock_turnover import StockTurnover
@@ -32,6 +36,7 @@ from astock.services.sync_store import (
     get_sync_start_date,
     upsert_sync_meta,
 )
+from astock.sources.akshare_client import fetch_cn_index_point
 from astock.sources.baostock_client import (
     BaostockClient,
     _SOCKET_TIMEOUT_SECONDS,
@@ -49,7 +54,7 @@ tencent_client = TencentQuoteClient()
 STOCK_UPSERT_FLUSH_SIZE = 5000
 
 _REQUIRED_FIELDS: dict[str, list[str]] = {
-    "point": ["close", "cached_at"],
+    "point": ["index_code", "close", "cached_at"],
     "turnover": ["sh_amount", "sz_amount", "cyb_amount", "turnover", "cached_at"],
     "stock_turnover": ["name", "amount", "cached_at"],
 }
@@ -222,20 +227,116 @@ def import_turnover(db: Session) -> dict[str, Any]:
     )
 
 
+def _fetch_point_index(index_code: str, start_date: str) -> SourceFetchResult:
+    config = POINT_INDEX_CONFIG[index_code]
+    source = str(config.get("source", "baostock"))
+    if source == "akshare":
+        return fetch_cn_index_point(index_code, start_date=start_date)
+    return baostock_client.fetch_point(index_code=index_code, start_date=start_date)
+
+
 def import_point(db: Session) -> dict[str, Any]:
-    return _import_simple_dataset(
-        db,
-        table_name="point",
-        model=Point,
-        conflict_cols=["date"],
-        fetch=baostock_client.fetch_point,
-        source_key="point",
-        failure_message="上证点位导入失败",
-        log_label="上证点位",
+    start_ts = time.perf_counter()
+    total_imported = 0
+    total_rows = count_rows(db, Point)
+    all_errors: list[str] = []
+    source_errors: dict[str, str | None] = {}
+    last_dates: list[str] = []
+    last_synced_ats: list[str] = []
+    statuses: list[SyncStatus] = []
+
+    for index_code, config in POINT_INDEX_CONFIG.items():
+        index_name = str(config["name"])
+        table_name = point_sync_meta_key(index_code)
+        start_date = get_sync_start_date(db, table_name)
+
+        fr = _fetch_point_index(index_code, start_date)
+        records = _prepare_records_for_upsert("point", fr.records, fr=fr)
+        imported = batch_upsert(
+            db,
+            Point,
+            records,
+            ["date", "index_code"],
+            commit_mode="single",
+        )
+
+        last_date = db.exec(
+            select(func.max(Point.date)).where(Point.index_code == index_code)
+        ).one()
+        status = _resolve_status(fr.ok, imported)
+        last_synced_at = upsert_sync_meta(
+            db,
+            table_name,
+            last_synced_date=last_date,
+            status=status,
+            error=fr.error_summary() if not fr.ok else None,
+        )
+
+        total_imported += imported
+        total_rows = count_rows(db, Point)
+        statuses.append(status)
+        if last_date:
+            last_dates.append(last_date)
+        if last_synced_at:
+            last_synced_ats.append(last_synced_at)
+        if not fr.ok:
+            all_errors.append(f"{index_name}: {fr.error_summary()}")
+        source_errors[index_code] = fr.error_summary() if not fr.ok else None
+
+        logger.info(
+            "%s点位导入: imported=%s status=%s",
+            index_name,
+            imported,
+            status,
+        )
+
+    ok = len(all_errors) == 0
+    aggregate_status = _aggregate_status(*statuses)
+    result = _build_result(
+        imported=total_imported,
+        total=total_rows,
+        last_date=max(last_dates) if last_dates else None,
+        ok=ok,
+        source_errors=source_errors if source_errors else None,
+        last_synced_at=max(last_synced_ats) if last_synced_ats else None,
     )
+    result["status"] = aggregate_status
+
+    if result["status"] == SyncStatus.FAILED:
+        raise ExternalSourceAppError(
+            f"指数点位导入失败: {'; '.join(all_errors[:5])}"
+        )
+
+    elapsed = time.perf_counter() - start_ts
+    logger.info(
+        "指数点位导入完成: imported=%s total=%s status=%s elapsed=%.2fs",
+        total_imported,
+        total_rows,
+        result["status"],
+        elapsed,
+    )
+    result["elapsed"] = round(elapsed, 2)
+    return result
 
 
-def import_stock(db: Session) -> dict[str, Any]:
+def import_stock(
+    db: Session,
+    on_progress: ProgressReporter | None = None,
+) -> dict[str, Any]:
+    gen = _import_stock_gen(db, on_progress=on_progress)
+    try:
+        while True:
+            next(gen)
+    except StopIteration as exc:
+        return exc.value
+
+
+def _import_stock_gen(
+    db: Session,
+    *,
+    on_progress: ProgressReporter | None = None,
+    bridge: SSEBridge | None = None,
+):
     start_ts = time.perf_counter()
     errors: list[str] = []
 
@@ -326,6 +427,19 @@ def import_stock(db: Session) -> dict[str, Any]:
         )
         record_buffer = []
 
+    def emit_stock_progress(current: int):
+        if on_progress is None:
+            return
+        on_progress.phase_progress(
+            "stock",
+            current,
+            total_stocks,
+            f"个股日线 {current}/{total_stocks}",
+            imported=imported,
+        )
+        if bridge is not None:
+            yield from bridge.drain()
+
     with ProcessPoolExecutor(
         max_workers=STOCK_HISTORY_FETCH_WORKERS,
         initializer=_baostock_worker_init,
@@ -370,6 +484,11 @@ def import_stock(db: Session) -> dict[str, Any]:
 
             if i % 20 == 0:
                 logger.info("个股日线进度: %s/%s", i, total_stocks)
+                yield from emit_stock_progress(i)
+            elif i % 100 == 0 and on_progress is not None:
+                on_progress.ping()
+                if bridge is not None:
+                    yield from bridge.drain()
 
     flush_buffer()
 
@@ -441,10 +560,43 @@ _SYNC_STATUS_TABLES: dict[str, str] = {
 }
 
 
+def _get_point_sync_status(db: Session) -> dict[str, Any]:
+    """聚合各指数点位同步状态，供页面展示。"""
+    metas = []
+    for index_code in POINT_INDEX_CONFIG:
+        meta = get_sync_meta(db, point_sync_meta_key(index_code))
+        if meta:
+            metas.append(meta)
+
+    legacy_meta = get_sync_meta(db, "point")
+    if legacy_meta and not metas:
+        metas.append(legacy_meta)
+
+    if not metas:
+        return {
+            "last_synced_date": None,
+            "last_synced_at": None,
+            "status": None,
+        }
+
+    dates = [m.last_synced_date for m in metas if m.last_synced_date]
+    synced_ats = [m.last_synced_at for m in metas if m.last_synced_at]
+    statuses = [m.last_status for m in metas if m.last_status]
+
+    return {
+        "last_synced_date": max(dates) if dates else None,
+        "last_synced_at": max(synced_ats) if synced_ats else None,
+        "status": _aggregate_status(*statuses) if statuses else None,
+    }
+
+
 def get_sync_status(db: Session) -> dict[str, Any]:
     """返回各数据集最近一次刷新的时间，供页面展示"最后更新时间"。"""
     status: dict[str, Any] = {}
     for table_name, dataset_key in _SYNC_STATUS_TABLES.items():
+        if dataset_key == "point":
+            status[dataset_key] = _get_point_sync_status(db)
+            continue
         meta = get_sync_meta(db, table_name)
         status[dataset_key] = {
             "last_synced_date": meta.last_synced_date if meta else None,
@@ -454,21 +606,42 @@ def get_sync_status(db: Session) -> dict[str, Any]:
     return status
 
 
-def import_dataset(db: Session, dataset: ImportDataset) -> dict[str, Any]:
+def import_dataset(
+    db: Session,
+    dataset: ImportDataset,
+    on_progress: ProgressReporter | None = None,
+) -> dict[str, Any]:
+    def run_phase(key: str, fn: Callable[[Session], dict[str, Any]]) -> dict[str, Any]:
+        if on_progress:
+            on_progress.phase_start(key)
+        result = fn(db)
+        if on_progress:
+            on_progress.phase_done(key, result)
+        return result
+
     match dataset:
         case ImportDataset.turnover:
-            return import_turnover(db)
+            return run_phase("turnover", import_turnover)
         case ImportDataset.point:
-            return import_point(db)
+            return run_phase("point", import_point)
         case ImportDataset.stock:
-            return import_stock(db)
+            if on_progress:
+                on_progress.phase_start("stock")
+            result = import_stock(db, on_progress=on_progress)
+            if on_progress:
+                on_progress.phase_done("stock", result)
+            return result
         case ImportDataset.global_assets:
-            return import_global_assets(db)
+            return run_phase("global_assets", import_global_assets)
         case ImportDataset.all:
-            turnover_result = import_turnover(db)
-            point_result = import_point(db)
-            stock_result = import_stock(db)
-            global_assets_result = import_global_assets(db)
+            turnover_result = run_phase("turnover", import_turnover)
+            point_result = run_phase("point", import_point)
+            if on_progress:
+                on_progress.phase_start("stock")
+            stock_result = import_stock(db, on_progress=on_progress)
+            if on_progress:
+                on_progress.phase_done("stock", stock_result)
+            global_assets_result = run_phase("global_assets", import_global_assets)
             statuses = [
                 turnover_result["status"],
                 point_result["status"],
@@ -482,3 +655,93 @@ def import_dataset(db: Session, dataset: ImportDataset) -> dict[str, Any]:
                 "global_assets": global_assets_result,
                 "status": _aggregate_status(*statuses),
             }
+
+
+def _stream_run_phase(
+    db: Session,
+    key: str,
+    fn: Callable[[Session], dict[str, Any]],
+    reporter: ProgressReporter,
+    bridge: SSEBridge,
+) -> Iterator[str]:
+    reporter.phase_start(key)
+    yield from bridge.drain()
+    result = fn(db)
+    reporter.phase_done(key, result)
+    yield from bridge.drain()
+    return result
+
+
+def _stream_stock_phase(
+    db: Session,
+    reporter: ProgressReporter,
+    bridge: SSEBridge,
+) -> Iterator[str]:
+    reporter.phase_start("stock")
+    yield from bridge.drain()
+    stock_gen = _import_stock_gen(db, on_progress=reporter, bridge=bridge)
+    try:
+        while True:
+            yield next(stock_gen)
+    except StopIteration as exc:
+        stock_result = exc.value
+    reporter.phase_done("stock", stock_result)
+    yield from bridge.drain()
+    return stock_result
+
+
+def import_dataset_stream(
+    db: Session,
+    dataset: ImportDataset,
+) -> Iterator[str]:
+    bridge = SSEBridge()
+    reporter = ProgressReporter(bridge.emit)
+
+    try:
+        match dataset:
+            case ImportDataset.turnover:
+                result = yield from _stream_run_phase(
+                    db, "turnover", import_turnover, reporter, bridge
+                )
+            case ImportDataset.point:
+                result = yield from _stream_run_phase(
+                    db, "point", import_point, reporter, bridge
+                )
+            case ImportDataset.stock:
+                result = yield from _stream_stock_phase(db, reporter, bridge)
+            case ImportDataset.global_assets:
+                result = yield from _stream_run_phase(
+                    db, "global_assets", import_global_assets, reporter, bridge
+                )
+            case ImportDataset.all:
+                turnover_result = yield from _stream_run_phase(
+                    db, "turnover", import_turnover, reporter, bridge
+                )
+                point_result = yield from _stream_run_phase(
+                    db, "point", import_point, reporter, bridge
+                )
+                stock_result = yield from _stream_stock_phase(db, reporter, bridge)
+                global_assets_result = yield from _stream_run_phase(
+                    db, "global_assets", import_global_assets, reporter, bridge
+                )
+                result = {
+                    "turnover": turnover_result,
+                    "point": point_result,
+                    "stock": stock_result,
+                    "global_assets": global_assets_result,
+                    "status": _aggregate_status(
+                        turnover_result["status"],
+                        point_result["status"],
+                        stock_result["status"],
+                        global_assets_result["status"],
+                    ),
+                }
+            case _:
+                raise ValueError(f"unsupported dataset: {dataset}")
+
+        reporter.done(result)
+        yield from bridge.drain()
+    except Exception as exc:
+        logger.exception("流式导入失败")
+        reporter.error(str(exc))
+        yield from bridge.drain()

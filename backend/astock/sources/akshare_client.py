@@ -1,15 +1,74 @@
-"""akshare 数据源：美股复权历史、外盘期货历史。"""
+"""akshare 数据源：A股指数点位、美股复权历史、外盘期货历史。"""
 
 import logging
 
 import akshare as ak
 import pandas as pd
 
-from astock.config import GLOBAL_ASSETS
-from astock.core.datetime_utils import normalize_date
+from astock.config import GLOBAL_ASSETS, POINT_INDEX_CONFIG, START_DATE
+from astock.core.datetime_utils import iso_now, normalize_date, today_local
 from astock.sources.fetch_result import SourceFetchResult
 
 logger = logging.getLogger(__name__)
+
+
+def _cn_index_sina_symbol(code: str) -> str:
+    code = code.strip()
+    prefix = "sz" if code.startswith("399") else "sh"
+    return f"{prefix}{code}"
+
+
+def fetch_cn_index_point(
+    index_code: str, start_date: str | None = None
+) -> SourceFetchResult:
+    """通过 akshare（新浪）拉取 A 股指数日线收盘价。"""
+    if index_code not in POINT_INDEX_CONFIG:
+        return SourceFetchResult.failure(f"未知指数代码: {index_code}")
+
+    config = POINT_INDEX_CONFIG[index_code]
+    index_name = str(config["name"])
+    start = start_date or START_DATE
+    end = today_local()
+    sina_symbol = _cn_index_sina_symbol(index_code)
+
+    try:
+        raw = ak.stock_zh_index_daily(symbol=sina_symbol)
+    except Exception as e:
+        msg = f"{index_name}点位查询失败(akshare): {e}"
+        logger.error(msg)
+        return SourceFetchResult.failure(msg)
+
+    if raw is None or raw.empty:
+        logger.info("%s点位无新增数据(akshare): %s → %s", index_name, start, end)
+        return SourceFetchResult.empty()
+
+    df = raw.copy()
+    df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
+    df["close"] = pd.to_numeric(df["close"], errors="coerce")
+    df = df.dropna(subset=["close"])
+    df = df[(df["date"] >= start) & (df["date"] <= end)]
+    if df.empty:
+        logger.info("%s点位无有效数据(akshare): %s → %s", index_name, start, end)
+        return SourceFetchResult.empty()
+
+    cached_at = iso_now()
+    records = [
+        {
+            "date": row["date"],
+            "index_code": index_code,
+            "close": float(row["close"]),
+            "cached_at": cached_at,
+        }
+        for row in df.to_dict("records")
+    ]
+    logger.info(
+        "%s点位拉取完成(akshare): %s 条 (%s → %s)",
+        index_name,
+        len(records),
+        start,
+        end,
+    )
+    return SourceFetchResult(records=records)
 
 
 def _normalize_history_df(df: pd.DataFrame) -> pd.DataFrame:

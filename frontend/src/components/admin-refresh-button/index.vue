@@ -18,7 +18,6 @@
     :ok-text="$t('adminRefresh.okText')"
     :cancel-text="$t('adminRefresh.cancelText')"
     :ok-button-props="{ status: 'danger' }"
-    :ok-loading="refreshing"
     @ok="handleConfirm"
     @cancel="handleClose"
   >
@@ -30,12 +29,15 @@
       @press-enter="handleConfirm"
     />
   </a-modal>
+
+  <RefreshProgressModal />
 </template>
 
 <script lang="ts" setup>
   import { ref } from 'vue';
   import { Message } from '@arco-design/web-vue';
   import { useI18n } from 'vue-i18n';
+  import RefreshProgressModal from '@/components/refresh-progress-modal/index.vue';
   import useAdminDataRefresh from '@/hooks/admin-data-refresh';
 
   const CONFIRM_PASSWORD = import.meta.env.VITE_ADMIN_REFRESH_PASSWORD ?? '';
