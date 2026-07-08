@@ -194,7 +194,11 @@ class BaostockClient:
                     return SourceFetchResult.empty()
 
                 df = pd.DataFrame(rows, columns=rs.fields)
-                df["close"] = df["close"].astype(float)
+                df["close"] = pd.to_numeric(df["close"], errors="coerce")
+                df = df.dropna(subset=["close"])
+                if df.empty:
+                    logger.info("上证点位无有效数据: %s → %s", start, end)
+                    return SourceFetchResult.empty()
                 df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
 
                 cached_at = iso_now()
@@ -241,7 +245,10 @@ class BaostockClient:
                     if not rows:
                         return None
                     df = pd.DataFrame(rows, columns=rs.fields)
-                    df["amount"] = df["amount"].astype(float)
+                    df["amount"] = pd.to_numeric(df["amount"], errors="coerce")
+                    df = df.dropna(subset=["amount"])
+                    if df.empty:
+                        return None
                     df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
                     df.rename(columns={"amount": col_name}, inplace=True)
                     return df[["date", col_name]]

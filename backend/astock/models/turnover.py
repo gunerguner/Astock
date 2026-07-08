@@ -7,8 +7,8 @@ class Turnover(SQLModel, table=True):
     __table_args__ = (Index("idx_turnover_turnover", "turnover"),)
 
     date: str = Field(primary_key=True)
-    sh_amount: float | None = None
-    sz_amount: float | None = None
-    cyb_amount: float | None = None
-    turnover: float | None = None
-    cached_at: str | None = None
+    sh_amount: float
+    sz_amount: float
+    cyb_amount: float
+    turnover: float
+    cached_at: str

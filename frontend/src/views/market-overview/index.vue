@@ -22,7 +22,12 @@
   import { computed, h, onMounted } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { TableColumnData } from '@arco-design/web-vue';
-  import { fetchMarketOverview, type MarketOverviewItem } from '@/api/analysis';
+  import {
+    fetchMarketOverview,
+    isMarketOverviewError,
+    type MarketOverviewDataItem,
+    type MarketOverviewRow,
+  } from '@/api/analysis';
   import useAsyncRequest from '@/hooks/async-request';
   import {
     isDividerRow,
@@ -50,7 +55,7 @@
     periodText: string;
   }
 
-  type TableRow = (MarketOverviewItem & { rowKind?: 'data' }) | DividerRow;
+  type TableRow = (MarketOverviewRow & { rowKind?: 'data' }) | DividerRow;
 
   const {
     loading,
@@ -78,13 +83,15 @@
     const rows: TableRow[] = [];
 
     categories.forEach((cat) => {
-      const validItems = cat.items.filter((item) => !item.error);
+      const validItems = cat.items.filter(
+        (item): item is MarketOverviewDataItem => !isMarketOverviewError(item)
+      );
       const periodStarts = validItems
         .map((item) => item.period_start)
-        .filter(Boolean) as string[];
+        .filter((value): value is string => Boolean(value));
       const periodEnds = validItems
         .map((item) => item.period_end)
-        .filter(Boolean) as string[];
+        .filter((value): value is string => Boolean(value));
       const periodStart =
         periodStarts.length > 0
           ? periodStarts.reduce((a, b) => (a < b ? a : b))
@@ -132,7 +139,9 @@
       render: ({ record }) => {
         const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) return null;
-        if (row.error) return t('pages.marketOverview.fetchError');
+        if (isMarketOverviewError(row)) {
+          return t('pages.marketOverview.fetchError');
+        }
         return h(
           'span',
           { class: `num-price ${numClass(row.current_price)}` },
@@ -145,7 +154,7 @@
       align: 'right',
       render: ({ record }) => {
         const row = toTableRow<TableRow>(record);
-        if (isDividerRow(row) || row.error) return null;
+        if (isDividerRow(row) || isMarketOverviewError(row)) return null;
         return h(
           'span',
           { class: getPercentClass(row.daily_change) },
@@ -158,7 +167,7 @@
       align: 'right',
       render: ({ record }) => {
         const row = toTableRow<TableRow>(record);
-        if (isDividerRow(row) || row.error) return null;
+        if (isDividerRow(row) || isMarketOverviewError(row)) return null;
         return h(
           'span',
           { class: getPercentClass(row.weekly_change) },

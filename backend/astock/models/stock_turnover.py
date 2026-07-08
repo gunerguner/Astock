@@ -10,6 +10,6 @@ class StockTurnover(SQLModel, table=True):
 
     date: str = Field(primary_key=True)
     code: str = Field(primary_key=True)
-    name: str | None = None
-    amount: float | None = None
-    cached_at: str | None = None
+    name: str
+    amount: float
+    cached_at: str

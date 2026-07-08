@@ -17,8 +17,9 @@ from astock.core.redis_client import (
     set_string,
 )
 from astock.core.sync_status import SyncStatus
+from astock.core.exceptions import AppError
 from astock.models.asset_high import AssetHigh
-from astock.schemas.analysis import PriceLevelItem, PriceLevelsResponse
+from astock.schemas.analysis import PriceLevelItem, PriceLevelPendingItem, PriceLevelsResponse
 from astock.services.price_utils import (
     baseline_prices,
     latest_trading_date,
@@ -139,8 +140,12 @@ def refresh_asset_highs(db: Session) -> dict:
             continue
 
         record = result.records[0]
-        all_time_high = float(record["all_time_high"])
-        ath_date = str(record["ath_date"])
+        try:
+            all_time_high = float(record["all_time_high"])
+            ath_date = str(record["ath_date"])
+        except (KeyError, TypeError, ValueError) as e:
+            errors.append(f"{ticker}: 历史最高点数据无效 ({e})")
+            continue
         closes = record.get("recent_closes") or {}
         _write_price_cache(ticker, closes)
         all_closes_for_latest[ticker] = closes
@@ -217,13 +222,12 @@ def _ensure_price_cache(
     return _backfill_from_akshare(assets)
 
 
-def _pending_item(asset: dict[str, str]) -> PriceLevelItem:
-    return PriceLevelItem(
+def _pending_item(asset: dict[str, str]) -> PriceLevelPendingItem:
+    return PriceLevelPendingItem(
         ticker=asset["ticker"],
         name=asset["name"],
         asset_type=asset["asset_type"],
         conclusion="待接入",
-        data_pending=True,
     )
 
 
@@ -237,7 +241,7 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> PriceLevels
     all_closes, cache_errors = _ensure_price_cache(GLOBAL_ASSETS, force_refresh=force_refresh)
 
     row_map = {row.ticker: row for row in rows}
-    items: list[PriceLevelItem] = []
+    items: list[PriceLevelItem | PriceLevelPendingItem] = []
     now = now_local()
     as_of = iso_now()
 
@@ -248,11 +252,13 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> PriceLevels
         if current is None:
             if asset.get("data_pending"):
                 items.append(_pending_item(asset))
+            else:
+                cache_errors.append(f"{ticker}: 当前价格缺失")
             continue
 
         row = row_map.get(ticker)
         if row is None:
-            logger.debug("跳过 %s：数据库无 ATH 记录，请通过 admin 刷新导入", ticker)
+            cache_errors.append(f"{ticker}: 数据库无 ATH 记录，请先刷新导入")
             continue
 
         all_time_high = float(row.all_time_high)
@@ -289,8 +295,8 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> PriceLevels
 
     items.sort(
         key=lambda x: (
-            0 if x.data_pending else 1,
-            x.percentage_diff if x.percentage_diff is not None else 0,
+            0 if isinstance(x, PriceLevelPendingItem) else 1,
+            x.percentage_diff if isinstance(x, PriceLevelItem) else 0,
         )
     )
 
@@ -298,6 +304,8 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> PriceLevels
     latest_trading_date_value = get_string(LATEST_TRADING_DATE_KEY) or (
         meta.last_synced_date if meta else None
     )
+    if latest_trading_date_value is None:
+        raise AppError("无法确定最新交易日，请先刷新全球资产数据")
 
     return PriceLevelsResponse(
         last_synced_at=meta.last_synced_at if meta else None,

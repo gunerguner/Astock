@@ -47,6 +47,9 @@ def build_bull_market_stats(
         ).one()
         days = int(count or 0)
         total_days += days
+        max_val = float(max_value) if max_value is not None else None
+        if days > 0 and max_val is None:
+            raise AppError(f"牛市区间 {market_name} 存在达标天数但缺少极值，请重新导入数据")
         items.append(
             BullMarketItem(
                 market=market_name,
@@ -54,7 +57,7 @@ def build_bull_market_stats(
                 end=period["end"],
                 description=period.get("description"),
                 days=days,
-                max_value=float(max_value) if max_value is not None else None,
+                max_value=max_val,
             )
         )
 

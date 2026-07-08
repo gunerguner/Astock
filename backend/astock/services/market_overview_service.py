@@ -18,8 +18,10 @@ from astock.core.redis_client import (
     set_json,
     set_string,
 )
+from astock.core.exceptions import AppError
 from astock.schemas.analysis import (
     MarketOverviewCategory,
+    MarketOverviewErrorItem,
     MarketOverviewItem,
     MarketOverviewResponse,
 )
@@ -120,26 +122,29 @@ def _ensure_closes(
     return all_closes, errors
 
 
-def _build_item(item: dict[str, str], closes: dict[str, float]) -> MarketOverviewItem:
+def _build_item(
+    item: dict[str, str], closes: dict[str, float]
+) -> MarketOverviewItem | MarketOverviewErrorItem:
     current, prev_close, week_ago_close = baseline_prices(closes)
-    daily = pct_change(current, prev_close) if current is not None else None
-    weekly = pct_change(current, week_ago_close) if current is not None else None
+    if current is None:
+        return _error_item(item, f"{item['name']}({item['code']}): 当前价格缺失")
+    daily = pct_change(current, prev_close)
+    weekly = pct_change(current, week_ago_close)
     dates = sorted_dates(closes)
     return MarketOverviewItem(
         key=item["key"],
         name=item["name"],
         code=item["code"],
-        current_price=round(current, 4) if current is not None else None,
+        current_price=round(current, 4),
         daily_change=round(daily, 2) if daily is not None else None,
         weekly_change=round(weekly, 2) if weekly is not None else None,
         period_start=dates[-2] if len(dates) >= 2 else dates[-1] if dates else None,
         period_end=dates[-1] if dates else None,
-        error=None,
     )
 
 
-def _error_item(item: dict[str, str], message: str) -> MarketOverviewItem:
-    return MarketOverviewItem(
+def _error_item(item: dict[str, str], message: str) -> MarketOverviewErrorItem:
+    return MarketOverviewErrorItem(
         key=item["key"],
         name=item["name"],
         code=item["code"],
@@ -155,17 +160,17 @@ def get_market_overview(*, force_refresh: bool = False) -> MarketOverviewRespons
     categories: list[MarketOverviewCategory] = []
 
     for cat in MARKET_OVERVIEW_CATEGORIES:
-        cat_items: list[MarketOverviewItem] = []
+        cat_items: list[MarketOverviewItem | MarketOverviewErrorItem] = []
         for raw_item in cat["items"]:
             item_key = f"{cat['key']}:{raw_item['code']}"
             item = item_map.get(item_key)
             if item is None:
                 continue
             closes = all_closes.get(item_key, {})
-            if closes:
-                cat_items.append(_build_item(item, closes))
-            else:
+            if not closes:
                 cat_items.append(_error_item(item, "数据获取失败"))
+                continue
+            cat_items.append(_build_item(item, closes))
 
         categories.append(
             MarketOverviewCategory(
@@ -178,6 +183,8 @@ def get_market_overview(*, force_refresh: bool = False) -> MarketOverviewRespons
     latest_trading_date_value = get_string(MARKET_OVERVIEW_LATEST_DATE_KEY) or latest_trading_date(
         all_closes
     )
+    if latest_trading_date_value is None:
+        raise AppError("无法确定最新交易日，请先刷新市场概览数据")
 
     return MarketOverviewResponse(
         as_of=as_of,

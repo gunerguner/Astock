@@ -1,3 +1,5 @@
+from typing import Union
+
 from pydantic import BaseModel
 
 
@@ -19,9 +21,9 @@ class BullMarketStatsResponse(BaseModel):
 class TurnoverRankingItem(BaseModel):
     rank: int
     date: str
-    sh_amount: float | None = None
-    sz_amount: float | None = None
-    turnover: float | None = None
+    sh_amount: float
+    sz_amount: float
+    turnover: float
 
 
 class TurnoverRankingResponse(BaseModel):
@@ -34,8 +36,8 @@ class StockRankingItem(BaseModel):
     rank: int
     date: str
     code: str
-    name: str | None = None
-    amount: float | None = None
+    name: str
+    amount: float
 
 
 class StockRankingResponse(BaseModel):
@@ -44,50 +46,69 @@ class StockRankingResponse(BaseModel):
     items: list[StockRankingItem]
 
 
+class PriceLevelPendingItem(BaseModel):
+    ticker: str
+    name: str
+    asset_type: str
+    conclusion: str
+    data_pending: bool = True
+
+
 class PriceLevelItem(BaseModel):
     ticker: str
     name: str
     asset_type: str
-    current_price: float | None = None
-    all_time_high: float | None = None
-    ath_date: str | None = None
-    percentage_diff: float | None = None
-    ath_days: int | None = None
+    current_price: float
+    all_time_high: float
+    ath_date: str
+    percentage_diff: float
+    ath_days: int
     daily_change: float | None = None
     weekly_change: float | None = None
     conclusion: str
-    data_pending: bool | None = None
+
+
+PriceLevelRow = Union[PriceLevelItem, PriceLevelPendingItem]
 
 
 class PriceLevelsResponse(BaseModel):
     last_synced_at: str | None = None
     as_of: str
-    latest_trading_date: str | None = None
-    items: list[PriceLevelItem]
+    latest_trading_date: str
+    items: list[PriceLevelRow]
     cache_errors: list[str] | None = None
+
+
+class MarketOverviewErrorItem(BaseModel):
+    key: str
+    name: str
+    code: str
+    error: str
 
 
 class MarketOverviewItem(BaseModel):
     key: str
     name: str
     code: str
-    current_price: float | None = None
+    current_price: float
     daily_change: float | None = None
     weekly_change: float | None = None
     period_start: str | None = None
     period_end: str | None = None
-    error: str | None = None
+
+
+MarketOverviewRow = Union[MarketOverviewItem, MarketOverviewErrorItem]
 
 
 class MarketOverviewCategory(BaseModel):
     key: str
     name: str
-    items: list[MarketOverviewItem]
+    items: list[MarketOverviewRow]
 
 
 class MarketOverviewResponse(BaseModel):
     as_of: str
-    latest_trading_date: str | None = None
+    latest_trading_date: str
     categories: list[MarketOverviewCategory]
     errors: list[str] | None = None
 

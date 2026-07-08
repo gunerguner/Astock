@@ -48,6 +48,55 @@ tencent_client = TencentQuoteClient()
 
 STOCK_UPSERT_FLUSH_SIZE = 5000
 
+_REQUIRED_FIELDS: dict[str, list[str]] = {
+    "point": ["close", "cached_at"],
+    "turnover": ["sh_amount", "sz_amount", "cyb_amount", "turnover", "cached_at"],
+    "stock_turnover": ["name", "amount", "cached_at"],
+}
+
+
+def _is_missing_value(value: Any) -> bool:
+    if value is None:
+        return True
+    return isinstance(value, str) and not value.strip()
+
+
+def _filter_required_records(
+    records: list[dict[str, Any]],
+    required_fields: list[str],
+    label: str,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    valid: list[dict[str, Any]] = []
+    errors: list[str] = []
+    for record in records:
+        missing = [field for field in required_fields if _is_missing_value(record.get(field))]
+        if missing:
+            identity = record.get("date") or record.get("code") or "unknown"
+            errors.append(f"{label}: 缺失字段 {','.join(missing)} ({identity})")
+            continue
+        valid.append(record)
+    return valid, errors
+
+
+def _prepare_records_for_upsert(
+    table_name: str,
+    records: list[dict[str, Any]],
+    *,
+    fr: SourceFetchResult,
+) -> list[dict[str, Any]]:
+    required_fields = _REQUIRED_FIELDS.get(table_name)
+    if not required_fields:
+        return records
+    valid_records, filter_errors = _filter_required_records(
+        records,
+        required_fields,
+        table_name,
+    )
+    if filter_errors:
+        fr.errors.extend(filter_errors)
+        fr.ok = False
+    return valid_records
+
 
 def _baostock_worker_init() -> None:
     """ProcessPool worker 初始化：每个子进程登录一次 baostock 会话。"""
@@ -114,10 +163,11 @@ def _import_simple_dataset(
     start_date = get_sync_start_date(db, table_name)
 
     fr = fetch(start_date)
+    records = _prepare_records_for_upsert(table_name, fr.records, fr=fr)
     imported = batch_upsert(
         db,
         model,
-        fr.records,
+        records,
         conflict_cols,
         commit_mode="single",
     )
@@ -299,6 +349,10 @@ def import_stock(db: Session) -> dict[str, Any]:
                 continue
 
             name = code_to_name.get(code, "")
+            if _is_missing_value(name):
+                stock_errors.append(f"个股 {code}: 缺少股票名称")
+                continue
+
             record_buffer.extend(
                 {
                     "date": row["date"],
@@ -308,7 +362,8 @@ def import_stock(db: Session) -> dict[str, Any]:
                     "cached_at": cached_at,
                 }
                 for row in hist_fr.records
-                if row["amount"] >= STOCK_TURNOVER_SLICE_THRESHOLD
+                if not _is_missing_value(row.get("amount"))
+                and row["amount"] >= STOCK_TURNOVER_SLICE_THRESHOLD
             )
             if len(record_buffer) >= STOCK_UPSERT_FLUSH_SIZE:
                 flush_buffer()

@@ -18,9 +18,9 @@ export interface BullMarketStats {
 export interface TurnoverRankingItem {
   rank: number;
   date: string;
-  sh_amount: number | null;
-  sz_amount: number | null;
-  turnover: number | null;
+  sh_amount: number;
+  sz_amount: number;
+  turnover: number;
 }
 
 export interface TurnoverRanking {
@@ -33,8 +33,8 @@ export interface StockRankingItem {
   rank: number;
   date: string;
   code: string;
-  name: string | null;
-  amount: number | null;
+  name: string;
+  amount: number;
 }
 
 export interface StockRanking {
@@ -83,27 +83,42 @@ export function fetchStockRanking(
   });
 }
 
-export interface AssetPriceLevelItem {
+export interface PriceLevelPendingItem {
   ticker: string;
   name: string;
   asset_type: 'stock' | 'metal';
-  current_price: number | null;
-  all_time_high: number | null;
-  ath_date: string | null;
-  percentage_diff: number | null;
-  ath_days: number | null;
+  conclusion: string;
+  data_pending: true;
+}
+
+export interface PriceLevelDataItem {
+  ticker: string;
+  name: string;
+  asset_type: 'stock' | 'metal';
+  current_price: number;
+  all_time_high: number;
+  ath_date: string;
+  percentage_diff: number;
+  ath_days: number;
   daily_change: number | null;
   weekly_change: number | null;
   conclusion: string;
-  data_pending?: boolean;
+}
+
+export type PriceLevelRow = PriceLevelDataItem | PriceLevelPendingItem;
+
+export function isPriceLevelPending(
+  item: PriceLevelRow
+): item is PriceLevelPendingItem {
+  return 'data_pending' in item && item.data_pending === true;
 }
 
 export interface AssetPriceLevels {
   last_synced_at: string | null;
   as_of: string;
-  latest_trading_date: string | null;
-  items: AssetPriceLevelItem[];
-  cache_errors?: string[] | null;
+  latest_trading_date: string;
+  items: PriceLevelRow[];
+  cache_errors?: string[];
 }
 
 export function fetchAssetPriceLevels(
@@ -114,29 +129,45 @@ export function fetchAssetPriceLevels(
   });
 }
 
-export interface MarketOverviewItem {
+export interface MarketOverviewErrorItem {
   key: string;
   name: string;
   code: string;
-  current_price: number | null;
+  error: string;
+}
+
+export interface MarketOverviewDataItem {
+  key: string;
+  name: string;
+  code: string;
+  current_price: number;
   daily_change: number | null;
   weekly_change: number | null;
   period_start: string | null;
   period_end: string | null;
-  error: string | null;
+}
+
+export type MarketOverviewRow =
+  | MarketOverviewDataItem
+  | MarketOverviewErrorItem;
+
+export function isMarketOverviewError(
+  item: MarketOverviewRow
+): item is MarketOverviewErrorItem {
+  return 'error' in item;
 }
 
 export interface MarketOverviewCategory {
   key: string;
   name: string;
-  items: MarketOverviewItem[];
+  items: MarketOverviewRow[];
 }
 
 export interface MarketOverview {
   as_of: string;
-  latest_trading_date: string | null;
+  latest_trading_date: string;
   categories: MarketOverviewCategory[];
-  errors?: string[] | null;
+  errors?: string[];
 }
 
 export function fetchMarketOverview(

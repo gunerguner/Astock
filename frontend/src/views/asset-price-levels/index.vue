@@ -25,7 +25,9 @@
   import type { TableColumnData } from '@arco-design/web-vue';
   import {
     fetchAssetPriceLevels,
-    type AssetPriceLevelItem,
+    isPriceLevelPending,
+    type PriceLevelDataItem,
+    type PriceLevelRow,
   } from '@/api/analysis';
   import useAsyncRequest from '@/hooks/async-request';
   import {
@@ -65,7 +67,7 @@
 
   type DividerRow = BaseDividerRow;
 
-  type TableRow = (AssetPriceLevelItem & { key: string }) | DividerRow;
+  type TableRow = (PriceLevelRow & { key: string }) | DividerRow;
 
   const {
     loading,
@@ -92,28 +94,28 @@
 
   const isFocusedTicker = (ticker: string) => FOCUSED_TICKERS.has(ticker);
 
-  const sortByPercentageDiff = (
-    a: AssetPriceLevelItem,
-    b: AssetPriceLevelItem
-  ) => (a.percentage_diff ?? 0) - (b.percentage_diff ?? 0);
+  const sortByPercentageDiff = (a: PriceLevelDataItem, b: PriceLevelDataItem) =>
+    a.percentage_diff - b.percentage_diff;
 
   const tableRows = computed<TableRow[]>(() => {
     const items = levels.value?.items ?? [];
     const groups = {
       pendingStocks: [] as TableRow[],
-      normalStocks: [] as AssetPriceLevelItem[],
-      metals: [] as AssetPriceLevelItem[],
+      normalStocks: [] as PriceLevelDataItem[],
+      metals: [] as PriceLevelDataItem[],
     };
 
     items.forEach((item) => {
+      if (isPriceLevelPending(item)) {
+        if (item.asset_type === 'stock') {
+          groups.pendingStocks.push({ ...item, key: item.ticker });
+        }
+        return;
+      }
       if (item.asset_type === 'metal') {
         groups.metals.push(item);
-      } else if (item.asset_type === 'stock') {
-        if (item.data_pending) {
-          groups.pendingStocks.push({ ...item, key: item.ticker });
-        } else {
-          groups.normalStocks.push(item);
-        }
+      } else {
+        groups.normalStocks.push(item);
       }
     });
 
@@ -142,7 +144,7 @@
     ];
   });
 
-  const renderAssetCell = (record: AssetPriceLevelItem) => {
+  const renderAssetCell = (record: PriceLevelRow) => {
     return renderAssetNameWithTooltip(record.name, record.ticker, () =>
       isFocusedTicker(record.ticker)
         ? h(
@@ -176,6 +178,9 @@
       render: ({ record }) => {
         const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) return null;
+        if (isPriceLevelPending(row)) {
+          return h('span', { class: 'num' }, '--');
+        }
         return h(
           'span',
           { class: `num-price ${numClass(row.current_price)}` },
@@ -189,6 +194,9 @@
       render: ({ record }) => {
         const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) return null;
+        if (isPriceLevelPending(row)) {
+          return h('span', { class: 'num' }, '--');
+        }
         return h(
           'span',
           { class: numClass(row.all_time_high) },
@@ -202,6 +210,9 @@
       render: ({ record }) => {
         const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) return null;
+        if (isPriceLevelPending(row)) {
+          return h('span', { class: 'num' }, '--');
+        }
         return h(
           'span',
           { class: getPercentClass(row.percentage_diff) },
@@ -215,7 +226,10 @@
       render: ({ record }) => {
         const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) return null;
-        return h('span', { class: 'num' }, row.ath_days ?? '--');
+        if (isPriceLevelPending(row)) {
+          return h('span', { class: 'num' }, '--');
+        }
+        return h('span', { class: 'num' }, String(row.ath_days));
       },
     },
     {
@@ -223,7 +237,7 @@
       align: 'right',
       render: ({ record }) => {
         const row = toTableRow<TableRow>(record);
-        if (isDividerRow(row)) return null;
+        if (isDividerRow(row) || isPriceLevelPending(row)) return null;
         return h(
           'span',
           { class: getPercentClass(row.daily_change) },
@@ -236,7 +250,7 @@
       align: 'right',
       render: ({ record }) => {
         const row = toTableRow<TableRow>(record);
-        if (isDividerRow(row)) return null;
+        if (isDividerRow(row) || isPriceLevelPending(row)) return null;
         return h(
           'span',
           { class: getPercentClass(row.weekly_change) },
