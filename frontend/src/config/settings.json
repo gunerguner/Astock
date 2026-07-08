@@ -1,6 +1,5 @@
 {
   "theme": "light",
-  "colorWeak": false,
   "navbar": true,
   "menu": true,
   "topMenu": true,
