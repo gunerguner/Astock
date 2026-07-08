@@ -5,9 +5,43 @@
 
 ---
 
+## 零、已完成基线（拆分前须纳入）
+
+以下功能在拆分启动前已落地，**拆分 PR 不得破坏或重复实现**：
+
+| 模块 | 文件 | 说明 |
+|------|------|------|
+| SSE 基础设施 | `core/progress.py` (108 行) | `SSEBridge` / `ProgressReporter` / `format_sse` |
+| 流式导入 | `import_service.py` L665+ | `import_dataset_stream` / `_stream_*_phase` |
+| 流式 API | `routers/admin.py` | `POST /data/import/stream` |
+| 前端 SSE | `frontend/src/utils/sse-stream.ts` | 通用 `streamPost` |
+| 刷新 UX | `admin-data-refresh.ts` + `refresh-progress-modal` | 四阶段进度弹窗 |
+| 页面联动 | `frontend/src/utils/data-refresh.ts` | 刷新完成后 4 页自动 reload |
+| 多指数点位 | `config/point_indices.yaml` + `models/point.py` | 复合主键 `(date, index_code)` |
+| DB 优化 | `core/database.py` | WAL + `busy_timeout=5000` |
+
+**架构差异**：`SSEBridge`/`ProgressReporter` 保留在 `core/progress.py`，`import_orchestrator.py` 只负责阶段编排并 import 自 `core.progress`。
+
+---
+
 ## 一、现状诊断
 
-### 1.1 文件规模分布（共 2548 行 / 12 文件）
+### 1.1 文件规模分布（更新于 2026-07-08）
+
+| 文件 | 原行数 | 现行数 | 评级 |
+|---|---|---|---|
+| `services/import_service.py` | 738 | **747** | 超大 |
+| `sources/market_overview_client.py` | 365 | 365 | 偏大 |
+| `services/global_asset_service.py` | 316 | 316 | 偏大 |
+| `sources/baostock_client.py` | 313 | 313 | 偏大 |
+| `core/progress.py` | — | **108** | 新增 |
+| `services/analysis_service.py` | 245 | 245 | 可接受 |
+| `services/market_overview_service.py` | 194 | 194 | 可接受 |
+| 其余 sources/services | — | ~400 | OK |
+
+**前 4 个文件合计 1741 行，占 68%。** 拆分收益仍集中在这 4 个文件。
+
+### 1.1b 原规模表（拆分前快照）
 
 | 文件 | 行数 | 占比 | 评级 |
 |---|---|---|---|
@@ -168,9 +202,11 @@ class ImportResult:
 
 迁移：`import_turnover` + `_import_simple_dataset`（通用模板，放 `_common` 或本文件，取决于是否被 point 复用 → point 用了自己的循环，所以 `_import_simple_dataset` 仅 turnover 用，放本文件）。
 
-#### (4) `services/imports/point_importer.py`（~80 行）
+#### (4) `services/imports/point_importer.py`（~100-120 行）
 
-迁移：`import_point`。
+迁移：`import_point`、`_fetch_point_index`（多指数循环 + baostock/akshare 双源路由）。
+
+`sync_status_service.py` 需覆盖 `point_{code}` 聚合（`_get_point_sync_status`）。
 
 #### (5) `services/imports/stock_importer.py`（~200 行，最大）
 
@@ -202,6 +238,8 @@ def _import_stock_gen(db, *, on_progress=None, bridge=None):
 #### (8) `services/import_orchestrator.py`（~120 行）
 
 迁移：`import_dataset` / `import_dataset_stream` / `_stream_run_phase` / `_stream_stock_phase` + `run_phase` 助手。
+
+**不迁移** `SSEBridge`/`ProgressReporter`（已在 `core/progress.py`）。
 
 这是唯一同时引用 4 个 importer 的文件，依赖方向清晰：orchestrator → imports/*。
 
@@ -255,9 +293,9 @@ from astock.services.global_asset.query import get_price_levels
 
 #### (2) `sources/baostock/point_source.py`（~70 行）
 
-迁移：`BaostockClient.fetch_point`。**保持为类方法**（`BaostockClient` 现仅含 point/turnover，拆分后每个 source 文件各自定义小 class 或改为函数）。
+迁移：`BaostockClient.fetch_point` → `fetch_point(index_code, start_date)` 模块级函数，读取 `POINT_INDEX_CONFIG`。
 
-**统一 API 决策**：建议全部改为模块级函数（`fetch_point` / `fetch_turnover`），消除"类里 2 个方法 + 模块 2 个函数"的割裂。`import_service` 里的 `baostock_client = BaostockClient()` 实例化 + `baostock_client.fetch_turnover()` 调用改为 `fetch_turnover(...)`。`BaostockClient` 类本身无状态（无 `__init__` 参数），类包装纯属多余。
+**已确认**：全部改为模块级函数，移除 `BaostockClient` 类。`akshare_client.fetch_cn_index_point` 留在 akshare，由 `point_importer` 负责路由。
 
 #### (3) `sources/baostock/turnover_source.py`（~90 行）
 
@@ -392,30 +430,40 @@ curl 'http://localhost:8000/api/v1/admin/data/sync-status'
 
 ---
 
-## 七、待决策项
+## 七、已确认决策
 
-1. **`ImportResult` dataclass 是否一步到位替换所有 `dict` 返回？**
-   - 方案 A（推荐）：内部用 dataclass，router 层通过 `.to_dict()` 过渡，后续再改 router 返回类型。
-   - 方案 B：直接让 router 返回 `ImportResult`，FastAPI 自动序列化（需加 `response_model` 或 `model_config`）。
-
-2. **`BaostockClient` 类是否彻底移除改为函数？**
-   - 推荐改为函数（类无状态，包装无意义）。
-   - 若未来需要连接池/会话复用，再重新引入有状态的类。
-
-3. **`analysis_service.py` 是否本轮一并拆分？**
-   - 245 行可接受，建议 PR4 之后单独评估。
-
-4. **`_SOCKET_TIMEOUT_SECONDS` 跨模块引用如何处理？**
-   - 推荐封装为 `session.configure_worker_socket()` 函数。
-   - 备选：在 `baostock/__init__.py` re-export 常量（过渡期）。
+| 项 | 决策 |
+|----|------|
+| 执行优先级 | 先 PR1→PR4 结构性拆分 |
+| ImportResult | 方案 A：内部 dataclass + `to_dict()` 过渡 |
+| BaostockClient | 改为模块级函数，移除类 |
+| `_SOCKET_TIMEOUT_SECONDS` | `session.configure_worker_socket()` |
+| analysis_service 拆分 | PR4 之后单独 PR5 |
+| 非流式 `/data/import` | 保留（curl/脚本仍可用） |
 
 ---
 
-## 八、执行顺序建议
+## 八、执行顺序
 
-1. 确认本方案（待决策项 1-4）
-2. PR1：拆 `baostock_client.py`（最低风险，验证拆分包模式）
-3. PR2：拆 `market_overview_client.py`（同模式，巩固）
-4. PR3：拆 `global_asset_service.py`（涉及读写分离）
-5. PR4：拆 `import_service.py` + 引入 `ImportResult`（最大改动，最后做）
-6. （可选）PR5：拆 `analysis_service.py`
+1. ~~确认本方案~~（已完成）
+2. PR1：拆 `baostock_client.py`
+3. PR2：拆 `market_overview_client.py`
+4. PR3：拆 `global_asset_service.py`
+5. PR4：拆 `import_service.py` + `ImportResult` + `StockImportContext`
+6. PR4 前：补充 `point` 表迁移 SQL
+7. PR1 起：`scripts/smoke_import.sh`
+8. （可选）PR5：拆 `analysis_service.py`
+
+---
+
+## 九、并行产生的技术债
+
+| 债务 | 严重度 | 建议时机 |
+|------|--------|----------|
+| `point` 表 schema 变更无迁移脚本 | **高** | PR4 前写迁移 SQL |
+| `ImportResultItem` 缺 `elapsed` 字段 | 中 | PR4 引入 `ImportResult` 时同步 |
+| 前端 `DEFAULT_POINT_THRESHOLDS` 与 YAML 重复 | 中 | PR5 或单独小 PR |
+| skill/reference 文档滞后 | 低 | 各 PR 末尾更新 |
+| 无自动化测试 | 中 | PR1 起加 smoke 脚本 |
+| SSE point 阶段无子指数进度 | 低 | 可选增强 |
+| 刷新弹窗无取消按钮 | 低 | 前端小改，独立于拆分 |

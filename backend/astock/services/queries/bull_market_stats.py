@@ -1,4 +1,4 @@
-"""分析服务：牛市区间统计与排名查询。"""
+"""牛市区间统计查询。"""
 
 from sqlalchemy import func
 from sqlalchemy.orm.attributes import InstrumentedAttribute
@@ -7,27 +7,14 @@ from sqlmodel import Session, SQLModel, select
 from astock.config import BULL_MARKETS, POINT_INDEX_CONFIG
 from astock.core.exceptions import AppError
 from astock.models.point import Point
-from astock.models.stock_turnover import StockTurnover
 from astock.models.turnover import Turnover
 from astock.schemas.analysis import (
     BullMarketItem,
     BullMarketStatsResponse,
     IndexPointStats,
     MultiIndexPointStatsResponse,
-    StockRankingItem,
-    StockRankingResponse,
-    TurnoverRankingItem,
-    TurnoverRankingResponse,
 )
-
-
-def _get_bull_market_period(bull_market: str | None) -> tuple[str, str] | None:
-    if not bull_market or bull_market == "all":
-        return None
-    period = BULL_MARKETS.get(bull_market)
-    if period is None:
-        raise ValueError(f"未知牛市区间: {bull_market}")
-    return period["start"], period["end"]
+from astock.services.queries._common import empty_index_items, require_rows
 
 
 def build_bull_market_stats(
@@ -91,12 +78,6 @@ def build_bull_market_stats(
     )
 
 
-def _require_rows(db: Session, model: type[SQLModel], empty_message: str) -> None:
-    exists = db.exec(select(model).limit(1)).first()
-    if exists is None:
-        raise AppError(empty_message)
-
-
 def bull_market_point_stats(
     db: Session, threshold: float, index_code: str = "000001"
 ) -> BullMarketStatsResponse:
@@ -121,25 +102,6 @@ def bull_market_point_stats(
     )
 
 
-def _empty_index_items(available_from: str | None = None) -> list[BullMarketItem]:
-    items: list[BullMarketItem] = []
-    for market_name, period in BULL_MARKETS.items():
-        not_available = bool(available_from and available_from > period["end"])
-        items.append(
-            BullMarketItem(
-                market=market_name,
-                start=period["start"],
-                end=period["end"],
-                description=period.get("description"),
-                days=0,
-                max_value=None,
-                not_available=not_available,
-            )
-        )
-    items.sort(key=lambda x: x.end, reverse=True)
-    return items
-
-
 def bull_market_multi_index_point_stats(
     db: Session, thresholds: dict[str, float]
 ) -> MultiIndexPointStatsResponse:
@@ -155,7 +117,7 @@ def bull_market_multi_index_point_stats(
             select(Point).where(Point.index_code == index_code).limit(1)
         ).first()
         if exists is None:
-            items = _empty_index_items(available_from)
+            items = empty_index_items(available_from)
             indices.append(
                 IndexPointStats(
                     index_code=index_code,
@@ -189,57 +151,5 @@ def bull_market_multi_index_point_stats(
 
 
 def bull_market_turnover_stats(db: Session, threshold: float) -> BullMarketStatsResponse:
-    _require_rows(db, Turnover, "成交额数据为空，请先导入数据")
+    require_rows(db, Turnover, "成交额数据为空，请先导入数据")
     return build_bull_market_stats(db, Turnover, Turnover.turnover, threshold)
-
-
-def turnover_ranking(
-    db: Session, *, top: int = 20, bull_market: str | None = None
-) -> TurnoverRankingResponse:
-    query = select(Turnover).order_by(Turnover.turnover.desc())
-    period = _get_bull_market_period(bull_market)
-    if period:
-        query = query.where(Turnover.date >= period[0], Turnover.date <= period[1])
-    rows = db.exec(query.limit(top)).all()
-    items = [
-        TurnoverRankingItem(
-            rank=idx,
-            date=row.date,
-            sh_amount=row.sh_amount,
-            sz_amount=row.sz_amount,
-            turnover=row.turnover,
-        )
-        for idx, row in enumerate(rows, start=1)
-    ]
-    return TurnoverRankingResponse(
-        top=top,
-        bull_market=bull_market if bull_market and bull_market != "all" else None,
-        items=items,
-    )
-
-
-def stock_ranking(
-    db: Session, *, top: int = 20, bull_market: str | None = None
-) -> StockRankingResponse:
-    query = select(StockTurnover).order_by(StockTurnover.amount.desc())
-    period = _get_bull_market_period(bull_market)
-    if period:
-        query = query.where(
-            StockTurnover.date >= period[0], StockTurnover.date <= period[1]
-        )
-    rows = db.exec(query.limit(top)).all()
-    items = [
-        StockRankingItem(
-            rank=idx,
-            date=row.date,
-            code=row.code,
-            name=row.name,
-            amount=row.amount,
-        )
-        for idx, row in enumerate(rows, start=1)
-    ]
-    return StockRankingResponse(
-        top=top,
-        bull_market=bull_market if bull_market and bull_market != "all" else None,
-        items=items,
-    )

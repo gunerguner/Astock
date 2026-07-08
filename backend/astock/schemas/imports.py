@@ -18,6 +18,7 @@ class ImportResultItem(BaseModel):
     last_synced_at: str | None = None
     status: str
     source_errors: dict[str, str | None] | None = None
+    elapsed: float | None = None
 
 
 class ImportAllResult(BaseModel):

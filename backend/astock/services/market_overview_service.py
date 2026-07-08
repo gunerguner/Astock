@@ -34,7 +34,7 @@ from astock.services.price_utils import (
     sorted_dates,
     write_recent_closes_cache,
 )
-from astock.sources.market_overview_client import fetch_all_items
+from astock.sources.market_overview import fetch_all_items
 
 logger = logging.getLogger(__name__)
 

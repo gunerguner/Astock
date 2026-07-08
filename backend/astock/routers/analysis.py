@@ -12,13 +12,13 @@ from astock.schemas.analysis import (
     TurnoverRankingResponse,
 )
 from astock.schemas.response import ApiResponse, success
-from astock.services.analysis_service import (
+from astock.services.global_asset import get_price_levels
+from astock.services.queries import (
     bull_market_multi_index_point_stats,
     bull_market_turnover_stats,
     stock_ranking,
     turnover_ranking,
 )
-from astock.services.global_asset_service import get_price_levels
 from astock.services.market_overview_service import get_market_overview
 
 router = APIRouter(prefix="/api/v1/analysis", tags=["analysis"])
