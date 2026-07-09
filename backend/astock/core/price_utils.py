@@ -1,6 +1,7 @@
 """价格与日期相关的纯函数（无 Redis / 无外部 IO）。"""
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 from astock.config import WEEKLY_BASELINE_OFFSET
 from astock.core.datetime_utils import (
@@ -18,6 +19,7 @@ __all__ = [
     "baseline_prices_at_anchor",
     "anchor_date_for_closes",
     "anchor_date_excluding_today",
+    "closes_cover_settled",
     "has_sufficient_baseline_points",
     "overview_item_markets",
     "global_asset_markets",
@@ -79,6 +81,30 @@ def anchor_date_for_closes(
     cap = last_settled_date(market)
     dates = [d for d in closes if d <= cap]
     return max(dates) if dates else None
+
+
+def closes_cover_settled(
+    closes: dict[str, float],
+    market: MarketCode = "cn",
+) -> bool:
+    """缓存是否已覆盖该市场最近可结算日（「最近一个收盘日」口径）。
+
+    无交易日历：若缓存最新日已达结算日，或二者之间仅隔周末，视为已覆盖；
+    中间若缺工作日（如停在周二而结算日已是周四）则未覆盖，需回填。
+    """
+    if not closes:
+        return False
+    cap = last_settled_date(market)
+    latest = max(closes)
+    if latest >= cap:
+        return True
+    cursor = datetime.strptime(latest, "%Y-%m-%d").date() + timedelta(days=1)
+    end = datetime.strptime(cap, "%Y-%m-%d").date()
+    while cursor <= end:
+        if cursor.weekday() < 5:
+            return False
+        cursor += timedelta(days=1)
+    return True
 
 
 def anchor_date_excluding_today(

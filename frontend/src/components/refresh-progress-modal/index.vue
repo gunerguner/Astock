@@ -119,7 +119,11 @@
     if (key === 'stock' && item.total > 0) {
       return `${item.current}/${item.total.toLocaleString()}`;
     }
-    if (item.imported > 0) {
+    if (
+      item.imported > 0 ||
+      item.status === 'done' ||
+      item.status === 'failed'
+    ) {
       return `${item.imported.toLocaleString()} ${t(
         'adminRefresh.progress.rows'
       )}`;

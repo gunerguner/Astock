@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from astock.config import MARKET_OVERVIEW_RECENT_DAYS
 from astock.services.closes_cache import ClosesFetchResult
+from astock.sources.market_overview.boc_forex import fetch_boc_forex
 from astock.sources.market_overview.cn_index import fetch_cn_index
 from astock.sources.market_overview.foreign_futures import fetch_foreign_futures
 from astock.sources.market_overview.global_index import fetch_global_index

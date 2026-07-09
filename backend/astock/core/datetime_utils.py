@@ -8,7 +8,12 @@ _SHANGHAI = ZoneInfo("Asia/Shanghai")
 _NEW_YORK = ZoneInfo("America/New_York")
 
 MarketCode = Literal["cn", "us"]
-_MARKET_CLOSE_HOUR = 16
+# A 股日线源（baostock/akshare）收盘后往往尚未就绪，傍晚后再视为「当日已结算」；
+# 美股仍按本地收盘 16:00 计。
+_MARKET_CLOSE_HOUR: dict[MarketCode, int] = {
+    "cn": 20,
+    "us": 16,
+}
 
 _MARKET_SOURCE: dict[str, MarketCode] = {
     "cn_index": "cn",
@@ -40,11 +45,15 @@ def market_for_asset_type(asset_type: str) -> MarketCode:
 
 
 def last_settled_date(market: MarketCode = "cn") -> str:
-    """各市场本地时区下、最近一个已收盘交易日（16:00 本地后算当日已结算）。"""
+    """各市场本地时区下、最近一个已收盘交易日。
+
+    cn：上海 20:00 后算当日已结算（避免收盘后日线源空窗）；
+    us：美东 16:00 后算当日已结算。
+    """
     tz = _NEW_YORK if market == "us" else _SHANGHAI
     now = datetime.now(tz)
     today = now.strftime("%Y-%m-%d")
-    if now.hour >= _MARKET_CLOSE_HOUR:
+    if now.hour >= _MARKET_CLOSE_HOUR[market]:
         return today
     return add_calendar_days(today, -1)
 

@@ -83,7 +83,7 @@ class SourceFetchResult:
 
 | 函数 / 概念 | 说明 |
 |-------------|------|
-| `last_settled_date(market)` | 各市场本地时区下「最近一个已收盘日」。本地 **16:00 前** → 昨日；**16:00 后** → 当日。未接入交易日历，周末按日历日推算 |
+| `last_settled_date(market)` | 各市场本地时区下「最近一个已收盘日」。`cn`：**20:00 前** → 昨日、**20:00 后** → 当日（避开 A 股日线源收盘后空窗）；`us`：美东 **16:00** 前后同理。未接入交易日历，周末按日历日推算 |
 | `market` | `"cn"`：`Asia/Shanghai`（A 股导入、在岸指数、央行汇率、美债）；`"us"`：`America/New_York`（美股、外盘期货、美元指数等） |
 | `market_for_source(source)` | 概览项 `source` → `cn`/`us`，见 `datetime_utils._MARKET_SOURCE` |
 | `market_for_asset_type(type)` | 全球资产 `stock`/`metal` → `us` |
@@ -342,9 +342,9 @@ flowchart TD
 ```mermaid
 flowchart TD
   A["GET /analysis/market-overview"] --> B["_ensure_closes"]
-  B --> C{每项 Redis 缓存足够?}
-  C -->|TTL 内且有 ≥6 个交易日点| D["直接复用"]
-  C -->|缺失/不足/失败标记| E["fetch_all_items(missing)"]
+  B --> C{每项是否需回填?}
+  C -->|已覆盖最近结算日且基准点够| D["直接复用 Redis"]
+  C -->|force_refresh / 未覆盖结算日 / 缺失 / 不足| E["fetch_all_items(missing)"]
   E --> F["写 market_overview:recent:{key}"]
   F --> G["每项 anchor_date_for_closes(按 source 映射 cn/us)"]
   G --> H["baseline_prices_at_anchor 算日/周涨跌 / period"]
@@ -363,9 +363,10 @@ flowchart TD
 |----|------|
 | Redis Key | `market_overview:recent:{category_key}:{code}`；`market_overview:meta:latest_trading_date` |
 | 失败冷却 | `market_overview:failure:{key}`，TTL `MARKET_OVERVIEW_FAILURE_TTL=300s`；默认模式下带标记项不重复打源 |
-| `force_refresh` | **仅**对「缓存不足 / 无缓存 / 有失败标记」的项重试；**TTL 内成功项始终复用** |
+| `force_refresh` | 对**全部项**重拉外部源（忽略未过期成功缓存） |
+| 新鲜度 | 缓存须 `closes_cover_settled`（`max(date) ≥ last_settled_date(market)`）；落后则回填。节假日空窗回填后仍落后则写失败冷却 |
 | 结算过滤 | 抓取层 `_tail_closes(..., market=...)`；缓存读写带 `market_for_source(source)` |
-| 锚点日 | **按项独立** `anchor_date_for_closes(closes, market)`，不再用全局单一锚点强行对齐美股/A 股 |
+| 锚点日 / 当前价 | **按项独立** `anchor_date_for_closes` → 该日收盘价即「当前价」（最近一个已结算收盘日） |
 | `latest_trading_date` | 响应优先 `anchor_date_excluding_today(..., markets=overview_item_markets)`，兜底 `last_settled_date("cn")` |
 | 并发 | 美债单独批量；其余项 `ThreadPoolExecutor(max_workers=4)`；单项内重试 `FETCH_RETRIES=4`，退避 `2s×attempt` |
 
@@ -418,4 +419,4 @@ flowchart TD
 | turnover / point | `is_synced_through_settled(last_synced_date, "cn")` 且 `last_status=success` | 不请求 baostock/akshare，`imported=0`；拉取 `end_date=last_settled_date("cn")` |
 | stock | `max(turnover.date) <= stock_turnover.last_synced_date` | 不请求快照/baostock，`imported=0`（间接依赖 A 股 `cn` 水位） |
 | global_assets | `is_multi_market_synced(last_synced_date)` 且 `last_status=success` 且表非空 | 不请求 akshare，`imported=0` |
-| market_overview | 各项 Redis 缓存 TTL 内且 `has_sufficient_baseline_points(..., market=...)` | 不请求外部源；`force_refresh` 不刷新已成功项 |
+| market_overview | 各项已 `closes_cover_settled` 且（若需要）基准点足够；失败冷却期内落后缓存可暂复用 | 否则回填；`force_refresh` 全部重拉 |

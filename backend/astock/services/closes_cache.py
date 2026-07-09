@@ -9,6 +9,7 @@ from astock.core.price_utils import (
     BaselinePrices,
     anchor_date_excluding_today,
     baseline_prices_at_anchor,
+    closes_cover_settled,
     has_sufficient_baseline_points,
     pct_change,
     sorted_dates,
@@ -132,6 +133,28 @@ def build_change_fields(closes: dict[str, float], anchor_date: str) -> ChangeFie
     )
 
 
+def _should_refetch(
+    closes: dict[str, float],
+    market: MarketCode,
+    *,
+    force_refresh: bool,
+    require_baseline: bool,
+    key: str,
+    has_failure: Callable[[str], bool] | None,
+) -> bool:
+    """是否需要回填：强制刷新 / 无缓存 / 未覆盖最近结算日 / 涨跌基准点不足。"""
+    if force_refresh:
+        return True
+    if not closes:
+        return not (has_failure and has_failure(key))
+    if not closes_cover_settled(closes, market):
+        # 源侧节假日可能仍无结算日 K 线：冷却期内复用旧缓存，避免每次打开都打源
+        return not (has_failure and has_failure(key))
+    if require_baseline and not has_sufficient_baseline_points(closes, market=market):
+        return not (has_failure and has_failure(key))
+    return False
+
+
 def ensure_closes(
     items: list[dict[str, str]],
     deps: ClosesCacheDeps,
@@ -140,7 +163,7 @@ def ensure_closes(
     """读缓存 → 判缺失 → 回填 → 更新 latest 锚点。
 
     deps 提供 Redis 读写与 fetch_missing；options 控制 force_refresh 与失败标记。
-    force_refresh 时仍复用未过期成功缓存，仅对缺失/不足/失败标记项重试。
+    缓存须覆盖该市场最近可结算日；force_refresh 时对全部项重拉。
     """
     opts = options or ClosesEnsureOptions()
     force_refresh = opts.force_refresh
@@ -160,14 +183,15 @@ def ensure_closes(
         closes = deps.read_closes(key, market)
         if closes:
             all_closes[key] = closes
-            if require_baseline and not has_sufficient_baseline_points(closes, market=market):
-                if not force_refresh and has_failure and has_failure(key):
-                    continue
-                missing.append(item)
-            continue
-        if not force_refresh and has_failure and has_failure(key):
-            continue
-        missing.append(item)
+        if _should_refetch(
+            closes,
+            market,
+            force_refresh=force_refresh,
+            require_baseline=require_baseline,
+            key=key,
+            has_failure=has_failure,
+        ):
+            missing.append(item)
 
     if not missing:
         latest = get_string(deps.latest_date_key)
@@ -187,14 +211,16 @@ def ensure_closes(
         if merged:
             all_closes[key] = merged
             deps.write_closes(key, merged, market)
-            if require_baseline:
-                if has_sufficient_baseline_points(merged, market=market):
-                    if clear_failure:
-                        clear_failure(key)
-                elif write_failure:
-                    write_failure(key)
-            elif clear_failure:
-                clear_failure(key)
+            covered = closes_cover_settled(merged, market)
+            baseline_ok = (not require_baseline) or has_sufficient_baseline_points(
+                merged, market=market
+            )
+            if covered and baseline_ok:
+                if clear_failure:
+                    clear_failure(key)
+            elif write_failure:
+                # 抓到了但仍落后于结算日（节假日空窗）或基准点不足：短冷却，避免打爆源
+                write_failure(key)
         elif write_failure:
             write_failure(key)
 
