@@ -1,4 +1,4 @@
-"""美元指数抓取：历史 + 现货合并。"""
+"""美元指数抓取：日线历史为主，现货仅补最新结算日。"""
 
 import logging
 import re
@@ -18,8 +18,8 @@ from astock.config import (
     USD_SPOT_TIMEOUT,
     WEEKLY_BASELINE_OFFSET,
 )
-from astock.core.datetime_utils import normalize_date, now_local
-from astock.core.price_utils import anchor_date_for_closes
+from astock.core.datetime_utils import last_settled_date, normalize_date, now_local
+from astock.core.price_utils import has_sufficient_baseline_points
 from astock.sources.market_overview._common import (
     _em_udi_headers,
     _merge_close_dicts,
@@ -122,17 +122,15 @@ def _fetch_usd_index_spot_sina() -> dict[str, float]:
 
 
 def _fetch_usd_index_spot() -> dict[str, float]:
-    merged: dict[str, float] = {}
-    for fetcher in (_fetch_usd_index_spot_em, _fetch_usd_index_spot_sina):
+    """现货仅作补丁：优先新浪（字段更完整），东财次之。"""
+    for fetcher in (_fetch_usd_index_spot_sina, _fetch_usd_index_spot_em):
         try:
             closes = fetcher()
             if closes:
-                merged = _merge_close_dicts(
-                    merged, closes, n=MARKET_OVERVIEW_RECENT_DAYS, market="us"
-                )
+                return closes
         except Exception as e:
             logger.warning("美元指数现货失败(%s): %s", fetcher.__name__, e)
-    return merged
+    return {}
 
 
 def _fetch_usd_index_history_em(host: str, n: int) -> dict[str, float]:
@@ -170,38 +168,58 @@ def _fetch_usd_index_history_akshare(n: int) -> dict[str, float]:
             return {}
         closes = df_to_tail_closes(df, n, date_col="日期", value_col="收盘", market="us")
         if closes:
+            logger.info("美元指数历史来自 akshare: %s 点", len(closes))
             return closes
     return {}
 
 
 def _fetch_usd_index_history(n: int) -> dict[str, float]:
+    """生产优先 akshare 日线，东财 push2his 多 host 兜底。"""
+    closes = _fetch_usd_index_history_akshare(n)
+    if closes:
+        return closes
     for host in EM_HIST_HOSTS:
         try:
             closes = _fetch_usd_index_history_em(host, n)
             if closes:
+                logger.info("美元指数历史来自东财 %s: %s 点", host, len(closes))
                 return closes
         except Exception as e:
             logger.warning("美元指数历史(%s)失败: %s", host, e)
-    return _fetch_usd_index_history_akshare(n)
+    return {}
+
+
+def _needs_spot_patch(history: dict[str, float]) -> bool:
+    """历史已覆盖结算日且基准点够时不打现货，减少生产机对不稳定接口的依赖。"""
+    if not history:
+        return True
+    if not has_sufficient_baseline_points(history, market="us"):
+        return True
+    return max(history) < last_settled_date("us")
 
 
 def fetch_usd_index(n: int) -> dict[str, float]:
-    spot = _fetch_usd_index_spot()
+    """日线历史为主；现货仅在历史缺最新结算日或点数不足时补丁合并。"""
     required_points = WEEKLY_BASELINE_OFFSET
     history_n = max(n, required_points + 5)
     history = _fetch_usd_index_history(history_n)
-    if not spot and not history:
+
+    spot: dict[str, float] = {}
+    if _needs_spot_patch(history):
+        spot = _fetch_usd_index_spot()
+
+    if not history and not spot:
         return {}
 
+    if not spot:
+        return history
+
     merged = _merge_close_dicts(history, spot, n=n, market="us")
-    anchor = anchor_date_for_closes(merged, "us")
-    if anchor is None:
-        return merged
-    dates = [d for d in sorted(merged.keys()) if d <= anchor]
-    if len(dates) >= required_points:
+    if has_sufficient_baseline_points(merged, market="us"):
         return merged
 
-    if history:
-        history = _fetch_usd_index_history(history_n + 10)
-        merged = _merge_close_dicts(history, spot, n=n, market="us")
+    # 现货补丁仍不够：再拉更长历史一次
+    longer = _fetch_usd_index_history(history_n + 10)
+    if longer:
+        merged = _merge_close_dicts(longer, spot, n=n, market="us")
     return merged
