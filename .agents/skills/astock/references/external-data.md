@@ -148,7 +148,7 @@ class SourceFetchResult:
 
 | source | 接口 | 覆盖 |
 |--------|------|------|
-| `global_index` | `ak.index_us_stock_sina`；美元指数 **`ak.index_global_hist_em` 日线优先**，东财 push2his / 现货仅兜底补丁 | 道琼斯/标普/纳斯达克/美元指数 |
+| `global_index` | `ak.index_us_stock_sina`；美元指数 **新浪 DINIW 日线优先**，akshare/东财历史与现货兜底 | 道琼斯/标普/纳斯达克/美元指数 |
 | `cn_index` | `ak.stock_zh_index_daily`（180 天回溯） | A 股指数 |
 | `foreign_futures` | `ak.futures_foreign_hist` | 黄金 GC、白银 SI、WTI CL |
 | `boc_forex` | `ak.currency_boc_sina`（央行中间价 /100） | 人民币汇率 |
@@ -355,7 +355,7 @@ flowchart TD
 | 美股 | 道琼斯、标普、纳斯达克 | `global_index` | `ak.index_us_stock_sina` |
 | A股 | 上证、沪深300、创业板、科创板 | `cn_index` | `ak.stock_zh_index_daily`（回溯 `CN_INDEX_LOOKBACK_DAYS=180`） |
 | 贵金属 | 黄金、白银 | `foreign_futures` | `ak.futures_foreign_hist` |
-| 汇率 | 美元指数、美元/人民币 | `global_index` / `boc_forex` | 美元指数：`ak.index_global_hist_em` 为主，东财/新浪现货仅补最新日；人民币：`ak.currency_boc_sina`（中间价 ÷100） |
+| 汇率 | 美元指数、美元/人民币 | `global_index` / `boc_forex` | 美元指数：新浪 `getDayKLine(DINIW)` 为主，akshare/东财历史与现货兜底；人民币：`ak.currency_boc_sina`（中间价 ÷100） |
 | 大宗 | WTI 原油 | `foreign_futures` | `ak.futures_foreign_hist`（CL） |
 | 债券 | 美债 5y/10y/30y | `us_bond` | `ak.bond_zh_us_rate`（一次拉取填三项） |
 

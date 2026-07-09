@@ -1,5 +1,6 @@
 """美元指数抓取：日线历史为主，现货仅补最新结算日。"""
 
+import json
 import logging
 import re
 import time
@@ -30,6 +31,10 @@ from astock.sources.market_overview._common import (
 
 logger = logging.getLogger(__name__)
 _SINA_DINIW_REFERER = "https://finance.sina.com.cn/money/forex/hq/DINIW.shtml"
+_SINA_DINIW_DAY_K_URL = (
+    "https://vip.stock.finance.sina.com.cn/forex/api/jsonp.php/"
+    "var_DINIW=/NewForexService.getDayKLine?symbol=DINIW"
+)
 
 
 def _previous_weekday(date_str: str) -> str:
@@ -155,6 +160,34 @@ def _fetch_usd_index_history_em(host: str, n: int) -> dict[str, float]:
         return _tail_closes(_parse_em_kline_lines(klines), n, market="us")
 
 
+def _fetch_usd_index_history_sina(n: int) -> dict[str, float]:
+    """新浪 DINIW 日线（生产机东财/akshare 常被掐时的主兜底）。"""
+    headers = {"User-Agent": EM_USER_AGENT, "Referer": _SINA_DINIW_REFERER}
+    with httpx.Client(timeout=USD_HISTORY_TIMEOUT, headers=headers, http2=False) as client:
+        resp = client.get(_SINA_DINIW_DAY_K_URL)
+        resp.raise_for_status()
+        text = resp.text
+    match = re.search(r"var_DINIW=\((.*)\)\s*;?\s*$", text, re.S)
+    if not match:
+        return {}
+    payload = match.group(1).strip()
+    if payload.startswith('"') and payload.endswith('"'):
+        payload = json.loads(payload)
+    pairs: list[tuple[str, float]] = []
+    for row in payload.split("|"):
+        parts = [p.strip() for p in row.split(",") if p.strip()]
+        if len(parts) < 5:
+            continue
+        d = normalize_date(parts[0])
+        close = pd.to_numeric(parts[4], errors="coerce")
+        if d and pd.notna(close):
+            pairs.append((d, float(close)))
+    closes = _tail_closes(pairs, n, market="us")
+    if closes:
+        logger.info("美元指数历史来自新浪 DINIW: %s 点", len(closes))
+    return closes
+
+
 def _fetch_usd_index_history_akshare(n: int) -> dict[str, float]:
     for attempt in range(2):
         try:
@@ -174,10 +207,18 @@ def _fetch_usd_index_history_akshare(n: int) -> dict[str, float]:
 
 
 def _fetch_usd_index_history(n: int) -> dict[str, float]:
-    """生产优先 akshare 日线，东财 push2his 多 host 兜底。"""
-    closes = _fetch_usd_index_history_akshare(n)
-    if closes:
-        return closes
+    """历史顺序：新浪日线（生产可达）→ akshare → 东财 push2his。"""
+    for fetcher, label in (
+        (_fetch_usd_index_history_sina, "sina"),
+        (_fetch_usd_index_history_akshare, "akshare"),
+    ):
+        try:
+            closes = fetcher(n)
+            if closes:
+                return closes
+        except Exception as e:
+            logger.warning("美元指数历史(%s)失败: %s", label, e)
+
     for host in EM_HIST_HOSTS:
         try:
             closes = _fetch_usd_index_history_em(host, n)
