@@ -4,7 +4,8 @@ business:
   turnover_threshold: 2000000000000
   market_cap_threshold: 100000000000
   stock_turnover_slice_threshold: 30000000000
-  stock_history_fetch_workers: 4
+  stock_history_fetch_workers: 8
+  path_b_candidate_amount_floor: 10000000000
   market_overview_recent_days: 10
   weekly_baseline_offset: 6
   price_level_conclusions:

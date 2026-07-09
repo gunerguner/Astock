@@ -85,7 +85,10 @@ MARKET_CAP_THRESHOLD = int(_business.get("market_cap_threshold", 100_000_000_000
 STOCK_TURNOVER_SLICE_THRESHOLD = int(
     _business.get("stock_turnover_slice_threshold", 30_000_000_000)
 )
-STOCK_HISTORY_FETCH_WORKERS = int(_business.get("stock_history_fetch_workers", 4))
+STOCK_HISTORY_FETCH_WORKERS = int(_business.get("stock_history_fetch_workers", 8))
+PATH_B_CANDIDATE_AMOUNT_FLOOR = int(
+    _business.get("path_b_candidate_amount_floor", 10_000_000_000)
+)
 START_DATE = str(_business.get("start_date", "2005-01-01"))
 GLOBAL_ASSET_RECENT_DAYS = 10
 MARKET_OVERVIEW_RECENT_DAYS = int(_business.get("market_overview_recent_days", 10))
@@ -108,6 +111,9 @@ TENCENT_QUOTE_URL = str(_tencent.get("quote_url", "http://qt.gtimg.cn/q="))
 TENCENT_BATCH_SIZE = int(_tencent.get("batch_size", 60))
 TENCENT_TIMEOUT = int(_tencent.get("timeout", 10))
 TENCENT_MARKET_CAP_FIELD_INDEX = 44
+# qt.gtimg.cn 字段 37：成交额（万元）
+TENCENT_AMOUNT_FIELD_INDEX = 37
+TENCENT_NAME_FIELD_INDEX = 1
 BAOSTOCK_SOCKET_TIMEOUT = int(_baostock.get("socket_timeout", 30))
 EM_HIST_HOST = str(_eastmoney.get("hist_host", "https://push2his.eastmoney.com"))
 EM_HIST_HOSTS: list[str] = [

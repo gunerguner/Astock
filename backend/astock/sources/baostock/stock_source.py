@@ -68,10 +68,16 @@ def fetch_all_stock_codes(as_of_date: str) -> SourceFetchResult:
 
 
 def fetch_stock_amount_history(
-    code: str, start_date: str | None = None
+    code: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
 ) -> SourceFetchResult:
-    """获取单只股票日线成交额。调用方需已处于 baostock 登录会话中（见 baostock_session）。"""
+    """获取单只股票日线成交额。调用方需已处于 baostock 登录会话中（见 baostock_session）。
+
+    end_date 默认 last_settled_date("cn")；Path B 中间日可传入 as_of 前一交易日。
+    """
     start = start_date or START_DATE
+    end = end_date or last_settled_date()
     prefixed = _to_baostock_code(code)
 
     def _query() -> SourceFetchResult:
@@ -79,7 +85,7 @@ def fetch_stock_amount_history(
             prefixed,
             "date,amount",
             start_date=start,
-            end_date=last_settled_date(),
+            end_date=end,
             frequency="d",
         )
         if failed := _query_failure(f"个股 {code} 日线查询失败", rs):

@@ -1,15 +1,31 @@
-"""akshare 数据源：A股指数点位、美股复权历史、外盘期货历史。"""
+"""akshare 数据源：A股指数点位、全市场快照、美股复权历史、外盘期货历史。"""
 
 import logging
+import re
 
 import akshare as ak
 import pandas as pd
 
-from astock.config import GLOBAL_ASSETS, POINT_INDEX_CONFIG, START_DATE
-from astock.core.datetime_utils import market_for_asset_type
+from astock.config import GLOBAL_ASSETS, POINT_INDEX_CONFIG, START_DATE, STOCK_CODE_PREFIXES
+from astock.core.datetime_utils import (
+    iso_now,
+    last_settled_date,
+    market_for_asset_type,
+    normalize_date,
+)
 from astock.sources.fetch_result import SourceFetchResult
 
 logger = logging.getLogger(__name__)
+
+_CODE_DIGITS_RE = re.compile(r"^\d{6}$")
+
+
+def _is_a_share_code(code: str) -> bool:
+    if not _CODE_DIGITS_RE.match(code):
+        return False
+    exchange = "sh" if code.startswith("6") else "sz"
+    prefixes = tuple(STOCK_CODE_PREFIXES.get(exchange, ()))
+    return bool(prefixes) and code.startswith(prefixes)
 
 
 def _cn_index_sina_symbol(code: str) -> str:
@@ -68,6 +84,72 @@ def fetch_cn_index_point(
         start,
         end,
     )
+    return SourceFetchResult(records=records)
+
+
+def _parse_spot_dataframe(df: pd.DataFrame) -> list[dict]:
+    """将东财/akshare 全市场快照 DataFrame 规范为 {code, name, amount, market_cap}。"""
+    col_map = {
+        "代码": "code",
+        "名称": "name",
+        "成交额": "amount",
+        "总市值": "market_cap",
+    }
+    missing = [c for c in col_map if c not in df.columns]
+    if missing:
+        raise ValueError(f"快照缺少列: {missing}; 实际列={list(df.columns)}")
+
+    out = df[list(col_map.keys())].rename(columns=col_map).copy()
+    out["name"] = out["name"].astype(str).fillna("")
+    out["amount"] = pd.to_numeric(out["amount"], errors="coerce")
+    out["market_cap"] = pd.to_numeric(out["market_cap"], errors="coerce")
+    out = out.dropna(subset=["amount", "market_cap"])
+    records: list[dict] = []
+    for row in out.to_dict("records"):
+        raw_code = str(row["code"]).strip()
+        if raw_code.endswith(".0"):
+            raw_code = raw_code[:-2]
+        digits = re.sub(r"\D", "", raw_code)
+        if len(digits) != 6 or not _is_a_share_code(digits):
+            continue
+        records.append(
+            {
+                "code": digits,
+                "name": str(row["name"]),
+                "amount": float(row["amount"]),
+                "market_cap": float(row["market_cap"]),
+            }
+        )
+    return records
+
+
+def fetch_stock_spot_snapshot() -> SourceFetchResult:
+    """全市场个股快照（代码/名称/成交额/总市值，单位元）。
+
+    主路径：akshare `stock_zh_a_spot_em`（东财一次拉全市场）。
+    失败时由调用方回退腾讯批量（见 stock_importer）。
+    """
+    try:
+        raw = ak.stock_zh_a_spot_em()
+    except Exception as e:
+        msg = f"全市场个股快照失败(akshare): {e}"
+        logger.warning(msg)
+        return SourceFetchResult.failure(msg)
+
+    if raw is None or raw.empty:
+        return SourceFetchResult.failure("全市场个股快照为空(akshare)")
+
+    try:
+        records = _parse_spot_dataframe(raw)
+    except Exception as e:
+        msg = f"全市场个股快照解析失败(akshare): {e}"
+        logger.warning(msg)
+        return SourceFetchResult.failure(msg)
+
+    if not records:
+        return SourceFetchResult.failure("全市场个股快照无有效 A 股记录(akshare)")
+
+    logger.info("全市场个股快照完成(akshare): %s 只", len(records))
     return SourceFetchResult(records=records)
 
 

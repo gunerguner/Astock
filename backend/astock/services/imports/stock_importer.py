@@ -8,16 +8,17 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import baostock as bs
-
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from astock.config import (
     MARKET_CAP_THRESHOLD,
+    PATH_B_CANDIDATE_AMOUNT_FLOOR,
     START_DATE,
     STOCK_HISTORY_FETCH_WORKERS,
     STOCK_TURNOVER_SLICE_THRESHOLD,
     STOCK_UPSERT_FLUSH_SIZE,
 )
+from astock.core.datetime_utils import add_calendar_days, last_settled_date, today_local
 from astock.core.exceptions import ExternalSourceAppError
 from astock.core.progress import ProgressReporter, SSEBridge
 from astock.core.sync_status import SyncStatus
@@ -33,6 +34,7 @@ from astock.services.sync_store import (
     get_sync_meta,
     upsert_sync_meta,
 )
+from astock.sources.akshare_client import fetch_stock_spot_snapshot
 from astock.sources.baostock import (
     configure_worker_socket,
     fetch_all_stock_codes,
@@ -74,12 +76,12 @@ def _baostock_worker_init() -> None:
 
 
 def _fetch_stock_amount_worker(
-    task: tuple[str, str | None],
+    task: tuple[str, str | None, str | None],
 ) -> tuple[str, SourceFetchResult]:
     """在子进程中抓取单只股票历史成交额。"""
-    code, start_date = task
+    code, start_date, end_date = task
     try:
-        fr = fetch_stock_amount_history(code, start_date=start_date)
+        fr = fetch_stock_amount_history(code, start_date=start_date, end_date=end_date)
         return code, fr
     except Exception as e:
         return code, SourceFetchResult(records=[], ok=False, errors=[str(e)])
@@ -97,11 +99,16 @@ class StockImportContext:
     imported: int = 0
     record_buffer: list[dict[str, Any]] = field(default_factory=list)
     code_to_name: dict[str, str] = field(default_factory=dict)
+    snapshot_by_code: dict[str, dict[str, Any]] = field(default_factory=dict)
     big_cap_codes: list[str] = field(default_factory=list)
+    path_b_codes: list[str] = field(default_factory=list)
     total_stocks: int = 0
-    tasks: list[tuple[str, str | None]] = field(default_factory=list)
+    tasks: list[tuple[str, str | None, str | None]] = field(default_factory=list)
     as_of_date: str | None = None
+    last_synced: str | None = None
     hist_start_date: str = START_DATE
+    hist_end_date: str | None = None
+    use_snapshot_for_as_of: bool = False
     cached_at: str = ""
 
     def build_skip_result(self) -> dict[str, Any]:
@@ -183,6 +190,32 @@ class StockImportContext:
         if len(self.record_buffer) >= STOCK_UPSERT_FLUSH_SIZE:
             self.flush_buffer()
 
+    def append_snapshot_slice(self, date: str) -> int:
+        """从快照直写 as_of 日切片，返回写入缓冲条数。"""
+        added = 0
+        for code in self.big_cap_codes:
+            spot = self.snapshot_by_code.get(code)
+            if not spot:
+                continue
+            amount = spot.get("amount")
+            if is_missing_value(amount) or amount < STOCK_TURNOVER_SLICE_THRESHOLD:
+                continue
+            name = self.code_to_name.get(code) or spot.get("name") or ""
+            if is_missing_value(name):
+                self.stock_errors.append(f"个股 {code}: 缺少股票名称")
+                continue
+            self.record_buffer.append(
+                {
+                    "date": date,
+                    "code": code,
+                    "name": name,
+                    "amount": float(amount),
+                    "cached_at": self.cached_at,
+                }
+            )
+            added += 1
+        return added
+
     def build_result(self) -> dict[str, Any]:
         all_errors = self.errors + self.stock_errors
         ok = len(all_errors) == 0
@@ -221,6 +254,181 @@ class StockImportContext:
         return result
 
 
+def _load_spot_snapshot(
+    ctx: StockImportContext,
+) -> Iterator[str] | SourceFetchResult:
+    """主路径 akshare 一次快照；失败则 baostock 代码池 + 腾讯批量回退。"""
+    _report_stock(ctx.on_progress, "获取全市场个股快照...")
+    yield from _drain_bridge(ctx.bridge)
+
+    spot_fr = fetch_stock_spot_snapshot()
+    if spot_fr.ok and spot_fr.records:
+        return spot_fr
+
+    if not spot_fr.ok:
+        # 主源失败仅记日志；回退成功则不向用户暴露中间态
+        logger.warning("akshare 快照失败，回退腾讯: %s", spot_fr.error_summary())
+
+    _report_stock(ctx.on_progress, "akshare 失败，回退腾讯行情...")
+    yield from _drain_bridge(ctx.bridge)
+
+    codes_fr = fetch_all_stock_codes(ctx.as_of_date or "")
+    if not codes_fr.ok or not codes_fr.records:
+        raise ExternalSourceAppError(
+            f"全市场代码清单获取失败: {codes_fr.error_summary()}"
+        )
+
+    code_list = [r["code"] for r in codes_fr.records]
+    name_by_code = {r["code"]: r["name"] for r in codes_fr.records}
+
+    records: list[dict] = []
+    cap_errors: list[str] = []
+    for batch_idx, total_batches, batch_records, error in tencent_client.iter_spot_batches(
+        code_list
+    ):
+        _report_stock(
+            ctx.on_progress,
+            f"腾讯快照 {batch_idx}/{total_batches}",
+            current=batch_idx,
+            total=total_batches,
+        )
+        yield from _drain_bridge(ctx.bridge)
+        if error:
+            cap_errors.append(error)
+            continue
+        for row in batch_records:
+            code = row["code"]
+            if not row.get("name"):
+                row["name"] = name_by_code.get(code, "")
+            records.append(row)
+
+    if not records:
+        # 回退也失败：把主源 + 腾讯错误一并抛给用户
+        detail = "; ".join((spot_fr.errors + cap_errors)[:3]) or "无有效记录"
+        raise ExternalSourceAppError(f"股票快照失败(akshare+腾讯): {detail}")
+    if cap_errors:
+        # 有部分批次失败但仍拿到足够快照：记 warning，不污染最终成功态
+        logger.warning(
+            "腾讯快照部分批次失败(%s)，已用 %s 条继续: %s",
+            len(cap_errors),
+            len(records),
+            "; ".join(cap_errors[:3]),
+        )
+
+    return SourceFetchResult(records=records, ok=True)
+
+
+def _historical_slice_codes(db: Session) -> set[str]:
+    rows = db.exec(select(StockTurnover.code).distinct()).all()
+    return {str(code) for code in rows if code}
+
+
+def _build_candidate_pool(ctx: StockImportContext, spot_records: list[dict]) -> None:
+    ctx.snapshot_by_code = {r["code"]: r for r in spot_records}
+    ctx.code_to_name = {
+        r["code"]: r.get("name") or ""
+        for r in spot_records
+        if r.get("name")
+    }
+    ctx.big_cap_codes = [
+        r["code"]
+        for r in spot_records
+        if r.get("market_cap", 0) >= MARKET_CAP_THRESHOLD
+    ]
+    logger.info(
+        "大市值候选池: %s 只 (阈值 %.0f 亿)",
+        len(ctx.big_cap_codes),
+        MARKET_CAP_THRESHOLD / 1e8,
+    )
+
+
+def _narrow_path_b_codes(ctx: StockImportContext) -> list[str]:
+    hist_codes = _historical_slice_codes(ctx.db)
+    narrowed: list[str] = []
+    for code in ctx.big_cap_codes:
+        spot = ctx.snapshot_by_code.get(code) or {}
+        amount = float(spot.get("amount") or 0)
+        if amount >= PATH_B_CANDIDATE_AMOUNT_FLOOR or code in hist_codes:
+            narrowed.append(code)
+    logger.info(
+        "Path B 候选池收窄: %s → %s (floor=%.0f 亿 ∪ 历史切片)",
+        len(ctx.big_cap_codes),
+        len(narrowed),
+        PATH_B_CANDIDATE_AMOUNT_FLOOR / 1e8,
+    )
+    return narrowed
+
+
+def _has_turnover_between(db: Session, start_exclusive: str, end_exclusive: str) -> bool:
+    """(start, end) 开区间内是否存在成交额交易日。"""
+    row = db.exec(
+        select(Turnover.date)
+        .where(Turnover.date > start_exclusive)
+        .where(Turnover.date < end_exclusive)
+        .limit(1)
+    ).first()
+    return row is not None
+
+
+def _select_path(ctx: StockImportContext) -> None:
+    """决定是否快照直写 as_of，以及 baostock 区间。"""
+    as_of = ctx.as_of_date
+    assert as_of is not None
+    settled = last_settled_date("cn")
+    last_synced = ctx.last_synced
+    missing_start = add_calendar_days(last_synced, 1) if last_synced else START_DATE
+
+    # 仅当 as_of 为「今日已结算」时可用实时快照直写，避免盘中用当日累计额填昨日
+    can_snapshot_as_of = as_of == settled == today_local()
+    # 日常单日：as_of 已结算，且 last_synced 与 as_of 之间无其它成交额交易日（含周末跳空）
+    gap_only_as_of = bool(last_synced) and not _has_turnover_between(
+        ctx.db, last_synced, as_of
+    )
+
+    ctx.use_snapshot_for_as_of = can_snapshot_as_of
+    if can_snapshot_as_of and gap_only_as_of:
+        # 路径 A：仅快照，0 baostock
+        ctx.path_b_codes = []
+        ctx.tasks = []
+        ctx.hist_end_date = None
+        logger.info(
+            "个股切片路径 A: 快照直写 as_of=%s (settled=%s, last_synced=%s)",
+            as_of,
+            settled,
+            last_synced,
+        )
+        return
+
+    # 路径 B：中间日 baostock；as_of 若可结算则快照直写
+    if can_snapshot_as_of:
+        ctx.hist_end_date = add_calendar_days(as_of, -1)
+        ctx.hist_start_date = missing_start
+        if ctx.hist_start_date > ctx.hist_end_date:
+            ctx.path_b_codes = []
+            ctx.tasks = []
+            logger.info(
+                "个股切片路径 B(仅快照 as_of): as_of=%s hist 区间空", as_of
+            )
+            return
+    else:
+        # 盘中等：as_of 未结算，不能用快照填 as_of，整段走 baostock
+        ctx.use_snapshot_for_as_of = False
+        ctx.hist_start_date = missing_start
+        ctx.hist_end_date = as_of
+
+    ctx.path_b_codes = _narrow_path_b_codes(ctx)
+    ctx.tasks = [
+        (code, ctx.hist_start_date, ctx.hist_end_date) for code in ctx.path_b_codes
+    ]
+    logger.info(
+        "个股切片路径 B: snapshot_as_of=%s hist=%s→%s baostock=%s",
+        ctx.use_snapshot_for_as_of,
+        ctx.hist_start_date,
+        ctx.hist_end_date,
+        len(ctx.tasks),
+    )
+
+
 def _init_stock_context(
     db: Session,
     *,
@@ -249,77 +457,49 @@ def _init_stock_context(
         return ctx
 
     ctx.as_of_date = as_of_date
+    ctx.last_synced = last_synced
     ctx.hist_start_date = last_synced or START_DATE
     ctx.cached_at = iso_now()
 
     logger.info(
-        "个股切片导入: as_of=%s, last_synced=%s, workers=%s",
+        "个股切片导入: as_of=%s, last_synced=%s, settled=%s, workers=%s",
         as_of_date,
         last_synced,
+        last_settled_date("cn"),
         STOCK_HISTORY_FETCH_WORKERS,
     )
 
-    _report_stock(on_progress, "获取全市场代码清单...")
-    yield from _drain_bridge(bridge)
-    codes_fr = fetch_all_stock_codes(as_of_date)
-    if not codes_fr.ok or not codes_fr.records:
-        raise ExternalSourceAppError(
-            f"全市场代码清单获取失败: {codes_fr.error_summary()}"
-        )
+    spot_gen = _load_spot_snapshot(ctx)
+    spot_fr = None
+    try:
+        while True:
+            yield next(spot_gen)
+    except StopIteration as exc:
+        spot_fr = exc.value
 
-    ctx.code_to_name = {r["code"]: r["name"] for r in codes_fr.records}
+    assert isinstance(spot_fr, SourceFetchResult)
+    _build_candidate_pool(ctx, spot_fr.records)
+    if not ctx.big_cap_codes:
+        raise ExternalSourceAppError("大市值候选池为空，无法导入个股切片")
 
-    cap_records: list[dict] = []
-    cap_errors: list[str] = []
-    for batch_idx, total_batches, batch_records, error in tencent_client.iter_market_cap_batches(
-        list(ctx.code_to_name.keys())
-    ):
+    _select_path(ctx)
+    ctx.total_stocks = len(ctx.tasks)
+
+    if ctx.use_snapshot_for_as_of and not ctx.tasks:
         _report_stock(
             on_progress,
-            f"获取市值快照 {batch_idx}/{total_batches}",
-            current=batch_idx,
-            total=total_batches,
+            f"路径 A：快照直写 {as_of_date}",
+            current=0,
+            total=1,
         )
-        yield from _drain_bridge(bridge)
-        if error:
-            cap_errors.append(error)
-        else:
-            cap_records.extend(batch_records)
-
-    caps_fr = SourceFetchResult(
-        records=cap_records,
-        ok=len(cap_errors) == 0,
-        errors=cap_errors,
-    )
-    if cap_records:
-        logger.info(
-            "腾讯行情市值快照完成: %s/%s 只解析成功, ok=%s",
-            len(cap_records),
-            len(ctx.code_to_name),
-            caps_fr.ok,
+    else:
+        _report_stock(
+            on_progress,
+            f"开始拉取个股日线，共 {ctx.total_stocks} 只"
+            + ("（含 as_of 快照）" if ctx.use_snapshot_for_as_of else ""),
+            current=0,
+            total=max(ctx.total_stocks, 1),
         )
-    if not caps_fr.ok and not caps_fr.records:
-        raise ExternalSourceAppError(f"股票市值快照失败: {caps_fr.error_summary()}")
-    if not caps_fr.ok:
-        ctx.errors.extend(caps_fr.errors)
-
-    ctx.big_cap_codes = [
-        r["code"] for r in caps_fr.records if r["market_cap"] > MARKET_CAP_THRESHOLD
-    ]
-    logger.info(
-        "大市值股票筛选完成: %s 只 (阈值 %.0f 亿)",
-        len(ctx.big_cap_codes),
-        MARKET_CAP_THRESHOLD / 1e8,
-    )
-
-    ctx.total_stocks = len(ctx.big_cap_codes)
-    ctx.tasks = [(code, ctx.hist_start_date) for code in ctx.big_cap_codes]
-    _report_stock(
-        on_progress,
-        f"开始拉取个股日线，共 {ctx.total_stocks} 只",
-        current=0,
-        total=max(ctx.total_stocks, 1),
-    )
     yield from _drain_bridge(bridge)
     return ctx
 
@@ -362,16 +542,22 @@ def _import_stock_gen(
     if ctx.is_skipped:
         return ctx.build_skip_result()
 
-    for i, code, hist_fr in _iter_stock_history(ctx):
-        ctx.accumulate(code, hist_fr)
+    if ctx.use_snapshot_for_as_of and ctx.as_of_date:
+        added = ctx.append_snapshot_slice(ctx.as_of_date)
+        logger.info("快照直写 as_of=%s: %s 条候选切片", ctx.as_of_date, added)
         ctx.maybe_flush()
 
-        if i % 5 == 0:
-            logger.info("个股日线进度: %s/%s", i, ctx.total_stocks)
-            yield from ctx.emit_stock_progress(i)
-        elif on_progress is not None:
-            on_progress.ping()
-            yield from _drain_bridge(bridge)
+    if ctx.tasks:
+        for i, code, hist_fr in _iter_stock_history(ctx):
+            ctx.accumulate(code, hist_fr)
+            ctx.maybe_flush()
+
+            if i % 5 == 0:
+                logger.info("个股日线进度: %s/%s", i, ctx.total_stocks)
+                yield from ctx.emit_stock_progress(i)
+            elif on_progress is not None:
+                on_progress.ping()
+                yield from _drain_bridge(bridge)
 
     ctx.flush_buffer()
     return ctx.build_result()

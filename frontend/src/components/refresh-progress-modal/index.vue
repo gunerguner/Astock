@@ -180,7 +180,8 @@
     background: var(--color-fill-1);
     font-size: var(--fs-body);
 
-    &--running {
+    &--running,
+    &--done {
       background: rgb(var(--primary-1));
     }
 

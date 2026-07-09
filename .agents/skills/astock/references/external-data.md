@@ -16,13 +16,13 @@
 |---------|--------|-------------|--------|---------------------|------|
 | 多指数收盘价 | baostock / akshare | `baostock.fetch_point` / `akshare.fetch_cn_index_point` | SQLite `point` + `sync_meta.point_{code}` | `last_synced_date ≥ last_settled_date("cn")`（按指数） | 单线程，4 指数串行 |
 | 两市合计成交额 | baostock 两指数 `amount` 求和 | `baostock.fetch_turnover` | SQLite `turnover` + `sync_meta.turnover` | 同上 | 单线程 |
-| 全市场股票代码 | baostock `query_all_stock` | `baostock.fetch_all_stock_codes` | 不落库（导入中间态） | — | 单线程 |
-| 个股日线成交额 | baostock `query_history_k_data_plus` | `baostock.fetch_stock_amount_history` | SQLite `stock_turnover` | `turnover 最新日 ≤ last_synced` | **ProcessPool 4 worker** |
-| 个股总市值快照 | 腾讯 `qt.gtimg.cn` | `TencentClient.fetch_market_caps` | 不落库（筛选中间态） | — | 60 只/批串行 |
+| 全市场个股快照 | akshare `stock_zh_a_spot_em`（失败回退腾讯） | `akshare.fetch_stock_spot_snapshot` / `TencentQuoteClient.fetch_spot_snapshot` | 不落库（筛选中间态） | — | akshare 1 次；腾讯回退 60 只/批 |
+| 个股日线成交额 | baostock `query_history_k_data_plus` | `baostock.fetch_stock_amount_history` | SQLite `stock_turnover` | `turnover 最新日 ≤ last_synced` | **ProcessPool（默认 8 worker，仅 Path B）** |
+| 全市场股票代码 | baostock `query_all_stock` | `baostock.fetch_all_stock_codes` | 不落库（仅腾讯回退时用） | — | 单线程 |
 | 美股/贵金属 ATH | akshare | `AkshareClient.fetch_all_assets` | SQLite `asset_high` + Redis 最近价 | **`is_multi_market_synced`**（中/美水位均达标） | **故意串行** |
 | 全球市场概览 | akshare + 东财 push2 | `market_overview.fetch_all_items` | **仅 Redis**（无 SQLite 导入） | TTL 内成功缓存复用 | 非美债项 ThreadPool 4；美债批量 |
 
-> A 股历史行情（点位/成交额/个股日线）已弃用 akshare 东方财富接口（限流/反爬不稳定），改用 **BaoStock + 腾讯行情** 组合。akshare 现用于科创50 点位、全球资产与市场概览。
+> A 股**历史**日线（点位/成交额/个股区间）仍用 BaoStock；**当日全市场快照**例外使用 akshare 东财（失败回退腾讯）。akshare 另用于科创50 点位、全球资产与市场概览。
 
 ### 持久化与缓存一览
 
@@ -108,27 +108,28 @@ class SourceFetchResult:
 |------|----------|------|
 | `fetch_point(index_code, start)` | 指数 `date,close` | 读取 `point_indices.yaml`，baostock 源指数 |
 | `fetch_turnover(start)` | 两市指数 `amount` 按日求和 | 上证综指 `sh.000001` + 深证综指 `sz.399106`（见 `exchange_turnover_codes`） |
-| `fetch_all_stock_codes(day)` | `bs.query_all_stock` | 过滤沪深主板/创业板/科创板 |
-| `fetch_stock_amount_history(code, start)` | `date,amount` 日线 | 单股历史成交额 |
+| `fetch_all_stock_codes(day)` | `bs.query_all_stock` | 过滤沪深主板/创业板/科创板（腾讯回退时用） |
+| `fetch_stock_amount_history(code, start, end_date?)` | `date,amount` 日线 | 单股历史；`end_date` 默认 `last_settled_date("cn")` |
 
-个股历史拉取用 `ProcessPoolExecutor`（`STOCK_HISTORY_FETCH_WORKERS=4`）并发，worker 内调用 `configure_worker_socket()`。
+个股历史拉取用 `ProcessPoolExecutor`（`STOCK_HISTORY_FETCH_WORKERS`，默认 8）并发，**仅 Path B**；worker 内调用 `configure_worker_socket()`。
 
-### TencentClient（个股总市值快照）
+### TencentQuoteClient（个股快照回退）
 
 - **文件**：`sources/tencent_client.py`
 - **接口**：`http://qt.gtimg.cn/q=`，无需鉴权，GBK 解码
 - **批量**：60 只/批（`TENCENT_BATCH_SIZE`）
-- **总市值**：响应第 44 字段，单位「亿元」×1e8 转元
-- **用途**：按 `MARKET_CAP_THRESHOLD`（默认 1000 亿）筛选后再用 baostock 拉日线
-- **方法**：仅 `fetch_market_caps(codes)`
+- **字段**：名称(1)、成交额万元(37)×1e4、总市值亿元(44)×1e8
+- **用途**：akshare 全市场快照失败时，配合 `query_all_stock` 回退拉取 `{code,name,amount,market_cap}`
+- **方法**：`fetch_spot_snapshot` / `iter_spot_batches`；保留 `fetch_market_caps` 兼容
 
-### AkshareClient（全球资产 ATH + 科创50 点位）
+### AkshareClient（全球资产 ATH + 科创50 + A 股快照）
 
 - **文件**：`sources/akshare_client.py`
 - **并发**：**故意串行**——akshare 底层 mini_racer/V8 在 macOS 并发会 crash
 
 | 方法 | 拉取内容 |
 |------|----------|
+| `fetch_stock_spot_snapshot()` | A 股全市场快照 `ak.stock_zh_a_spot_em` → `{code,name,amount,market_cap}` |
 | `fetch_stock_ath(symbol)` | 美股前复权 `ak.stock_us_daily(symbol, adjust="qfq")`，失败回退未复权 |
 | `fetch_metal_ath(symbol)` | 外盘期货 `ak.futures_foreign_hist`（GC/SI） |
 | `fetch_cn_index_point(index_code, start)` | 科创50 等 akshare 源指数日线 |
@@ -159,7 +160,7 @@ class SourceFetchResult:
 |-----------|-------------|---------|---------------------|
 | `POST /admin/data/import/stream?dataset=turnover` | `imports/turnover_importer` | baostock 两市成交额 | SQLite + `sync_meta`；`cn` 水位已结算则跳过 |
 | `POST /admin/data/import/stream?dataset=point` | `imports/point_importer` | baostock 三指数 + akshare 科创50 | 按指数独立水位；`cn` 结算日跳过 |
-| `POST /admin/data/import/stream?dataset=stock` | `imports/stock_importer` | baostock 代码池 + 腾讯市值 + baostock 个股日线 | 依赖 turnover 最新日；无新交易日跳过 |
+| `POST /admin/data/import/stream?dataset=stock` | `imports/stock_importer` | 全市场快照（akshare/腾讯）+ 可选 baostock 区间 | 依赖 turnover 最新日；无新交易日跳过；Path A 0 baostock |
 | `POST /admin/data/import/stream?dataset=global_assets` | `global_asset/refresh.py` | akshare ATH + recent closes | SQLite + Redis；`is_multi_market_synced` 跳过 |
 | `POST /admin/data/import/stream?dataset=all` | `import_orchestrator` | 四阶段顺序执行 + SSE 进度 | 各阶段独立跳过 |
 | `GET /analysis/asset-price-levels` | `global_asset/query.py` | 读 DB + Redis（miss 时 akshare 补拉） | 每股按 `us` 结算过滤；Redis TTL 86400s |
@@ -267,23 +268,28 @@ flowchart TD
   B -->|否| D["as_of = max(turnover.date)"]
   D --> E{as_of <= last_synced?}
   E -->|是| Z["跳过 imported=0"]
-  E -->|否| F["fetch_all_stock_codes(as_of)"]
-  F --> G["腾讯 fetch_market_caps 分批 60 只"]
-  G --> H["筛选市值 > MARKET_CAP_THRESHOLD"]
-  H --> I["ProcessPool 4 worker 拉个股 amount 历史"]
-  I --> J["过滤 amount >= 300亿/日"]
-  J --> K["每 5000 条 flush upsert stock_turnover"]
+  E -->|否| F["fetch_stock_spot_snapshot"]
+  F -->|失败| F2["query_all_stock + 腾讯 spot 回退"]
+  F --> G["市值 >= MARKET_CAP_THRESHOLD"]
+  F2 --> G
+  G --> H{路径}
+  H -->|"A: 仅缺 as_of 且 as_of==settled==today"| I["快照 amount>=300亿 直写"]
+  H -->|"B: 多天或盘中"| J["as_of 可快照则直写; 中间日收窄候选池 baostock"]
+  I --> K["upsert stock_turnover"]
+  J --> K
   K --> L["sync_meta.stock_turnover ← as_of"]
 ```
 
 | 项 | 说明 |
 |----|------|
 | 交易日锚点 | **成交额表最新日期** `as_of_date`（非日历今天） |
-| 跳过 | `stock_turnover.last_synced_date` 已 ≥ `as_of_date` → 无新交易日，不拉腾讯/baostock |
-| 历史起点 | `hist_start_date = last_synced or START_DATE`（拉取区间含水位日，仅在新交易日场景执行） |
+| 跳过 | `stock_turnover.last_synced_date` 已 ≥ `as_of_date` → 无新交易日，不拉快照/baostock |
+| 快照源 | 主路径 `ak.stock_zh_a_spot_em` **1 次**；失败回退腾讯批量（需 `query_all_stock`） |
+| 路径 A | `as_of == last_settled_date("cn") == today_local()`，且 `last_synced` 与 `as_of` 之间无其它 turnover 交易日 → **0 baostock**，快照直写 |
+| 路径 B | 多天缺口或盘中：as_of 可结算则快照直写；中间日 `hist_start→hist_end` baostock；候选池 = 市值≥1000亿 ∧ (快照成交额≥100亿 ∨ 历史切片 code) |
 | 筛选 | 市值 ≥ `1e11`（1000 亿）；日成交额切片 ≥ `3e10`（300 亿） |
 | 缓存 | **仅 SQLite**；读排名 `GET /analysis/stock/ranking` 纯查库 |
-| SSE | 每 5 只股票上报进度；市值快照按批上报 |
+| SSE | Path B 每 5 只股票上报进度；腾讯回退时按批上报 |
 
 ### 7.4 全球资产历史最高点 + 价格水位（`global_assets`）
 
@@ -408,6 +414,6 @@ flowchart TD
 | 数据集 | 条件 | 行为 |
 |--------|------|------|
 | turnover / point | `is_synced_through_settled(last_synced_date, "cn")` 且 `last_status=success` | 不请求 baostock/akshare，`imported=0`；拉取 `end_date=last_settled_date("cn")` |
-| stock | `max(turnover.date) <= stock_turnover.last_synced_date` | 不请求腾讯/baostock，`imported=0`（间接依赖 A 股 `cn` 水位） |
+| stock | `max(turnover.date) <= stock_turnover.last_synced_date` | 不请求快照/baostock，`imported=0`（间接依赖 A 股 `cn` 水位） |
 | global_assets | `is_multi_market_synced(last_synced_date)` 且 `last_status=success` 且表非空 | 不请求 akshare，`imported=0` |
 | market_overview | 各项 Redis 缓存 TTL 内且 `has_sufficient_baseline_points(..., market=...)` | 不请求外部源；`force_refresh` 不刷新已成功项 |
