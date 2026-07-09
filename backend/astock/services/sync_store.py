@@ -7,6 +7,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlmodel import Session, select
 
 from astock.config import DEFAULT_UPSERT_BATCH_SIZE, START_DATE
+from astock.core.datetime_utils import add_calendar_days, is_synced_through_settled
 from astock.core.sync_status import SyncStatus
 from astock.models.sync_meta import SyncMeta
 from astock.services.price_utils import iso_now
@@ -25,10 +26,21 @@ def get_sync_meta(db: Session, table_name: str) -> SyncMeta | None:
 
 
 def get_sync_start_date(db: Session, table_name: str) -> str:
+    """增量拉取起始日：上次已同步日的次日（避免重复 upsert 最后一天）。"""
     meta = get_sync_meta(db, table_name)
     if meta and meta.last_synced_date:
-        return meta.last_synced_date
+        return add_calendar_days(meta.last_synced_date, 1)
     return START_DATE
+
+
+def should_skip_daily_sync(db: Session, table_name: str) -> bool:
+    """水位已覆盖最近可结算日时跳过（盘中不拉当日未完成日线）。"""
+    meta = get_sync_meta(db, table_name)
+    if not meta or not meta.last_synced_date:
+        return False
+    if meta.last_status != SyncStatus.SUCCESS:
+        return False
+    return is_synced_through_settled(meta.last_synced_date)
 
 
 def upsert_sync_meta(

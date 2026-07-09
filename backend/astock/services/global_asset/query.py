@@ -5,7 +5,7 @@ from datetime import date
 from sqlmodel import Session, select
 
 from astock.config import GLOBAL_ASSETS
-from astock.core.datetime_utils import iso_now, now_local
+from astock.core.datetime_utils import filter_settled_closes, iso_now, last_settled_date, market_for_asset_type, now_local
 from astock.core.exceptions import AppError
 from astock.core.redis_client import LATEST_TRADING_DATE_KEY, get_string, set_string
 from astock.models.asset_high import AssetHigh
@@ -20,7 +20,15 @@ from astock.services.global_asset._cache import (
     pending_item,
     read_price_cache,
 )
-from astock.services.price_utils import baseline_prices, pct_change, sorted_dates
+from astock.services.price_utils import (
+    anchor_date_excluding_today,
+    anchor_date_for_closes,
+    baseline_prices_at_anchor,
+    baseline_prices,
+    global_asset_markets,
+    pct_change,
+    sorted_dates,
+)
 from astock.services.sync_store import get_sync_meta
 
 
@@ -32,7 +40,8 @@ def _ensure_price_cache(
         missing: list[dict[str, str]] = []
         for asset in assets:
             ticker = asset["ticker"]
-            closes = read_price_cache(ticker)
+            market = market_for_asset_type(asset["asset_type"])
+            closes = read_price_cache(ticker, market=market)
             if closes:
                 all_closes[ticker] = closes
             else:
@@ -40,9 +49,10 @@ def _ensure_price_cache(
         if not missing:
             latest = get_string(LATEST_TRADING_DATE_KEY)
             if latest is None:
-                from astock.services.price_utils import latest_trading_date
-
-                latest = latest_trading_date(all_closes)
+                latest = anchor_date_excluding_today(
+                    all_closes,
+                    markets=global_asset_markets(assets),
+                )
                 if latest:
                     set_string(LATEST_TRADING_DATE_KEY, latest)
             return all_closes, []
@@ -67,10 +77,17 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> PriceLevels
     now = now_local()
     as_of = iso_now()
 
+    asset_markets = global_asset_markets(GLOBAL_ASSETS)
     for asset in GLOBAL_ASSETS:
         ticker = asset["ticker"]
-        closes = all_closes.get(ticker, {})
-        current, prev_close, week_ago_close = baseline_prices(closes)
+        market = asset_markets[ticker]
+        closes = filter_settled_closes(all_closes.get(ticker, {}), market)
+        anchor = anchor_date_for_closes(closes, market)
+        current, prev_close, week_ago_close = (
+            baseline_prices(closes)
+            if anchor is None
+            else baseline_prices_at_anchor(closes, anchor)
+        )
         if current is None:
             if asset.get("data_pending"):
                 items.append(pending_item(asset))
@@ -123,11 +140,21 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> PriceLevels
     )
 
     meta = get_sync_meta(db, "asset_high")
-    latest_trading_date_value = get_string(LATEST_TRADING_DATE_KEY) or (
-        meta.last_synced_date if meta else None
+    settled_closes = {
+        ticker: filter_settled_closes(closes, asset_markets[ticker])
+        for ticker, closes in all_closes.items()
+        if ticker in asset_markets
+    }
+    latest_trading_date_value = (
+        anchor_date_excluding_today(settled_closes, markets=asset_markets)
+        or get_string(LATEST_TRADING_DATE_KEY)
+        or (meta.last_synced_date if meta else None)
     )
+    display_cap = max(last_settled_date("cn"), last_settled_date("us"))
+    if latest_trading_date_value and latest_trading_date_value > display_cap:
+        latest_trading_date_value = display_cap
     if latest_trading_date_value is None:
-        raise AppError(message="无法确定最新交易日，请先刷新全球资产数据")
+        raise AppError("无法确定最新交易日，请先刷新全球资产数据")
 
     return PriceLevelsResponse(
         last_synced_at=meta.last_synced_at if meta else None,

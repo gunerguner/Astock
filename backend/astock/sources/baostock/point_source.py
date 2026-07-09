@@ -6,7 +6,7 @@ import baostock as bs
 import pandas as pd
 
 from astock.config import POINT_INDEX_CONFIG, START_DATE
-from astock.core.datetime_utils import iso_now, today_local
+from astock.core.datetime_utils import iso_now, last_settled_date
 from astock.sources.baostock.session import (
     _collect_rows,
     _login_failure,
@@ -34,7 +34,7 @@ def fetch_point(
     bs_code = str(config["baostock_code"])
     index_name = str(config["name"])
     start = start_date or START_DATE
-    end = today_local()
+    end = last_settled_date()
 
     with baostock_session() as lg:
         if failed := _login_failure(lg):

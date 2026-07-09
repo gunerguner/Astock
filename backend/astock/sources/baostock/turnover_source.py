@@ -6,7 +6,7 @@ import baostock as bs
 import pandas as pd
 
 from astock.config import EXCHANGE_TURNOVER_CODES, START_DATE
-from astock.core.datetime_utils import iso_now, today_local
+from astock.core.datetime_utils import iso_now, last_settled_date
 from astock.sources.baostock.session import (
     _collect_rows,
     _login_failure,
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 def fetch_turnover(start_date: str | None = None) -> SourceFetchResult:
     start = start_date or START_DATE
-    end = today_local()
+    end = last_settled_date()
     errors: list[str] = []
 
     index_codes = EXCHANGE_TURNOVER_CODES

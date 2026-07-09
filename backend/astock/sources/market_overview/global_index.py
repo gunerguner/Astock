@@ -29,7 +29,7 @@ def _fetch_us_index_sina(symbol: str, n: int) -> dict[str, float]:
         close = pd.to_numeric(row.get("close"), errors="coerce")
         if d and pd.notna(close):
             pairs.append((d, float(close)))
-    return _tail_closes(pairs, n)
+    return _tail_closes(pairs, n, market="us")
 
 
 def fetch_global_index(symbol: str, n: int) -> dict[str, float]:

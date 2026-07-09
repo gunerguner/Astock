@@ -13,10 +13,17 @@ from astock.models.point import Point
 from astock.services.imports._common import (
     aggregate_status,
     build_result,
+    build_skip_result,
     prepare_records_for_upsert,
     resolve_status,
 )
-from astock.services.sync_store import batch_upsert, count_rows, get_sync_start_date, upsert_sync_meta
+from astock.services.sync_store import (
+    batch_upsert,
+    count_rows,
+    get_sync_start_date,
+    should_skip_daily_sync,
+    upsert_sync_meta,
+)
 from astock.sources.akshare_client import fetch_cn_index_point
 from astock.sources.baostock import fetch_point
 from astock.sources.fetch_result import SourceFetchResult
@@ -45,6 +52,32 @@ def import_point(db: Session) -> dict:
     for index_code, config in POINT_INDEX_CONFIG.items():
         index_name = str(config["name"])
         table_name = point_sync_meta_key(index_code)
+        index_last_date = db.exec(
+            select(func.max(Point.date)).where(Point.index_code == index_code)
+        ).one()
+
+        if should_skip_daily_sync(db, table_name):
+            skip_result = build_skip_result(
+                db,
+                table_name=table_name,
+                model=Point,
+                source_key=index_code,
+                start_ts=time.perf_counter(),
+                last_date=index_last_date,
+            )
+            if index_last_date:
+                last_dates.append(index_last_date)
+            if skip_result.get("last_synced_at"):
+                last_synced_ats.append(skip_result["last_synced_at"])
+            statuses.append(SyncStatus.SUCCESS)
+            source_errors[index_code] = None
+            logger.info(
+                "%s点位导入跳过: 无新交易日 (last_date=%s)",
+                index_name,
+                index_last_date,
+            )
+            continue
+
         start_date = get_sync_start_date(db, table_name)
 
         fr = _fetch_point_index(index_code, start_date)

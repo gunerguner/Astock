@@ -6,7 +6,7 @@ import akshare as ak
 import pandas as pd
 
 from astock.config import GLOBAL_ASSETS, POINT_INDEX_CONFIG, START_DATE
-from astock.core.datetime_utils import iso_now, normalize_date, today_local
+from astock.core.datetime_utils import market_for_asset_type
 from astock.sources.fetch_result import SourceFetchResult
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ def fetch_cn_index_point(
     config = POINT_INDEX_CONFIG[index_code]
     index_name = str(config["name"])
     start = start_date or START_DATE
-    end = today_local()
+    end = last_settled_date()
     sina_symbol = _cn_index_sina_symbol(index_code)
 
     try:
@@ -119,7 +119,16 @@ def extract_ath(df: pd.DataFrame) -> tuple[float, str] | None:
     return float(row["high"]), normalize_date(row["date"])
 
 
-def extract_recent_closes(df: pd.DataFrame, n: int = 10) -> dict[str, float]:
+def extract_recent_closes(
+    df: pd.DataFrame,
+    n: int = 10,
+    *,
+    market: str = "cn",
+) -> dict[str, float]:
+    if df.empty:
+        return {}
+    cap = last_settled_date(market)
+    df = df[df["date"] <= cap]
     if df.empty:
         return {}
     tail = df.tail(n)
@@ -142,7 +151,7 @@ def fetch_one_asset(asset: dict[str, str]) -> tuple[str, SourceFetchResult]:
         if ath is None:
             return ticker, SourceFetchResult.failure(f"{ticker} 无法提取历史最高点")
         all_time_high, ath_date = ath
-        recent_closes = extract_recent_closes(df)
+        recent_closes = extract_recent_closes(df, market=market_for_asset_type(asset_type))
         return ticker, SourceFetchResult(
             records=[
                 {

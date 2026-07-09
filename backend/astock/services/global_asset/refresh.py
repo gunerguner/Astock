@@ -5,12 +5,12 @@ import logging
 from sqlmodel import Session, select
 
 from astock.config import ASSET_PRICE_CACHE_TTL, GLOBAL_ASSETS
-from astock.core.datetime_utils import iso_now, synced_today
+from astock.core.datetime_utils import filter_settled_closes, is_multi_market_synced, iso_now, market_for_asset_type
 from astock.core.redis_client import LATEST_TRADING_DATE_KEY, set_string
 from astock.core.sync_status import SyncStatus
 from astock.models.asset_high import AssetHigh
 from astock.services.global_asset._cache import write_price_cache
-from astock.services.price_utils import latest_trading_date
+from astock.services.price_utils import anchor_date_excluding_today, global_asset_markets
 from astock.services.sync_store import batch_upsert, get_sync_meta, upsert_sync_meta
 from astock.sources.akshare_client import fetch_all_assets
 
@@ -22,13 +22,13 @@ def refresh_asset_highs(db: Session) -> dict:
     if (
         meta
         and meta.last_status == SyncStatus.SUCCESS
-        and synced_today(meta.last_synced_at)
+        and is_multi_market_synced(meta.last_synced_date)
     ):
         total = len(db.exec(select(AssetHigh)).all())
         if total > 0:
             logger.info(
-                "全球资产最高点刷新跳过: 今日已成功同步 (last_synced_at=%s)",
-                meta.last_synced_at,
+                "全球资产最高点刷新跳过: 已覆盖最近可结算日 (last_synced_date=%s)",
+                meta.last_synced_date,
             )
             return {
                 "imported": 0,
@@ -65,8 +65,9 @@ def refresh_asset_highs(db: Session) -> dict:
             errors.append(f"{ticker}: 历史最高点数据无效 ({e})")
             continue
         closes = record.get("recent_closes") or {}
-        write_price_cache(ticker, closes)
-        all_closes_for_latest[ticker] = closes
+        market = market_for_asset_type(asset["asset_type"])
+        write_price_cache(ticker, closes, market=market)
+        all_closes_for_latest[ticker] = filter_settled_closes(closes, market)
 
         records.append(
             {
@@ -84,7 +85,10 @@ def refresh_asset_highs(db: Session) -> dict:
         if records
         else 0
     )
-    latest = latest_trading_date(all_closes_for_latest)
+    latest = anchor_date_excluding_today(
+        all_closes_for_latest,
+        markets=global_asset_markets(GLOBAL_ASSETS),
+    )
     if latest:
         set_string(LATEST_TRADING_DATE_KEY, latest, ttl=ASSET_PRICE_CACHE_TTL)
 

@@ -48,12 +48,16 @@ export interface ImportStreamHandlers {
 
 const STREAM_URL = '/api/v1/admin/data/import/stream';
 
+/** 与 nginx proxy_read_timeout / GUNICORN_TIMEOUT 对齐，避免长任务被前端误判为断连 */
+const IMPORT_STREAM_IDLE_TIMEOUT_MS = 300_000;
+
 export function refreshAllDataStream(
   handlers: ImportStreamHandlers
 ): AbortController {
   return streamPost<ImportProgressEvent, ImportAllResult, ImportStreamError>(
     STREAM_URL,
-    handlers
+    handlers,
+    { idleTimeoutMs: IMPORT_STREAM_IDLE_TIMEOUT_MS }
   );
 }
 

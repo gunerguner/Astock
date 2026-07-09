@@ -46,6 +46,25 @@ logger = logging.getLogger(__name__)
 tencent_client = TencentQuoteClient()
 
 
+def _drain_bridge(bridge: SSEBridge | None) -> Iterator[str]:
+    if bridge is not None:
+        yield from bridge.drain()
+
+
+def _report_stock(
+    on_progress: ProgressReporter | None,
+    detail: str,
+    *,
+    current: int = 0,
+    total: int = 1,
+    imported: int = 0,
+) -> None:
+    if on_progress is not None:
+        on_progress.phase_progress(
+            "stock", current, total, detail, imported=imported
+        )
+
+
 def _baostock_worker_init() -> None:
     """ProcessPool worker 初始化：每个子进程登录一次 baostock 会话。"""
     lg = bs.login()
@@ -207,11 +226,14 @@ def _init_stock_context(
     *,
     on_progress: ProgressReporter | None = None,
     bridge: SSEBridge | None = None,
-) -> StockImportContext:
+) -> Iterator[str] | StockImportContext:
+    """初始化导入上下文；长耗时步骤前 yield SSE 保活帧。"""
     ctx = StockImportContext(db=db, on_progress=on_progress, bridge=bridge)
 
     turnover_count = count_rows(db, Turnover)
     if turnover_count == 0:
+        _report_stock(on_progress, "成交额表为空，先导入成交额...")
+        yield from _drain_bridge(bridge)
         import_turnover(db)
 
     meta = get_sync_meta(db, "stock_turnover")
@@ -237,6 +259,8 @@ def _init_stock_context(
         STOCK_HISTORY_FETCH_WORKERS,
     )
 
+    _report_stock(on_progress, "获取全市场代码清单...")
+    yield from _drain_bridge(bridge)
     codes_fr = fetch_all_stock_codes(as_of_date)
     if not codes_fr.ok or not codes_fr.records:
         raise ExternalSourceAppError(
@@ -244,7 +268,36 @@ def _init_stock_context(
         )
 
     ctx.code_to_name = {r["code"]: r["name"] for r in codes_fr.records}
-    caps_fr = tencent_client.fetch_market_caps(list(ctx.code_to_name.keys()))
+
+    cap_records: list[dict] = []
+    cap_errors: list[str] = []
+    for batch_idx, total_batches, batch_records, error in tencent_client.iter_market_cap_batches(
+        list(ctx.code_to_name.keys())
+    ):
+        _report_stock(
+            on_progress,
+            f"获取市值快照 {batch_idx}/{total_batches}",
+            current=batch_idx,
+            total=total_batches,
+        )
+        yield from _drain_bridge(bridge)
+        if error:
+            cap_errors.append(error)
+        else:
+            cap_records.extend(batch_records)
+
+    caps_fr = SourceFetchResult(
+        records=cap_records,
+        ok=len(cap_errors) == 0,
+        errors=cap_errors,
+    )
+    if cap_records:
+        logger.info(
+            "腾讯行情市值快照完成: %s/%s 只解析成功, ok=%s",
+            len(cap_records),
+            len(ctx.code_to_name),
+            caps_fr.ok,
+        )
     if not caps_fr.ok and not caps_fr.records:
         raise ExternalSourceAppError(f"股票市值快照失败: {caps_fr.error_summary()}")
     if not caps_fr.ok:
@@ -261,6 +314,13 @@ def _init_stock_context(
 
     ctx.total_stocks = len(ctx.big_cap_codes)
     ctx.tasks = [(code, ctx.hist_start_date) for code in ctx.big_cap_codes]
+    _report_stock(
+        on_progress,
+        f"开始拉取个股日线，共 {ctx.total_stocks} 只",
+        current=0,
+        total=max(ctx.total_stocks, 1),
+    )
+    yield from _drain_bridge(bridge)
     return ctx
 
 
@@ -291,7 +351,14 @@ def _import_stock_gen(
     on_progress: ProgressReporter | None = None,
     bridge: SSEBridge | None = None,
 ):
-    ctx = _init_stock_context(db, on_progress=on_progress, bridge=bridge)
+    init_gen = _init_stock_context(db, on_progress=on_progress, bridge=bridge)
+    ctx = None
+    try:
+        while True:
+            yield next(init_gen)
+    except StopIteration as exc:
+        ctx = exc.value
+
     if ctx.is_skipped:
         return ctx.build_skip_result()
 
@@ -299,13 +366,12 @@ def _import_stock_gen(
         ctx.accumulate(code, hist_fr)
         ctx.maybe_flush()
 
-        if i % 20 == 0:
+        if i % 5 == 0:
             logger.info("个股日线进度: %s/%s", i, ctx.total_stocks)
             yield from ctx.emit_stock_progress(i)
-        elif i % 100 == 0 and ctx.on_progress is not None:
-            ctx.on_progress.ping()
-            if ctx.bridge is not None:
-                yield from ctx.bridge.drain()
+        elif on_progress is not None:
+            on_progress.ping()
+            yield from _drain_bridge(bridge)
 
     ctx.flush_buffer()
     return ctx.build_result()

@@ -1,11 +1,8 @@
 """market_overview 抓取公共工具。"""
 
 import logging
-import os
-import threading
 import time
 from collections.abc import Callable
-from contextlib import contextmanager
 from datetime import timedelta
 
 import pandas as pd
@@ -16,49 +13,17 @@ from astock.config import (
     EM_USER_AGENT,
     FETCH_RETRIES,
     FETCH_RETRY_DELAY,
-    MARKET_OVERVIEW_IGNORE_SYSTEM_PROXY,
 )
-from astock.core.datetime_utils import normalize_date, now_local
+from astock.core.datetime_utils import MarketCode, last_settled_date, normalize_date, now_local
 
 logger = logging.getLogger(__name__)
-_PROXY_ENV_KEYS = (
-    "HTTP_PROXY",
-    "HTTPS_PROXY",
-    "ALL_PROXY",
-    "http_proxy",
-    "https_proxy",
-    "all_proxy",
-    "SOCKS_PROXY",
-    "SOCKS5_PROXY",
-    "socks_proxy",
-    "socks5_proxy",
-)
-_PROXY_ENV_LOCK = threading.Lock()
-
-
-@contextmanager
-def _without_system_proxy():
-    """按配置临时屏蔽代理环境变量，避免抓取链路被本机代理干扰。"""
-    if not MARKET_OVERVIEW_IGNORE_SYSTEM_PROXY:
-        yield
-        return
-
-    with _PROXY_ENV_LOCK:
-        old_values = {k: os.environ.pop(k, None) for k in _PROXY_ENV_KEYS}
-        try:
-            yield
-        finally:
-            for key, value in old_values.items():
-                if value is not None:
-                    os.environ[key] = value
 
 
 def _retry_call[T](label: str, fn: Callable[[], T]) -> T:
     last: Exception | None = None
     for attempt in range(FETCH_RETRIES):
         try:
-            with _without_system_proxy():
-                return fn()
+            return fn()
         except Exception as e:
             last = e
             if attempt < FETCH_RETRIES - 1:
@@ -68,10 +33,19 @@ def _retry_call[T](label: str, fn: Callable[[], T]) -> T:
     raise last
 
 
-def _tail_closes(date_close_pairs: list[tuple[str, float]], n: int) -> dict[str, float]:
+def _tail_closes(
+    date_close_pairs: list[tuple[str, float]],
+    n: int,
+    *,
+    market: MarketCode = "cn",
+) -> dict[str, float]:
     if not date_close_pairs:
         return {}
-    sorted_pairs = sorted(date_close_pairs, key=lambda x: x[0])
+    cap = last_settled_date(market)
+    filtered = [(d, c) for d, c in date_close_pairs if d <= cap]
+    if not filtered:
+        return {}
+    sorted_pairs = sorted(filtered, key=lambda x: x[0])
     return dict(sorted_pairs[-n:])
 
 
@@ -102,11 +76,11 @@ def _parse_em_kline_lines(klines: list[str]) -> list[tuple[str, float]]:
     return pairs
 
 
-def _merge_close_dicts(*sources: dict[str, float], n: int) -> dict[str, float]:
+def _merge_close_dicts(*sources: dict[str, float], n: int, market: MarketCode = "cn") -> dict[str, float]:
     merged: dict[str, float] = {}
     for src in sources:
         merged.update(src)
-    return _tail_closes(sorted(merged.items()), n)
+    return _tail_closes(sorted(merged.items()), n, market=market)
 
 
 def _cn_index_cutoff():

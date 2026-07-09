@@ -1,8 +1,12 @@
 """导入器公共工具。"""
 
+import time
 from typing import Any
 
+from sqlmodel import Session
+
 from astock.core.sync_status import SyncStatus
+from astock.services.sync_store import count_rows, get_sync_meta, upsert_sync_meta
 from astock.sources.fetch_result import SourceFetchResult
 
 _REQUIRED_FIELDS: dict[str, list[str]] = {
@@ -69,6 +73,39 @@ def aggregate_status(*statuses: SyncStatus | str) -> SyncStatus:
     if all(s == SyncStatus.FAILED for s in statuses):
         return SyncStatus.FAILED
     return SyncStatus.PARTIAL_FAILURE
+
+
+def build_skip_result(
+    db: Session,
+    *,
+    table_name: str,
+    model: type,
+    source_key: str,
+    start_ts: float,
+    last_date: str | None = None,
+) -> dict[str, Any]:
+    """日频数据集无新交易日时的快速跳过结果。"""
+    meta = get_sync_meta(db, table_name)
+    last_synced = meta.last_synced_date if meta else None
+    resolved_last_date = last_date if last_date is not None else last_synced
+    last_synced_at = upsert_sync_meta(
+        db,
+        table_name,
+        last_synced_date=last_synced,
+        status=SyncStatus.SUCCESS,
+        error=None,
+    )
+    elapsed = time.perf_counter() - start_ts
+    result = build_result(
+        imported=0,
+        total=count_rows(db, model),
+        last_date=resolved_last_date,
+        ok=True,
+        source_errors={source_key: None},
+        last_synced_at=last_synced_at,
+        elapsed=round(elapsed, 2),
+    )
+    return result
 
 
 def build_result(

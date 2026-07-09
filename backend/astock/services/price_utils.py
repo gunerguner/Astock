@@ -4,7 +4,14 @@ from collections.abc import Callable
 from typing import Any
 
 from astock.config import WEEKLY_BASELINE_OFFSET
-from astock.core.datetime_utils import iso_now, today_local
+from astock.core.datetime_utils import (
+    MarketCode,
+    filter_settled_closes,
+    iso_now,
+    last_settled_date,
+    market_for_asset_type,
+    market_for_source,
+)
 
 __all__ = [
     "iso_now",
@@ -12,8 +19,9 @@ __all__ = [
     "pct_change",
     "baseline_prices",
     "baseline_prices_at_anchor",
+    "anchor_date_for_closes",
     "anchor_date_excluding_today",
-    "latest_trading_date",
+    "has_sufficient_baseline_points",
     "read_recent_closes_cache",
     "write_recent_closes_cache",
 ]
@@ -60,30 +68,63 @@ def baseline_prices_at_anchor(
     return current, prev, week_ago
 
 
-def anchor_date_excluding_today(all_closes: dict[str, dict[str, float]]) -> str | None:
-    """返回小于 today 的最后交易日；若不存在则回退到全量最大日期。"""
-    today = today_local()
-    dates: set[str] = set()
-    for closes in all_closes.values():
-        dates.update(closes.keys())
-    if not dates:
-        return None
-    before_today = [d for d in dates if d < today]
-    if before_today:
-        return max(before_today)
-    return max(dates)
-
-
-def latest_trading_date(all_closes: dict[str, dict[str, float]]) -> str | None:
-    dates: set[str] = set()
-    for closes in all_closes.values():
-        dates.update(closes.keys())
+def anchor_date_for_closes(
+    closes: dict[str, float],
+    market: MarketCode = "cn",
+) -> str | None:
+    """单资产在对应市场结算日上界内的最新交易日。"""
+    cap = last_settled_date(market)
+    dates = [d for d in closes if d <= cap]
     return max(dates) if dates else None
+
+
+def anchor_date_excluding_today(
+    all_closes: dict[str, dict[str, float]],
+    *,
+    markets: dict[str, MarketCode] | None = None,
+    default_market: MarketCode = "cn",
+) -> str | None:
+    """多资产取各市场结算日后的全局最新锚点（用于展示「数据截至」）。"""
+    anchors: list[str] = []
+    for key, closes in all_closes.items():
+        market = (markets or {}).get(key, default_market)
+        anchor = anchor_date_for_closes(closes, market)
+        if anchor:
+            anchors.append(anchor)
+    return max(anchors) if anchors else None
+
+
+def has_sufficient_baseline_points(
+    closes: dict[str, float],
+    anchor_date: str | None = None,
+    *,
+    market: MarketCode = "cn",
+) -> bool:
+    """判断在锚点日口径下是否足以计算日/周涨跌（至少 WEEKLY_BASELINE_OFFSET 个交易日点）。"""
+    if not closes:
+        return False
+    anchor = anchor_date
+    if anchor is None:
+        anchor = anchor_date_for_closes(closes, market)
+    if anchor is None:
+        return False
+    dates = [d for d in sorted_dates(closes) if d <= anchor]
+    return len(dates) >= WEEKLY_BASELINE_OFFSET
+
+
+def overview_item_markets(items: list[dict[str, str]]) -> dict[str, MarketCode]:
+    return {item["key"]: market_for_source(item["source"]) for item in items}
+
+
+def global_asset_markets(assets: list[dict[str, str]]) -> dict[str, MarketCode]:
+    return {asset["ticker"]: market_for_asset_type(asset["asset_type"]) for asset in assets}
 
 
 def read_recent_closes_cache(
     get_json: Callable[[str], Any | None],
     key: str,
+    *,
+    market: MarketCode = "cn",
 ) -> dict[str, float]:
     cached = get_json(key)
     if not isinstance(cached, list):
@@ -96,7 +137,7 @@ def read_recent_closes_cache(
         close = item.get("close")
         if d and close is not None:
             closes[str(d)] = float(close)
-    return closes
+    return filter_settled_closes(closes, market)
 
 
 def write_recent_closes_cache(
@@ -105,10 +146,14 @@ def write_recent_closes_cache(
     closes: dict[str, float],
     *,
     ttl: int,
+    market: MarketCode = "cn",
 ) -> None:
     if not closes:
         return
-    sorted_items = sorted(closes.items())
+    settled = filter_settled_closes(closes, market)
+    if not settled:
+        return
+    sorted_items = sorted(settled.items())
     set_json(
         key,
         [{"date": d, "close": price} for d, price in sorted_items],

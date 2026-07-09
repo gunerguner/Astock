@@ -6,6 +6,7 @@
 
 import logging
 import re
+from collections.abc import Callable, Iterator
 
 import httpx
 
@@ -38,16 +39,17 @@ def _parse_market_cap(raw: str) -> float | None:
 
 
 class TencentQuoteClient:
-    def fetch_market_caps(self, codes: list[str]) -> SourceFetchResult:
-        """codes 为 6 位股票代码列表；返回 records=[{code, market_cap}]（market_cap 单位：元）。"""
+    def iter_market_cap_batches(
+        self,
+        codes: list[str],
+    ) -> Iterator[tuple[int, int, list[dict], str | None]]:
+        """按批拉取市值；yield (batch_idx, total_batches, records, error)。"""
         if not codes:
-            return SourceFetchResult()
+            return
 
-        records: list[dict] = []
-        errors: list[str] = []
-
+        total_batches = (len(codes) + TENCENT_BATCH_SIZE - 1) // TENCENT_BATCH_SIZE
         with httpx.Client(timeout=TENCENT_TIMEOUT, headers={"User-Agent": "Mozilla/5.0"}) as client:
-            for i in range(0, len(codes), TENCENT_BATCH_SIZE):
+            for batch_idx, i in enumerate(range(0, len(codes), TENCENT_BATCH_SIZE), start=1):
                 batch = codes[i : i + TENCENT_BATCH_SIZE]
                 query = ",".join(_to_tencent_code(c) for c in batch)
                 try:
@@ -57,13 +59,35 @@ class TencentQuoteClient:
                 except Exception as e:
                     msg = f"腾讯行情批次失败(codes={batch[:3]}...): {e}"
                     logger.warning(msg)
-                    errors.append(msg)
+                    yield batch_idx, total_batches, [], msg
                     continue
 
+                records: list[dict] = []
                 for _, digits, raw in _LINE_RE.findall(text):
                     market_cap = _parse_market_cap(raw)
                     if market_cap is not None:
                         records.append({"code": digits, "market_cap": market_cap})
+                yield batch_idx, total_batches, records, None
+
+    def fetch_market_caps(
+        self,
+        codes: list[str],
+        *,
+        on_batch: Callable[[int, int], None] | None = None,
+    ) -> SourceFetchResult:
+        """codes 为 6 位股票代码列表；返回 records=[{code, market_cap}]（market_cap 单位：元）。"""
+        if not codes:
+            return SourceFetchResult()
+
+        records: list[dict] = []
+        errors: list[str] = []
+        for batch_idx, total_batches, batch_records, error in self.iter_market_cap_batches(codes):
+            if on_batch is not None:
+                on_batch(batch_idx, total_batches)
+            if error:
+                errors.append(error)
+            else:
+                records.extend(batch_records)
 
         ok = len(errors) == 0
         logger.info(

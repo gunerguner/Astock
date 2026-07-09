@@ -110,6 +110,13 @@ TENCENT_TIMEOUT = int(_tencent.get("timeout", 10))
 TENCENT_MARKET_CAP_FIELD_INDEX = 44
 BAOSTOCK_SOCKET_TIMEOUT = int(_baostock.get("socket_timeout", 30))
 EM_HIST_HOST = str(_eastmoney.get("hist_host", "https://push2his.eastmoney.com"))
+EM_HIST_HOSTS: list[str] = [
+    str(host)
+    for host in _eastmoney.get(
+        "hist_hosts",
+        [EM_HIST_HOST, "https://88.push2his.eastmoney.com", "https://47.push2his.eastmoney.com"],
+    )
+]
 EM_DELAY_HOST = str(_eastmoney.get("delay_host", "https://push2delay.eastmoney.com"))
 EM_UDI_REFERER = "https://quote.eastmoney.com/gb/zsUDI.html"
 EM_USER_AGENT = (
@@ -121,9 +128,6 @@ USD_SPOT_TIMEOUT = int(_eastmoney.get("usd_spot_timeout", 15))
 FETCH_RETRIES = int(_api.get("fetch_retries", 4))
 FETCH_RETRY_DELAY = float(_api.get("fetch_retry_delay", 2.0))
 CN_INDEX_LOOKBACK_DAYS = int(_api.get("cn_index_lookback_days", 180))
-MARKET_OVERVIEW_IGNORE_SYSTEM_PROXY = bool(
-    _api.get("market_overview_ignore_system_proxy", True)
-)
 
 # mappings / filters
 EXCHANGE_TURNOVER_CODES: dict[str, str] = dict(

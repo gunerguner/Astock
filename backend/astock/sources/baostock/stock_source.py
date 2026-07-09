@@ -2,11 +2,12 @@
 
 import logging
 import re
+import time
 
 import baostock as bs
 
-from astock.config import START_DATE, STOCK_CODE_PREFIXES
-from astock.core.datetime_utils import today_local
+from astock.config import FETCH_RETRIES, FETCH_RETRY_DELAY, START_DATE, STOCK_CODE_PREFIXES
+from astock.core.datetime_utils import last_settled_date
 from astock.sources.baostock.session import (
     _collect_rows,
     _login_failure,
@@ -78,7 +79,7 @@ def fetch_stock_amount_history(
             prefixed,
             "date,amount",
             start_date=start,
-            end_date=today_local(),
+            end_date=last_settled_date(),
             frequency="d",
         )
         if failed := _query_failure(f"个股 {code} 日线查询失败", rs):
@@ -91,11 +92,18 @@ def fetch_stock_amount_history(
         ]
         return SourceFetchResult(records=records)
 
-    result = _safe_baostock_call(
-        f"个股 {code} 日线查询超时/连接异常",
-        _query,
-        log_level="warning",
-    )
-    if isinstance(result, SourceFetchResult):
+    last_result: SourceFetchResult | None = None
+    for attempt in range(FETCH_RETRIES):
+        result = _safe_baostock_call(
+            f"个股 {code} 日线查询超时/连接异常",
+            _query,
+            log_level="warning",
+        )
+        if isinstance(result, SourceFetchResult):
+            last_result = result
+            if result.ok or attempt >= FETCH_RETRIES - 1:
+                return result
+            time.sleep(FETCH_RETRY_DELAY * (attempt + 1))
+            continue
         return result
-    return result
+    return last_result or SourceFetchResult.failure(f"个股 {code} 日线查询失败")

@@ -9,12 +9,18 @@ from sqlmodel import Session
 from astock.core.exceptions import ExternalSourceAppError
 from astock.core.sync_status import SyncStatus
 from astock.models.turnover import Turnover
-from astock.services.imports._common import build_result, prepare_records_for_upsert, resolve_status
+from astock.services.imports._common import (
+    build_result,
+    build_skip_result,
+    prepare_records_for_upsert,
+    resolve_status,
+)
 from astock.services.sync_store import (
     batch_upsert,
     count_rows,
     get_last_date,
     get_sync_start_date,
+    should_skip_daily_sync,
     upsert_sync_meta,
 )
 from astock.sources.baostock import fetch_turnover
@@ -35,6 +41,23 @@ def _import_simple_dataset(
     log_label: str,
 ) -> dict:
     start_ts = time.perf_counter()
+    db_last_date = get_last_date(db, model)
+    if should_skip_daily_sync(db, table_name):
+        result = build_skip_result(
+            db,
+            table_name=table_name,
+            model=model,
+            source_key=source_key,
+            start_ts=start_ts,
+            last_date=db_last_date,
+        )
+        logger.info(
+            "%s导入跳过: 无新交易日 (last_date=%s)",
+            log_label,
+            db_last_date,
+        )
+        return result
+
     start_date = get_sync_start_date(db, table_name)
 
     fr = fetch(start_date)

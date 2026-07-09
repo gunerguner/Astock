@@ -25,4 +25,4 @@ def fetch_foreign_futures(code: str, n: int) -> dict[str, float]:
         close = pd.to_numeric(row["close"], errors="coerce")
         if d and pd.notna(close):
             pairs.append((d, float(close)))
-    return _tail_closes(pairs, n)
+    return _tail_closes(pairs, n, market="us")

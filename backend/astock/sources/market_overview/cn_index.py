@@ -37,4 +37,4 @@ def fetch_cn_index(code: str, n: int) -> dict[str, float]:
     df = df[df["Close"].notna()]
     df = df[df.index >= pd.Timestamp(cutoff.date())]
     pairs = [(d.strftime("%Y-%m-%d"), float(row["Close"])) for d, row in df.iterrows()]
-    return _tail_closes(pairs, n)
+    return _tail_closes(pairs, n, market="cn")

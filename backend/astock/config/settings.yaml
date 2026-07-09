@@ -23,13 +23,16 @@ api:
     socket_timeout: 30
   eastmoney:
     hist_host: "https://push2his.eastmoney.com"
+    hist_hosts:
+      - "https://push2his.eastmoney.com"
+      - "https://88.push2his.eastmoney.com"
+      - "https://47.push2his.eastmoney.com"
     delay_host: "https://push2delay.eastmoney.com"
     usd_history_timeout: 12
     usd_spot_timeout: 15
   fetch_retries: 4
   fetch_retry_delay: 2.0
   cn_index_lookback_days: 180
-  market_overview_ignore_system_proxy: true
 
 # 批量写入
 batch:

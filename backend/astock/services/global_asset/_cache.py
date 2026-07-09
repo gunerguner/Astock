@@ -1,6 +1,6 @@
 """全球资产价格缓存读写。"""
 
-from astock.config import ASSET_PRICE_CACHE_TTL, PRICE_LEVEL_CONCLUSIONS, PRICE_LEVEL_DEFAULT
+from astock.config import ASSET_PRICE_CACHE_TTL, GLOBAL_ASSETS, PRICE_LEVEL_CONCLUSIONS, PRICE_LEVEL_DEFAULT
 from astock.core.redis_client import (
     LATEST_TRADING_DATE_KEY,
     get_json,
@@ -11,8 +11,10 @@ from astock.core.redis_client import (
     set_string,
 )
 from astock.schemas.analysis import PriceLevelPendingItem
+from astock.core.datetime_utils import filter_settled_closes, market_for_asset_type
 from astock.services.price_utils import (
-    latest_trading_date,
+    anchor_date_excluding_today,
+    global_asset_markets,
     read_recent_closes_cache,
     write_recent_closes_cache,
 )
@@ -26,22 +28,23 @@ def conclusion(percentage_diff: float) -> str:
     return PRICE_LEVEL_DEFAULT
 
 
-def write_price_cache(ticker: str, closes: dict[str, float]) -> None:
-    if not closes:
+def write_price_cache(ticker: str, closes: dict[str, float], *, market: str) -> None:
+    settled = filter_settled_closes(closes, market)
+    if not settled:
         return
-    sorted_items = sorted(closes.items())
+    sorted_items = sorted(settled.items())
     for d, price in sorted_items:
         set_string(price_key(ticker, d), str(price), ttl=ASSET_PRICE_CACHE_TTL)
     write_recent_closes_cache(
         set_json,
         recent_closes_key(ticker),
-        closes,
+        settled,
         ttl=ASSET_PRICE_CACHE_TTL,
     )
 
 
-def read_price_cache(ticker: str) -> dict[str, float]:
-    closes = read_recent_closes_cache(get_json, recent_closes_key(ticker))
+def read_price_cache(ticker: str, *, market: str) -> dict[str, float]:
+    closes = read_recent_closes_cache(get_json, recent_closes_key(ticker), market=market)
     if closes:
         return closes
 
@@ -69,13 +72,14 @@ def backfill_from_akshare(
                 errors.append(f"{ticker}: 未返回数据")
             continue
         record = result.records[0]
-        closes = record.get("recent_closes") or {}
+        market = market_for_asset_type(asset["asset_type"])
+        closes = filter_settled_closes(record.get("recent_closes") or {}, market)
         if not closes:
             errors.append(f"{ticker}: 最近收盘价为空")
             continue
         all_closes[ticker] = closes
-        write_price_cache(ticker, closes)
-    latest = latest_trading_date(all_closes)
+        write_price_cache(ticker, closes, market=market)
+    latest = anchor_date_excluding_today(all_closes, markets=global_asset_markets(assets))
     if latest:
         set_string(LATEST_TRADING_DATE_KEY, latest, ttl=ASSET_PRICE_CACHE_TTL)
     return all_closes, errors

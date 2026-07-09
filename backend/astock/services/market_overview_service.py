@@ -7,9 +7,8 @@ from astock.config import (
     MARKET_OVERVIEW_CATEGORIES,
     MARKET_OVERVIEW_FAILURE_TTL,
     MARKET_OVERVIEW_ITEMS,
-    WEEKLY_BASELINE_OFFSET,
 )
-from astock.core.datetime_utils import today_local
+from astock.core.datetime_utils import last_settled_date, market_for_source
 from astock.core.redis_client import (
     MARKET_OVERVIEW_LATEST_DATE_KEY,
     delete_key,
@@ -27,10 +26,12 @@ from astock.schemas.analysis import (
     MarketOverviewResponse,
 )
 from astock.services.price_utils import (
+    anchor_date_for_closes,
     anchor_date_excluding_today,
     baseline_prices_at_anchor,
+    has_sufficient_baseline_points,
     iso_now,
-    latest_trading_date,
+    overview_item_markets,
     pct_change,
     read_recent_closes_cache,
     sorted_dates,
@@ -41,17 +42,22 @@ from astock.sources.market_overview import fetch_all_items
 logger = logging.getLogger(__name__)
 
 
-def _write_cache(item_key: str, closes: dict[str, float]) -> None:
+def _write_cache(item_key: str, closes: dict[str, float], *, market: str) -> None:
     write_recent_closes_cache(
         set_json,
         market_overview_recent_key(item_key),
         closes,
         ttl=ASSET_PRICE_CACHE_TTL,
+        market=market,
     )
 
 
-def _read_cache(item_key: str) -> dict[str, float]:
-    return read_recent_closes_cache(get_json, market_overview_recent_key(item_key))
+def _read_cache(item_key: str, *, market: str) -> dict[str, float]:
+    return read_recent_closes_cache(
+        get_json,
+        market_overview_recent_key(item_key),
+        market=market,
+    )
 
 
 def _has_failure_marker(item_key: str) -> bool:
@@ -83,16 +89,19 @@ def _ensure_closes(
     all_closes: dict[str, dict[str, float]] = {}
     missing: list[dict[str, str]] = []
 
+    item_markets = overview_item_markets(MARKET_OVERVIEW_ITEMS)
+
     for item in MARKET_OVERVIEW_ITEMS:
         key = item["key"]
-        closes = _read_cache(key)
+        market = item_markets[key]
+        closes = _read_cache(key, market=market)
         if closes:
-            # 为了满足口径：T / T-1 / T-5 至少需要 WEEKLY_BASELINE_OFFSET=6 个交易日点位
-            # 否则 daily/weekly 会自然为 null，应该触发补齐而不是继续复用旧缓存。
-            if len(closes) >= WEEKLY_BASELINE_OFFSET:
-                all_closes[key] = closes
-            else:
-                missing.append(item)
+            all_closes[key] = closes
+            if has_sufficient_baseline_points(closes, market=market):
+                continue
+            if not force_refresh and _has_failure_marker(key):
+                continue
+            missing.append(item)
         elif not force_refresh and _has_failure_marker(key):
             continue
         else:
@@ -101,7 +110,7 @@ def _ensure_closes(
     if not missing:
         latest = get_string(MARKET_OVERVIEW_LATEST_DATE_KEY)
         if latest is None:
-            latest = latest_trading_date(all_closes)
+            latest = anchor_date_excluding_today(all_closes, markets=item_markets)
             if latest:
                 set_string(
                     MARKET_OVERVIEW_LATEST_DATE_KEY,
@@ -113,17 +122,20 @@ def _ensure_closes(
     backfill, errors = fetch_all_items(missing)
     for item in missing:
         key = item["key"]
-        existing = _read_cache(key)
+        existing = _read_cache(key, market=item_markets[key])
         new_closes = backfill.get(key, {})
         merged = {**existing, **new_closes}
         if merged:
             all_closes[key] = merged
-            _write_cache(key, merged)
-            _clear_failure_marker(key)
+            _write_cache(key, merged, market=item_markets[key])
+            if has_sufficient_baseline_points(merged, market=item_markets[key]):
+                _clear_failure_marker(key)
+            else:
+                _write_failure_marker(key)
         else:
             _write_failure_marker(key)
 
-    latest = latest_trading_date(all_closes)
+    latest = anchor_date_excluding_today(all_closes, markets=item_markets)
     if latest:
         set_string(MARKET_OVERVIEW_LATEST_DATE_KEY, latest, ttl=ASSET_PRICE_CACHE_TTL)
     return all_closes, errors
@@ -166,7 +178,7 @@ def _error_item(item: dict[str, str], message: str) -> MarketOverviewErrorItem:
 def get_market_overview(*, force_refresh: bool = False) -> MarketOverviewResponse:
     all_closes, cache_errors = _ensure_closes(force_refresh=force_refresh)
     as_of = iso_now()
-    anchor_date = anchor_date_excluding_today(all_closes)
+    item_markets = overview_item_markets(MARKET_OVERVIEW_ITEMS)
 
     item_map = {item["key"]: item for item in MARKET_OVERVIEW_ITEMS}
     categories: list[MarketOverviewCategory] = []
@@ -182,6 +194,7 @@ def get_market_overview(*, force_refresh: bool = False) -> MarketOverviewRespons
             if not closes:
                 cat_items.append(_error_item(item, "数据获取失败"))
                 continue
+            anchor_date = anchor_date_for_closes(closes, item_markets[item_key])
             if anchor_date is None:
                 cat_items.append(_error_item(item, "无法确定最新交易日"))
                 continue
@@ -195,14 +208,12 @@ def get_market_overview(*, force_refresh: bool = False) -> MarketOverviewRespons
             )
         )
 
-    latest_trading_date_value = anchor_date
-    if latest_trading_date_value is None:
-        latest_trading_date_value = get_string(MARKET_OVERVIEW_LATEST_DATE_KEY) or latest_trading_date(
-            all_closes
-        )
-    if latest_trading_date_value is None:
-        # 没有可用行情时也返回结构化空结果，避免前端进入页面直接报服务错误
-        latest_trading_date_value = today_local()
+    latest_trading_date_value = (
+        anchor_date_excluding_today(all_closes, markets=item_markets)
+        or get_string(MARKET_OVERVIEW_LATEST_DATE_KEY)
+        or last_settled_date("cn")
+    )
+    if not all_closes:
         cache_errors = [
             *(cache_errors or []),
             "无法确定最新交易日，请先刷新市场概览数据",

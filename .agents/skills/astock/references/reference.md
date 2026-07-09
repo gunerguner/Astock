@@ -218,7 +218,7 @@ class ApiResponse(BaseModel, Generic[T]):
 | `last_status` | `success` / `partial_failure` / `failed` |
 | `last_error` | 最近错误信息 |
 
-增量起点 `get_sync_start_date`：读 `sync_meta.last_synced_date`，缺省 `START_DATE="2005-01-01"`。
+增量起点 `get_sync_start_date`：读 `sync_meta.last_synced_date` 的**次日**（`+1` 日历日，避免重复 upsert 已同步日）；缺省 `START_DATE="2005-01-01"`。`should_skip_daily_sync`：当次日已超过 `today_local()` 时整段跳过。
 
 ### 批量 upsert
 
