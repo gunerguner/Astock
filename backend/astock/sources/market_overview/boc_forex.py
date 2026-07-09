@@ -8,7 +8,8 @@ import pandas as pd
 
 from astock.config import CN_INDEX_LOOKBACK_DAYS
 from astock.core.datetime_utils import normalize_date, now_local
-from astock.sources.market_overview._common import _retry_call, _tail_closes
+from astock.sources.market_overview._common import _tail_closes
+from astock.sources.retry import retry_call
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ def fetch_boc_forex(symbol: str, n: int) -> dict[str, float]:
     end = now_local()
     start = end - timedelta(days=CN_INDEX_LOOKBACK_DAYS)
     try:
-        df = _retry_call(
+        df = retry_call(
             f"currency_boc_sina:{symbol}",
             lambda: ak.currency_boc_sina(
                 symbol=symbol,

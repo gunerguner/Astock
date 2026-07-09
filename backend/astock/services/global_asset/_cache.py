@@ -18,7 +18,7 @@ from astock.services.price_utils import (
     read_recent_closes_cache,
     write_recent_closes_cache,
 )
-from astock.sources.akshare_client import fetch_all_assets
+from astock.sources.akshare import fetch_all_assets
 
 def conclusion(percentage_diff: float) -> str:
     abs_diff = abs(percentage_diff)

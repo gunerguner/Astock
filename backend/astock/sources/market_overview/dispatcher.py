@@ -35,7 +35,7 @@ def fetch_all_items(
     items: list[dict[str, str]],
     n: int = MARKET_OVERVIEW_RECENT_DAYS,
 ) -> tuple[dict[str, dict[str, float]], list[str]]:
-    """串行抓取全部资产，返回 {item_key: recent_closes} 与错误列表。"""
+    """抓取全部资产：美债一次批量，其余 ThreadPool(4)；返回 {item_key: recent_closes} 与错误列表。"""
     all_closes: dict[str, dict[str, float]] = {}
     errors: list[str] = []
 

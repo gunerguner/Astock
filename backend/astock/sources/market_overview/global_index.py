@@ -7,8 +7,9 @@ import pandas as pd
 
 from astock.config import GLOBAL_INDEX_SINA_FALLBACK
 from astock.core.datetime_utils import normalize_date
-from astock.sources.market_overview._common import _retry_call, _tail_closes
+from astock.sources.market_overview._common import _tail_closes
 from astock.sources.market_overview.usd_index import fetch_usd_index
+from astock.sources.retry import retry_call
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ _GLOBAL_INDEX_EM_ONLY = {"美元指数"}
 
 def _fetch_us_index_sina(symbol: str, n: int) -> dict[str, float]:
     try:
-        df = _retry_call(f"index_us_stock_sina:{symbol}", lambda: ak.index_us_stock_sina(symbol=symbol))
+        df = retry_call(f"index_us_stock_sina:{symbol}", lambda: ak.index_us_stock_sina(symbol=symbol))
     except Exception as e:
         logger.warning("新浪美股指数 %s 失败: %s", symbol, e)
         return {}

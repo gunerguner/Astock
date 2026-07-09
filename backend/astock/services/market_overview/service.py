@@ -8,15 +8,13 @@ from astock.config import (
     MARKET_OVERVIEW_FAILURE_TTL,
     MARKET_OVERVIEW_ITEMS,
 )
-from astock.core.datetime_utils import last_settled_date, market_for_source
+from astock.core.datetime_utils import last_settled_date
 from astock.core.redis_client import (
     MARKET_OVERVIEW_LATEST_DATE_KEY,
     delete_key,
-    get_json,
     get_string,
     market_overview_failure_key,
     market_overview_recent_key,
-    set_json,
     set_string,
 )
 from astock.schemas.analysis import (
@@ -25,39 +23,20 @@ from astock.schemas.analysis import (
     MarketOverviewItem,
     MarketOverviewResponse,
 )
+from astock.services.closes_cache import build_change_fields, ensure_closes, redis_closes_io
 from astock.services.price_utils import (
-    anchor_date_for_closes,
     anchor_date_excluding_today,
-    baseline_prices_at_anchor,
-    has_sufficient_baseline_points,
+    anchor_date_for_closes,
     iso_now,
     overview_item_markets,
-    pct_change,
-    read_recent_closes_cache,
-    sorted_dates,
-    write_recent_closes_cache,
 )
 from astock.sources.market_overview import fetch_all_items
 
 logger = logging.getLogger(__name__)
 
-
-def _write_cache(item_key: str, closes: dict[str, float], *, market: str) -> None:
-    write_recent_closes_cache(
-        set_json,
-        market_overview_recent_key(item_key),
-        closes,
-        ttl=ASSET_PRICE_CACHE_TTL,
-        market=market,
-    )
-
-
-def _read_cache(item_key: str, *, market: str) -> dict[str, float]:
-    return read_recent_closes_cache(
-        get_json,
-        market_overview_recent_key(item_key),
-        market=market,
-    )
+_read_closes, _write_closes = redis_closes_io(
+    market_overview_recent_key, ttl=ASSET_PRICE_CACHE_TTL
+)
 
 
 def _has_failure_marker(item_key: str) -> bool:
@@ -76,69 +55,31 @@ def _clear_failure_marker(item_key: str) -> None:
     delete_key(market_overview_failure_key(item_key))
 
 
+def _fetch_missing(
+    missing: list[dict[str, str]],
+) -> tuple[dict[str, dict[str, float]], list[str]]:
+    return fetch_all_items(missing)
+
+
 def _ensure_closes(
     *, force_refresh: bool = False
 ) -> tuple[dict[str, dict[str, float]], list[str]]:
-    """确保各资产收盘价可用。
-
-    无论 force_refresh 与否，凡是仍有未过期成功缓存（TTL 内，即已是最新交易日数据）的
-    资产一律直接复用，不重新拉取——"强制刷新"只应补齐真正缺失/已过期/此前失败的部分，
-    而不是无条件重新下载全部资产的完整历史。force_refresh 与默认模式的唯一区别是：
-    是否忽略"近期抓取失败"标记，强制重试这些项。
-    """
-    all_closes: dict[str, dict[str, float]] = {}
-    missing: list[dict[str, str]] = []
-
     item_markets = overview_item_markets(MARKET_OVERVIEW_ITEMS)
-
-    for item in MARKET_OVERVIEW_ITEMS:
-        key = item["key"]
-        market = item_markets[key]
-        closes = _read_cache(key, market=market)
-        if closes:
-            all_closes[key] = closes
-            if has_sufficient_baseline_points(closes, market=market):
-                continue
-            if not force_refresh and _has_failure_marker(key):
-                continue
-            missing.append(item)
-        elif not force_refresh and _has_failure_marker(key):
-            continue
-        else:
-            missing.append(item)
-
-    if not missing:
-        latest = get_string(MARKET_OVERVIEW_LATEST_DATE_KEY)
-        if latest is None:
-            latest = anchor_date_excluding_today(all_closes, markets=item_markets)
-            if latest:
-                set_string(
-                    MARKET_OVERVIEW_LATEST_DATE_KEY,
-                    latest,
-                    ttl=ASSET_PRICE_CACHE_TTL,
-                )
-        return all_closes, []
-
-    backfill, errors = fetch_all_items(missing)
-    for item in missing:
-        key = item["key"]
-        existing = _read_cache(key, market=item_markets[key])
-        new_closes = backfill.get(key, {})
-        merged = {**existing, **new_closes}
-        if merged:
-            all_closes[key] = merged
-            _write_cache(key, merged, market=item_markets[key])
-            if has_sufficient_baseline_points(merged, market=item_markets[key]):
-                _clear_failure_marker(key)
-            else:
-                _write_failure_marker(key)
-        else:
-            _write_failure_marker(key)
-
-    latest = anchor_date_excluding_today(all_closes, markets=item_markets)
-    if latest:
-        set_string(MARKET_OVERVIEW_LATEST_DATE_KEY, latest, ttl=ASSET_PRICE_CACHE_TTL)
-    return all_closes, errors
+    return ensure_closes(
+        MARKET_OVERVIEW_ITEMS,
+        key_fn=lambda item: item["key"],
+        market_fn=lambda item: item_markets[item["key"]],
+        read_closes=_read_closes,
+        write_closes=_write_closes,
+        fetch_missing=_fetch_missing,
+        latest_date_key=MARKET_OVERVIEW_LATEST_DATE_KEY,
+        latest_ttl=ASSET_PRICE_CACHE_TTL,
+        force_refresh=force_refresh,
+        require_baseline=True,
+        has_failure=_has_failure_marker,
+        write_failure=_write_failure_marker,
+        clear_failure=_clear_failure_marker,
+    )
 
 
 def _build_item(
@@ -146,23 +87,18 @@ def _build_item(
     closes: dict[str, float],
     anchor_date: str,
 ) -> MarketOverviewItem | MarketOverviewErrorItem:
-    current, prev_close, week_ago_close = baseline_prices_at_anchor(closes, anchor_date)
-    if current is None:
+    fields = build_change_fields(closes, anchor_date)
+    if fields["current"] is None:
         return _error_item(item, f"{item['name']}({item['code']}): 当前价格缺失")
-    daily = pct_change(current, prev_close)
-    weekly = pct_change(current, week_ago_close)
-    dates = [d for d in sorted_dates(closes) if d <= anchor_date]
-    period_end = dates[-1] if dates else None
-    period_start = dates[-2] if len(dates) >= 2 else period_end
     return MarketOverviewItem(
         key=item["key"],
         name=item["name"],
         code=item["code"],
-        current_price=round(current, 4),
-        daily_change=round(daily, 2) if daily is not None else None,
-        weekly_change=round(weekly, 2) if weekly is not None else None,
-        period_start=period_start,
-        period_end=period_end,
+        current_price=fields["current_price"],
+        daily_change=fields["daily_change"],
+        weekly_change=fields["weekly_change"],
+        period_start=fields["period_start"],
+        period_end=fields["period_end"],
     )
 
 

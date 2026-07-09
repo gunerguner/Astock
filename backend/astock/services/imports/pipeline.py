@@ -1,4 +1,4 @@
-"""成交额数据导入。"""
+"""日频数据集导入模板（Template Method）。"""
 
 import logging
 import time
@@ -8,7 +8,6 @@ from sqlmodel import Session
 
 from astock.core.exceptions import ExternalSourceAppError
 from astock.core.sync_status import SyncStatus
-from astock.models.turnover import Turnover
 from astock.services.imports._common import (
     build_result,
     build_skip_result,
@@ -23,13 +22,12 @@ from astock.services.sync_store import (
     should_skip_daily_sync,
     upsert_sync_meta,
 )
-from astock.sources.baostock import fetch_turnover
 from astock.sources.fetch_result import SourceFetchResult
 
 logger = logging.getLogger(__name__)
 
 
-def _import_simple_dataset(
+def run_daily_import(
     db: Session,
     *,
     table_name: str,
@@ -39,9 +37,15 @@ def _import_simple_dataset(
     source_key: str,
     failure_message: str,
     log_label: str,
+    prepare_table: str | None = None,
+    resolve_last_date: Callable[[Session], str | None] | None = None,
+    raise_on_failed: bool = True,
 ) -> dict:
+    """skip → fetch → validate → upsert → meta → result。"""
     start_ts = time.perf_counter()
-    db_last_date = get_last_date(db, model)
+    last_date_fn = resolve_last_date or (lambda s: get_last_date(s, model))
+    db_last_date = last_date_fn(db)
+
     if should_skip_daily_sync(db, table_name):
         result = build_skip_result(
             db,
@@ -59,9 +63,10 @@ def _import_simple_dataset(
         return result
 
     start_date = get_sync_start_date(db, table_name)
-
     fr = fetch(start_date)
-    records = prepare_records_for_upsert(table_name, fr.records, fr=fr)
+    records = prepare_records_for_upsert(
+        prepare_table or table_name, fr.records, fr=fr
+    )
     imported = batch_upsert(
         db,
         model,
@@ -70,7 +75,7 @@ def _import_simple_dataset(
         commit_mode="single",
     )
 
-    last_date = get_last_date(db, model)
+    last_date = last_date_fn(db)
     status = resolve_status(fr.ok, imported)
     last_synced_at = upsert_sync_meta(
         db,
@@ -89,7 +94,7 @@ def _import_simple_dataset(
         last_synced_at=last_synced_at,
     )
 
-    if result["status"] == SyncStatus.FAILED:
+    if raise_on_failed and result["status"] == SyncStatus.FAILED:
         raise ExternalSourceAppError(
             f"{failure_message}: {result['source_errors'].get(source_key)}"
         )
@@ -105,16 +110,3 @@ def _import_simple_dataset(
     )
     result["elapsed"] = round(elapsed, 2)
     return result
-
-
-def import_turnover(db: Session) -> dict:
-    return _import_simple_dataset(
-        db,
-        table_name="turnover",
-        model=Turnover,
-        conflict_cols=["date"],
-        fetch=fetch_turnover,
-        source_key="turnover",
-        failure_message="成交额导入失败",
-        log_label="成交额",
-    )

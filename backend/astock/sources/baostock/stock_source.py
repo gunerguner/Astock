@@ -1,7 +1,6 @@
 """baostock 个股代码与日线成交额。"""
 
 import logging
-import re
 import time
 
 import baostock as bs
@@ -16,15 +15,9 @@ from astock.sources.baostock.session import (
     baostock_session,
 )
 from astock.sources.fetch_result import SourceFetchResult
+from astock.sources.symbols import parse_baostock_code, to_baostock_code
 
 logger = logging.getLogger(__name__)
-
-_CODE_RE = re.compile(r"^(sh|sz)\.(\d{6})$")
-
-
-def _to_baostock_code(code: str) -> str:
-    prefix = "sh" if code.startswith("6") else "sz"
-    return f"{prefix}.{code}"
 
 
 def fetch_all_stock_codes(as_of_date: str) -> SourceFetchResult:
@@ -54,10 +47,10 @@ def fetch_all_stock_codes(as_of_date: str) -> SourceFetchResult:
         for code, status, name in rows:
             if status != "1":
                 continue
-            m = _CODE_RE.match(code)
-            if not m:
+            parsed = parse_baostock_code(code)
+            if not parsed:
                 continue
-            exchange, digits = m.groups()
+            exchange, digits = parsed
             prefixes = tuple(STOCK_CODE_PREFIXES.get(exchange, ()))
             if prefixes and not digits.startswith(prefixes):
                 continue
@@ -72,13 +65,13 @@ def fetch_stock_amount_history(
     start_date: str | None = None,
     end_date: str | None = None,
 ) -> SourceFetchResult:
-    """获取单只股票日线成交额。调用方需已处于 baostock 登录会话中（见 baostock_session）。
+    """获取单只股票日线成交额。需在已 login 的 ProcessPool worker 中调用。
 
     end_date 默认 last_settled_date("cn")；Path B 中间日可传入 as_of 前一交易日。
     """
     start = start_date or START_DATE
     end = end_date or last_settled_date()
-    prefixed = _to_baostock_code(code)
+    prefixed = to_baostock_code(code)
 
     def _query() -> SourceFetchResult:
         rs = bs.query_history_k_data_plus(

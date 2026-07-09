@@ -1,43 +1,53 @@
 """全球资产历史最高点刷新（写路径）。"""
 
 import logging
+import time
 
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from astock.config import ASSET_PRICE_CACHE_TTL, GLOBAL_ASSETS
-from astock.core.datetime_utils import filter_settled_closes, is_multi_market_synced, iso_now, market_for_asset_type
+from astock.core.datetime_utils import (
+    filter_settled_closes,
+    is_multi_market_synced,
+    iso_now,
+    market_for_asset_type,
+)
 from astock.core.redis_client import LATEST_TRADING_DATE_KEY, set_string
 from astock.core.sync_status import SyncStatus
 from astock.models.asset_high import AssetHigh
 from astock.services.global_asset._cache import write_price_cache
+from astock.services.imports._common import build_result
 from astock.services.price_utils import anchor_date_excluding_today, global_asset_markets
-from astock.services.sync_store import batch_upsert, get_sync_meta, upsert_sync_meta
-from astock.sources.akshare_client import fetch_all_assets
+from astock.services.sync_store import batch_upsert, count_rows, get_sync_meta, upsert_sync_meta
+from astock.sources.akshare import fetch_all_assets
 
 logger = logging.getLogger(__name__)
 
 
 def refresh_asset_highs(db: Session) -> dict:
+    start_ts = time.perf_counter()
     meta = get_sync_meta(db, "asset_high")
     if (
         meta
         and meta.last_status == SyncStatus.SUCCESS
         and is_multi_market_synced(meta.last_synced_date)
     ):
-        total = len(db.exec(select(AssetHigh)).all())
+        total = count_rows(db, AssetHigh)
         if total > 0:
             logger.info(
                 "全球资产最高点刷新跳过: 已覆盖最近可结算日 (last_synced_date=%s)",
                 meta.last_synced_date,
             )
-            return {
-                "imported": 0,
-                "total": total,
-                "last_date": meta.last_synced_date,
-                "last_synced_at": meta.last_synced_at,
-                "status": SyncStatus.SUCCESS,
-                "source_errors": {"global_assets": None},
-            }
+            result = build_result(
+                imported=0,
+                total=total,
+                last_date=meta.last_synced_date,
+                ok=True,
+                source_errors={"global_assets": None},
+                last_synced_at=meta.last_synced_at,
+                elapsed=round(time.perf_counter() - start_ts, 2),
+            )
+            return result
 
     cached_at = iso_now()
     records: list[dict] = []
@@ -92,26 +102,36 @@ def refresh_asset_highs(db: Session) -> dict:
     if latest:
         set_string(LATEST_TRADING_DATE_KEY, latest, ttl=ASSET_PRICE_CACHE_TTL)
 
-    if not errors:
-        status = SyncStatus.SUCCESS
-    elif imported:
-        status = SyncStatus.PARTIAL_FAILURE
-    else:
-        status = SyncStatus.FAILED
-
+    ok = len(errors) == 0
     last_synced_at = upsert_sync_meta(
         db,
         "asset_high",
         last_synced_date=latest,
-        status=status,
+        status=(
+            SyncStatus.SUCCESS
+            if ok
+            else SyncStatus.PARTIAL_FAILURE
+            if imported
+            else SyncStatus.FAILED
+        ),
         error="; ".join(errors[:5]) if errors else None,
     )
 
-    return {
-        "imported": imported,
-        "total": len(records),
-        "last_date": latest,
-        "last_synced_at": last_synced_at,
-        "status": status,
-        "source_errors": {"global_assets": "; ".join(errors[:5]) if errors else None},
-    }
+    elapsed = time.perf_counter() - start_ts
+    result = build_result(
+        imported=imported,
+        total=len(records),
+        last_date=latest,
+        ok=ok,
+        source_errors={"global_assets": "; ".join(errors[:5]) if errors else None},
+        last_synced_at=last_synced_at,
+        elapsed=round(elapsed, 2),
+    )
+    logger.info(
+        "全球资产最高点刷新完成: imported=%s total=%s status=%s elapsed=%.2fs",
+        result["imported"],
+        result["total"],
+        result["status"],
+        elapsed,
+    )
+    return result

@@ -1,28 +1,21 @@
-"""A 股指数抓取。"""
+"""A 股指数抓取（复用 akshare.cn_index 底层）。"""
 
 import logging
 
-import akshare as ak
 import pandas as pd
 
-from astock.sources.market_overview._common import (
-    _cn_index_cutoff,
-    _cn_index_sina_symbol,
-    _retry_call,
-    _tail_closes,
-)
+from astock.sources.akshare.cn_index import fetch_cn_index_daily_raw
+from astock.sources.market_overview._common import _cn_index_cutoff, _tail_closes
+from astock.sources.symbols import cn_index_sina_symbol
 
 logger = logging.getLogger(__name__)
 
 
 def fetch_cn_index(code: str, n: int) -> dict[str, float]:
-    sina_symbol = _cn_index_sina_symbol(code)
+    sina_symbol = cn_index_sina_symbol(code)
     cutoff = _cn_index_cutoff()
     try:
-        raw = _retry_call(
-            f"stock_zh_index_daily:{sina_symbol}",
-            lambda: ak.stock_zh_index_daily(symbol=sina_symbol),
-        )
+        raw = fetch_cn_index_daily_raw(sina_symbol)
     except Exception as e:
         logger.warning("A股指数 %s 抓取失败: %s", code, e)
         return {}

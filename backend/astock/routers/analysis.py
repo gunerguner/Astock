@@ -19,7 +19,7 @@ from astock.services.queries import (
     stock_ranking,
     turnover_ranking,
 )
-from astock.services.market_overview_service import get_market_overview
+from astock.services.market_overview import get_market_overview
 
 router = APIRouter(prefix="/api/v1/analysis", tags=["analysis"])
 

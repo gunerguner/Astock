@@ -4,63 +4,65 @@ from datetime import date
 
 from sqlmodel import Session, select
 
-from astock.config import GLOBAL_ASSETS
-from astock.core.datetime_utils import filter_settled_closes, iso_now, last_settled_date, market_for_asset_type, now_local
+from astock.config import ASSET_PRICE_CACHE_TTL, GLOBAL_ASSETS
+from astock.core.datetime_utils import (
+    filter_settled_closes,
+    iso_now,
+    last_settled_date,
+    market_for_asset_type,
+    now_local,
+)
 from astock.core.exceptions import AppError
-from astock.core.redis_client import LATEST_TRADING_DATE_KEY, get_string, set_string
+from astock.core.redis_client import LATEST_TRADING_DATE_KEY, get_string
 from astock.models.asset_high import AssetHigh
 from astock.schemas.analysis import (
     PriceLevelItem,
     PriceLevelPendingItem,
     PriceLevelsResponse,
 )
+from astock.services.closes_cache import build_change_fields, ensure_closes
 from astock.services.global_asset._cache import (
     backfill_from_akshare,
     conclusion,
     pending_item,
     read_price_cache,
+    write_price_cache,
 )
 from astock.services.price_utils import (
     anchor_date_excluding_today,
     anchor_date_for_closes,
-    baseline_prices_at_anchor,
-    baseline_prices,
     global_asset_markets,
-    pct_change,
     sorted_dates,
 )
 from astock.services.sync_store import get_sync_meta
 
 
+def _read_closes(ticker: str, market: str) -> dict[str, float]:
+    return read_price_cache(ticker, market=market)
+
+
+def _write_closes(ticker: str, closes: dict[str, float], market: str) -> None:
+    write_price_cache(ticker, closes, market=market)
+
+
 def _ensure_price_cache(
     assets: list[dict[str, str]], *, force_refresh: bool = False
 ) -> tuple[dict[str, dict[str, float]], list[str]]:
-    if not force_refresh:
-        all_closes: dict[str, dict[str, float]] = {}
-        missing: list[dict[str, str]] = []
-        for asset in assets:
-            ticker = asset["ticker"]
-            market = market_for_asset_type(asset["asset_type"])
-            closes = read_price_cache(ticker, market=market)
-            if closes:
-                all_closes[ticker] = closes
-            else:
-                missing.append(asset)
-        if not missing:
-            latest = get_string(LATEST_TRADING_DATE_KEY)
-            if latest is None:
-                latest = anchor_date_excluding_today(
-                    all_closes,
-                    markets=global_asset_markets(assets),
-                )
-                if latest:
-                    set_string(LATEST_TRADING_DATE_KEY, latest)
-            return all_closes, []
-        backfill, errors = backfill_from_akshare(missing)
-        all_closes.update(backfill)
-        return all_closes, errors
-
-    return backfill_from_akshare(assets)
+    if force_refresh:
+        # 强制刷新：仍复用未过期缓存，仅对缺失项回填（与 ensure_closes 语义一致）
+        pass
+    return ensure_closes(
+        assets,
+        key_fn=lambda a: a["ticker"],
+        market_fn=lambda a: market_for_asset_type(a["asset_type"]),
+        read_closes=_read_closes,
+        write_closes=_write_closes,
+        fetch_missing=backfill_from_akshare,
+        latest_date_key=LATEST_TRADING_DATE_KEY,
+        latest_ttl=ASSET_PRICE_CACHE_TTL,
+        force_refresh=force_refresh,
+        require_baseline=False,
+    )
 
 
 def get_price_levels(db: Session, *, force_refresh: bool = False) -> PriceLevelsResponse:
@@ -83,11 +85,15 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> PriceLevels
         market = asset_markets[ticker]
         closes = filter_settled_closes(all_closes.get(ticker, {}), market)
         anchor = anchor_date_for_closes(closes, market)
-        current, prev_close, week_ago_close = (
-            baseline_prices(closes)
-            if anchor is None
-            else baseline_prices_at_anchor(closes, anchor)
-        )
+        if anchor is None:
+            if asset.get("data_pending"):
+                items.append(pending_item(asset))
+            else:
+                cache_errors.append(f"{ticker}: 当前价格缺失")
+            continue
+
+        fields = build_change_fields(closes, anchor)
+        current = fields["current"]
         if current is None:
             if asset.get("data_pending"):
                 items.append(pending_item(asset))
@@ -117,17 +123,13 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> PriceLevels
                 ticker=ticker,
                 name=row.name,
                 asset_type=row.asset_type,
-                current_price=round(current, 4),
+                current_price=fields["current_price"],
                 all_time_high=round(all_time_high, 4),
                 ath_date=ath_date,
                 percentage_diff=round(percentage_diff, 2),
                 ath_days=ath_days,
-                daily_change=round(v, 2)
-                if (v := pct_change(current, prev_close)) is not None
-                else None,
-                weekly_change=round(v, 2)
-                if (v := pct_change(current, week_ago_close)) is not None
-                else None,
+                daily_change=fields["daily_change"],
+                weekly_change=fields["weekly_change"],
                 conclusion=conclusion(percentage_diff),
             )
         )

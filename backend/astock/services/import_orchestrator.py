@@ -7,13 +7,10 @@ from sqlmodel import Session
 
 from astock.core.progress import ProgressReporter, SSEBridge
 from astock.schemas.imports import ImportDataset
-from astock.services.imports import (
-    import_global_assets,
-    import_point,
-    import_turnover,
-)
+from astock.services.global_asset.refresh import refresh_asset_highs
+from astock.services.imports import import_point, import_stock, import_turnover
 from astock.services.imports._common import aggregate_status
-from astock.services.imports.stock_importer import _import_stock_gen
+from astock.services.imports.stock import import_stock_gen
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +37,7 @@ def _stream_stock_phase(
 ) -> Iterator[str]:
     reporter.phase_start("stock")
     yield from bridge.drain()
-    stock_gen = _import_stock_gen(db, on_progress=reporter, bridge=bridge)
+    stock_gen = import_stock_gen(db, on_progress=reporter, bridge=bridge)
     try:
         while True:
             yield next(stock_gen)
@@ -72,7 +69,7 @@ def import_dataset_stream(
                 result = yield from _stream_stock_phase(db, reporter, bridge)
             case ImportDataset.global_assets:
                 result = yield from _stream_run_phase(
-                    db, "global_assets", import_global_assets, reporter, bridge
+                    db, "global_assets", refresh_asset_highs, reporter, bridge
                 )
             case ImportDataset.all:
                 turnover_result = yield from _stream_run_phase(
@@ -83,7 +80,7 @@ def import_dataset_stream(
                 )
                 stock_result = yield from _stream_stock_phase(db, reporter, bridge)
                 global_assets_result = yield from _stream_run_phase(
-                    db, "global_assets", import_global_assets, reporter, bridge
+                    db, "global_assets", refresh_asset_highs, reporter, bridge
                 )
                 result = {
                     "turnover": turnover_result,

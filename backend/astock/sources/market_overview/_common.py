@@ -1,8 +1,5 @@
 """market_overview 抓取公共工具。"""
 
-import logging
-import time
-from collections.abc import Callable
 from datetime import timedelta
 
 import pandas as pd
@@ -11,26 +8,14 @@ from astock.config import (
     CN_INDEX_LOOKBACK_DAYS,
     EM_UDI_REFERER,
     EM_USER_AGENT,
-    FETCH_RETRIES,
-    FETCH_RETRY_DELAY,
 )
 from astock.core.datetime_utils import MarketCode, last_settled_date, normalize_date, now_local
+from astock.sources.retry import retry_call
+from astock.sources.symbols import cn_index_sina_symbol
 
-logger = logging.getLogger(__name__)
-
-
-def _retry_call[T](label: str, fn: Callable[[], T]) -> T:
-    last: Exception | None = None
-    for attempt in range(FETCH_RETRIES):
-        try:
-            return fn()
-        except Exception as e:
-            last = e
-            if attempt < FETCH_RETRIES - 1:
-                logger.warning("%s 第 %s 次失败，重试: %s", label, attempt + 1, e)
-                time.sleep(FETCH_RETRY_DELAY * (attempt + 1))
-    assert last is not None
-    raise last
+# 兼容旧 import 名
+_retry_call = retry_call
+_cn_index_sina_symbol = cn_index_sina_symbol
 
 
 def _tail_closes(
@@ -47,12 +32,6 @@ def _tail_closes(
         return {}
     sorted_pairs = sorted(filtered, key=lambda x: x[0])
     return dict(sorted_pairs[-n:])
-
-
-def _cn_index_sina_symbol(code: str) -> str:
-    code = code.strip()
-    prefix = "sz" if code.startswith("399") else "sh"
-    return f"{prefix}{code}"
 
 
 def _em_udi_headers() -> dict[str, str]:
