@@ -20,6 +20,7 @@ _MARKET_SOURCE: dict[str, MarketCode] = {
 
 
 def iso_now() -> str:
+    """返回当前 UTC 时间的 ISO 秒级字符串。"""
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
@@ -34,6 +35,7 @@ def market_for_source(source: str) -> MarketCode:
 
 
 def market_for_asset_type(asset_type: str) -> MarketCode:
+    """按资产类型推断适用结算市场（股票/贵金属走美股时区）。"""
     return "us" if asset_type in ("stock", "metal") else "cn"
 
 
@@ -72,6 +74,7 @@ def is_multi_market_synced(last_synced_date: str | None) -> bool:
 
 
 def now_local() -> datetime:
+    """返回上海时区当前本地时间。"""
     return datetime.now(_SHANGHAI)
 
 
@@ -82,6 +85,7 @@ def add_calendar_days(date_str: str, days: int = 1) -> str:
 
 
 def normalize_date(value: Any) -> str:
+    """将 datetime/date/字符串统一规范为 YYYY-MM-DD。"""
     if isinstance(value, datetime):
         return value.strftime("%Y-%m-%d")
     if isinstance(value, date):

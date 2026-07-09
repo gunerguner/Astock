@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 def refresh_asset_highs(db: Session) -> dict:
+    """刷新全球资产历史最高点入库，并同步价格缓存与最新交易日。"""
     start_ts = time.perf_counter()
     meta = get_sync_meta(db, "asset_high")
     if (
@@ -50,8 +51,11 @@ def refresh_asset_highs(db: Session) -> dict:
     parsed, errors = parse_asset_fetch_results(
         GLOBAL_ASSETS, fetch_all_assets(), skip_pending=True
     )
-    for asset, record, market, closes in parsed:
-        ticker = asset["ticker"]
+    for row in parsed:
+        ticker = row.asset["ticker"]
+        record = row.record
+        market = row.market
+        closes = row.closes
         try:
             all_time_high = float(record["all_time_high"])
             ath_date = str(record["ath_date"])
@@ -63,8 +67,8 @@ def refresh_asset_highs(db: Session) -> dict:
         records.append(
             {
                 "ticker": ticker,
-                "name": asset["name"],
-                "asset_type": asset["asset_type"],
+                "name": row.asset["name"],
+                "asset_type": row.asset["asset_type"],
                 "all_time_high": all_time_high,
                 "ath_date": ath_date,
                 "cached_at": cached_at,

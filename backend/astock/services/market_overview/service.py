@@ -28,7 +28,14 @@ from astock.schemas.analysis import (
     MarketOverviewItem,
     MarketOverviewResponse,
 )
-from astock.services.closes_cache import build_change_fields, ensure_closes, redis_closes_io
+from astock.services.closes_cache import (
+    ClosesCacheDeps,
+    ClosesEnsureOptions,
+    ClosesFetchResult,
+    build_change_fields,
+    ensure_closes,
+    redis_closes_io,
+)
 from astock.sources.market_overview import fetch_all_items
 
 logger = logging.getLogger(__name__)
@@ -54,18 +61,14 @@ def _clear_failure_marker(item_key: str) -> None:
     delete_key(market_overview_failure_key(item_key))
 
 
-def _fetch_missing(
-    missing: list[dict[str, str]],
-) -> tuple[dict[str, dict[str, float]], list[str]]:
+def _fetch_missing(missing: list[dict[str, str]]) -> ClosesFetchResult:
     return fetch_all_items(missing)
 
 
-def _ensure_closes(
-    *, force_refresh: bool = False
-) -> tuple[dict[str, dict[str, float]], list[str]]:
+def _ensure_closes(*, force_refresh: bool = False) -> ClosesFetchResult:
+    """确保概览项收盘价缓存齐全，不足基准点时触发回填并管理失败标记。"""
     item_markets = overview_item_markets(MARKET_OVERVIEW_ITEMS)
-    return ensure_closes(
-        MARKET_OVERVIEW_ITEMS,
+    deps = ClosesCacheDeps(
         key_fn=lambda item: item["key"],
         market_fn=lambda item: item_markets[item["key"]],
         read_closes=_read_closes,
@@ -73,12 +76,15 @@ def _ensure_closes(
         fetch_missing=_fetch_missing,
         latest_date_key=MARKET_OVERVIEW_LATEST_DATE_KEY,
         latest_ttl=ASSET_PRICE_CACHE_TTL,
+    )
+    options = ClosesEnsureOptions(
         force_refresh=force_refresh,
         require_baseline=True,
         has_failure=_has_failure_marker,
         write_failure=_write_failure_marker,
         clear_failure=_clear_failure_marker,
     )
+    return ensure_closes(MARKET_OVERVIEW_ITEMS, deps, options)
 
 
 def _build_item(
@@ -86,18 +92,19 @@ def _build_item(
     closes: dict[str, float],
     anchor_date: str,
 ) -> MarketOverviewItem | MarketOverviewErrorItem:
+    """将单条概览配置与收盘价序列组装为成功或缺价错误项。"""
     fields = build_change_fields(closes, anchor_date)
-    if fields["current"] is None:
+    if fields.current is None:
         return _error_item(item, f"{item['name']}({item['code']}): 当前价格缺失")
     return MarketOverviewItem(
         key=item["key"],
         name=item["name"],
         code=item["code"],
-        current_price=fields["current_price"],
-        daily_change=fields["daily_change"],
-        weekly_change=fields["weekly_change"],
-        period_start=fields["period_start"],
-        period_end=fields["period_end"],
+        current_price=fields.current_price,
+        daily_change=fields.daily_change,
+        weekly_change=fields.weekly_change,
+        period_start=fields.period_start,
+        period_end=fields.period_end,
     )
 
 
@@ -111,7 +118,10 @@ def _error_item(item: dict[str, str], message: str) -> MarketOverviewErrorItem:
 
 
 def get_market_overview(*, force_refresh: bool = False) -> MarketOverviewResponse:
-    all_closes, cache_errors = _ensure_closes(force_refresh=force_refresh)
+    """按分类返回全球市场概览项的现价、日/周涨跌与数据截至日。"""
+    fetched = _ensure_closes(force_refresh=force_refresh)
+    all_closes = fetched.closes
+    cache_errors = list(fetched.errors)
     as_of = iso_now()
     item_markets = overview_item_markets(MARKET_OVERVIEW_ITEMS)
 
@@ -150,7 +160,7 @@ def get_market_overview(*, force_refresh: bool = False) -> MarketOverviewRespons
     )
     if not all_closes:
         cache_errors = [
-            *(cache_errors or []),
+            *cache_errors,
             "无法确定最新交易日，请先刷新市场概览数据",
         ]
 

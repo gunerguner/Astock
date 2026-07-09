@@ -48,6 +48,7 @@ def prepare_records_for_upsert(
     *,
     fr: SourceFetchResult,
 ) -> list[dict[str, Any]]:
+    """按表名校验必填字段，不合格记录记入抓取错误并剔除。"""
     required_fields = _REQUIRED_FIELDS.get(table_name)
     if not required_fields:
         return records
@@ -63,6 +64,7 @@ def prepare_records_for_upsert(
 
 
 def resolve_status(ok: bool, imported: int) -> SyncStatus:
+    """根据抓取成功与否与入库条数判定 SUCCESS/PARTIAL/FAILED。"""
     if ok:
         return SyncStatus.SUCCESS
     if imported > 0:
@@ -71,6 +73,7 @@ def resolve_status(ok: bool, imported: int) -> SyncStatus:
 
 
 def aggregate_status(*statuses: SyncStatus | str) -> SyncStatus:
+    """聚合多项导入状态，任一项失败则整体为部分失败。"""
     if all(s == SyncStatus.SUCCESS for s in statuses):
         return SyncStatus.SUCCESS
     if all(s == SyncStatus.FAILED for s in statuses):
@@ -121,6 +124,7 @@ def build_result(
     last_synced_at: str | None = None,
     elapsed: float | None = None,
 ) -> dict[str, Any]:
+    """组装标准导入结果字典（含 status、source_errors、elapsed）。"""
     from astock.services.import_results import ImportResult
 
     result = ImportResult(
@@ -141,6 +145,7 @@ def finalize_import_result(
     start_ts: float,
     log_label: str,
 ) -> dict[str, Any]:
+    """记录导入耗时日志并写回结果 elapsed 字段。"""
     elapsed = time.perf_counter() - start_ts
     logger.info(
         "%s完成: imported=%s total=%s status=%s elapsed=%.2fs",

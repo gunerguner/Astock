@@ -4,7 +4,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from astock.config import MARKET_OVERVIEW_RECENT_DAYS
-from astock.sources.market_overview.boc_forex import fetch_boc_forex
+from astock.services.closes_cache import ClosesFetchResult
 from astock.sources.market_overview.cn_index import fetch_cn_index
 from astock.sources.market_overview.foreign_futures import fetch_foreign_futures
 from astock.sources.market_overview.global_index import fetch_global_index
@@ -34,8 +34,8 @@ def fetch_item_closes(item: dict[str, str], n: int = MARKET_OVERVIEW_RECENT_DAYS
 def fetch_all_items(
     items: list[dict[str, str]],
     n: int = MARKET_OVERVIEW_RECENT_DAYS,
-) -> tuple[dict[str, dict[str, float]], list[str]]:
-    """抓取全部资产：美债一次批量，其余 ThreadPool(4)；返回 {item_key: recent_closes} 与错误列表。"""
+) -> ClosesFetchResult:
+    """抓取全部资产：美债一次批量，其余 ThreadPool(4)。"""
     all_closes: dict[str, dict[str, float]] = {}
     errors: list[str] = []
 
@@ -74,4 +74,4 @@ def fetch_all_items(
                 elif err:
                     errors.append(err)
 
-    return all_closes, errors
+    return ClosesFetchResult(all_closes, errors)

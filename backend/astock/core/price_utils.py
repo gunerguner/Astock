@@ -1,16 +1,17 @@
 """价格与日期相关的纯函数（无 Redis / 无外部 IO）。"""
 
+from dataclasses import dataclass
+
 from astock.config import WEEKLY_BASELINE_OFFSET
 from astock.core.datetime_utils import (
     MarketCode,
-    iso_now,
     last_settled_date,
     market_for_asset_type,
     market_for_source,
 )
 
 __all__ = [
-    "iso_now",
+    "BaselinePrices",
     "sorted_dates",
     "pct_change",
     "baseline_prices",
@@ -23,37 +24,43 @@ __all__ = [
 ]
 
 
+@dataclass(frozen=True)
+class BaselinePrices:
+    """锚点日口径下的当前价与昨收、约一周前基准价。"""
+
+    current: float | None
+    prev: float | None
+    week_ago: float | None
+
+
 def sorted_dates(closes: dict[str, float]) -> list[str]:
+    """将收盘价字典的日期键排序为升序列表。"""
     return sorted(closes.keys())
 
 
 def pct_change(cur: float, base: float | None) -> float | None:
+    """按基准价计算当前价的百分比涨跌幅。"""
     if base and base > 0:
         return (cur - base) / base * 100
     return None
 
 
-def baseline_prices(
-    closes: dict[str, float],
-) -> tuple[float | None, float | None, float | None]:
-    """返回 (当前价, 昨收基准, 约5个交易日前基准)。"""
+def baseline_prices(closes: dict[str, float]) -> BaselinePrices:
+    """返回最近交易日的当前价、昨收基准与约 5 个交易日前基准。"""
     dates = sorted_dates(closes)
     if not dates:
-        return None, None, None
+        return BaselinePrices(None, None, None)
     current = closes[dates[-1]]
     prev = closes[dates[-2]] if len(dates) >= 2 else None
     week_ago = closes[dates[-WEEKLY_BASELINE_OFFSET]] if len(dates) >= WEEKLY_BASELINE_OFFSET else None
-    return current, prev, week_ago
+    return BaselinePrices(current, prev, week_ago)
 
 
-def baseline_prices_at_anchor(
-    closes: dict[str, float],
-    anchor_date: str,
-) -> tuple[float | None, float | None, float | None]:
-    """返回给定锚点交易日的 (当前价, 昨收基准, 约5个交易日前基准)。"""
+def baseline_prices_at_anchor(closes: dict[str, float], anchor_date: str) -> BaselinePrices:
+    """返回给定锚点交易日内的当前价、昨收基准与约 5 个交易日前基准。"""
     dates = [d for d in sorted_dates(closes) if d <= anchor_date]
     if not dates:
-        return None, None, None
+        return BaselinePrices(None, None, None)
     current = closes[dates[-1]]
     prev = closes[dates[-2]] if len(dates) >= 2 else None
     week_ago = (
@@ -61,7 +68,7 @@ def baseline_prices_at_anchor(
         if len(dates) >= WEEKLY_BASELINE_OFFSET
         else None
     )
-    return current, prev, week_ago
+    return BaselinePrices(current, prev, week_ago)
 
 
 def anchor_date_for_closes(
@@ -109,8 +116,10 @@ def has_sufficient_baseline_points(
 
 
 def overview_item_markets(items: list[dict[str, str]]) -> dict[str, MarketCode]:
+    """为市场概览条目建立 key → 结算市场映射。"""
     return {item["key"]: market_for_source(item["source"]) for item in items}
 
 
 def global_asset_markets(assets: list[dict[str, str]]) -> dict[str, MarketCode]:
+    """为全球资产建立 ticker → 结算市场映射。"""
     return {asset["ticker"]: market_for_asset_type(asset["asset_type"]) for asset in assets}
