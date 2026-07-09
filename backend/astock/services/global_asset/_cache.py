@@ -1,6 +1,11 @@
 """全球资产价格缓存读写。"""
 
-from astock.config import ASSET_PRICE_CACHE_TTL, GLOBAL_ASSETS, PRICE_LEVEL_CONCLUSIONS, PRICE_LEVEL_DEFAULT
+from collections.abc import Mapping
+from typing import Any
+
+from astock.config import ASSET_PRICE_CACHE_TTL, PRICE_LEVEL_CONCLUSIONS, PRICE_LEVEL_DEFAULT
+from astock.core.datetime_utils import filter_settled_closes, market_for_asset_type
+from astock.core.price_utils import anchor_date_excluding_today, global_asset_markets
 from astock.core.redis_client import (
     LATEST_TRADING_DATE_KEY,
     get_json,
@@ -11,14 +16,10 @@ from astock.core.redis_client import (
     set_string,
 )
 from astock.schemas.analysis import PriceLevelPendingItem
-from astock.core.datetime_utils import filter_settled_closes, market_for_asset_type
-from astock.services.price_utils import (
-    anchor_date_excluding_today,
-    global_asset_markets,
-    read_recent_closes_cache,
-    write_recent_closes_cache,
-)
+from astock.services.closes_cache import read_recent_closes_cache, write_recent_closes_cache
 from astock.sources.akshare import fetch_all_assets
+from astock.sources.fetch_result import SourceFetchResult
+
 
 def conclusion(percentage_diff: float) -> str:
     abs_diff = abs(percentage_diff)
@@ -56,14 +57,19 @@ def read_price_cache(ticker: str, *, market: str) -> dict[str, float]:
     return {}
 
 
-def backfill_from_akshare(
+def parse_asset_fetch_results(
     assets: list[dict[str, str]],
-) -> tuple[dict[str, dict[str, float]], list[str]]:
+    fetch_results: Mapping[str, SourceFetchResult],
+    *,
+    skip_pending: bool = False,
+) -> tuple[list[tuple[dict[str, str], dict[str, Any], str, dict[str, float]]], list[str]]:
+    """解析 fetch_all_assets 结果 → [(asset, record, market, settled_closes), ...] + errors。"""
+    parsed: list[tuple[dict[str, str], dict[str, Any], str, dict[str, float]]] = []
     errors: list[str] = []
-    all_closes: dict[str, dict[str, float]] = {}
-    fetch_results = fetch_all_assets(assets)
     for asset in assets:
         ticker = asset["ticker"]
+        if skip_pending and asset.get("data_pending"):
+            continue
         result = fetch_results.get(ticker)
         if result is None or not result.ok or not result.records:
             if result:
@@ -74,6 +80,19 @@ def backfill_from_akshare(
         record = result.records[0]
         market = market_for_asset_type(asset["asset_type"])
         closes = filter_settled_closes(record.get("recent_closes") or {}, market)
+        parsed.append((asset, record, market, closes))
+    return parsed, errors
+
+
+def backfill_from_akshare(
+    assets: list[dict[str, str]],
+) -> tuple[dict[str, dict[str, float]], list[str]]:
+    errors: list[str] = []
+    all_closes: dict[str, dict[str, float]] = {}
+    parsed, parse_errors = parse_asset_fetch_results(assets, fetch_all_assets(assets))
+    errors.extend(parse_errors)
+    for asset, _record, market, closes in parsed:
+        ticker = asset["ticker"]
         if not closes:
             errors.append(f"{ticker}: 最近收盘价为空")
             continue

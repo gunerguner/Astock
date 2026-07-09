@@ -10,7 +10,7 @@ from astock.config import DEFAULT_UPSERT_BATCH_SIZE, START_DATE
 from astock.core.datetime_utils import add_calendar_days, is_synced_through_settled
 from astock.core.sync_status import SyncStatus
 from astock.models.sync_meta import SyncMeta
-from astock.services.price_utils import iso_now
+from astock.core.datetime_utils import iso_now
 
 CommitMode = Literal["per_batch", "single"]
 

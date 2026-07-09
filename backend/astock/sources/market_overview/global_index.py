@@ -3,13 +3,10 @@
 import logging
 
 import akshare as ak
-import pandas as pd
 
 from astock.config import GLOBAL_INDEX_SINA_FALLBACK
-from astock.core.datetime_utils import normalize_date
-from astock.sources.market_overview._common import _tail_closes
+from astock.sources.market_overview._common import df_to_tail_closes, safe_retry_df
 from astock.sources.market_overview.usd_index import fetch_usd_index
-from astock.sources.retry import retry_call
 
 logger = logging.getLogger(__name__)
 
@@ -17,20 +14,14 @@ _GLOBAL_INDEX_EM_ONLY = {"美元指数"}
 
 
 def _fetch_us_index_sina(symbol: str, n: int) -> dict[str, float]:
-    try:
-        df = retry_call(f"index_us_stock_sina:{symbol}", lambda: ak.index_us_stock_sina(symbol=symbol))
-    except Exception as e:
-        logger.warning("新浪美股指数 %s 失败: %s", symbol, e)
+    df = safe_retry_df(
+        f"index_us_stock_sina:{symbol}",
+        lambda: ak.index_us_stock_sina(symbol=symbol),
+        logger=logger,
+    )
+    if df is None:
         return {}
-    if df is None or df.empty:
-        return {}
-    pairs: list[tuple[str, float]] = []
-    for _, row in df.iterrows():
-        d = normalize_date(row.get("date"))
-        close = pd.to_numeric(row.get("close"), errors="coerce")
-        if d and pd.notna(close):
-            pairs.append((d, float(close)))
-    return _tail_closes(pairs, n, market="us")
+    return df_to_tail_closes(df, n, date_col="date", value_col="close", market="us")
 
 
 def fetch_global_index(symbol: str, n: int) -> dict[str, float]:

@@ -28,15 +28,3 @@ class ImportResult:
         if self.elapsed is not None:
             d["elapsed"] = self.elapsed
         return d
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ImportResult":
-        return cls(
-            imported=data["imported"],
-            total=data["total"],
-            last_date=data.get("last_date"),
-            last_synced_at=data.get("last_synced_at"),
-            status=data["status"],
-            source_errors=data.get("source_errors"),
-            elapsed=data.get("elapsed"),
-        )

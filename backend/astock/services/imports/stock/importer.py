@@ -18,7 +18,7 @@ from astock.services.imports.stock.history import iter_stock_history
 from astock.services.imports.stock.path_select import build_candidate_pool, select_path
 from astock.services.imports.stock.snapshot import drain_bridge, load_spot_snapshot, report_stock
 from astock.services.imports.turnover import import_turnover
-from astock.services.price_utils import iso_now
+from astock.core.datetime_utils import iso_now
 from astock.services.sync_store import count_rows, get_last_date, get_sync_meta
 from astock.sources.fetch_result import SourceFetchResult
 

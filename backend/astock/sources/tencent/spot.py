@@ -20,7 +20,6 @@ from astock.config import (
     TENCENT_QUOTE_URL,
     TENCENT_TIMEOUT,
 )
-from astock.sources.fetch_result import SourceFetchResult
 from astock.sources.symbols import to_tencent_code
 
 logger = logging.getLogger(__name__)
@@ -90,23 +89,3 @@ def iter_spot_batches(
                     }
                 )
             yield batch_idx, total_batches, records, None
-
-
-def fetch_spot_snapshot(codes: list[str]) -> SourceFetchResult:
-    """codes 为 6 位股票代码；返回 {code, name, amount, market_cap}（元）。"""
-    if not codes:
-        return SourceFetchResult()
-
-    records: list[dict] = []
-    errors: list[str] = []
-    for _, _, batch_records, error in iter_spot_batches(codes):
-        if error:
-            errors.append(error)
-        else:
-            records.extend(batch_records)
-
-    ok = len(errors) == 0
-    logger.info(
-        "腾讯行情快照完成: %s/%s 只解析成功, ok=%s", len(records), len(codes), ok
-    )
-    return SourceFetchResult(records=records, ok=ok, errors=errors)

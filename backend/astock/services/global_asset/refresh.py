@@ -6,18 +6,13 @@ import time
 from sqlmodel import Session
 
 from astock.config import ASSET_PRICE_CACHE_TTL, GLOBAL_ASSETS
-from astock.core.datetime_utils import (
-    filter_settled_closes,
-    is_multi_market_synced,
-    iso_now,
-    market_for_asset_type,
-)
+from astock.core.datetime_utils import is_multi_market_synced, iso_now
+from astock.core.price_utils import anchor_date_excluding_today, global_asset_markets
 from astock.core.redis_client import LATEST_TRADING_DATE_KEY, set_string
 from astock.core.sync_status import SyncStatus
 from astock.models.asset_high import AssetHigh
-from astock.services.global_asset._cache import write_price_cache
-from astock.services.imports._common import build_result
-from astock.services.price_utils import anchor_date_excluding_today, global_asset_markets
+from astock.services.global_asset._cache import parse_asset_fetch_results, write_price_cache
+from astock.services.imports._common import build_result, finalize_import_result, resolve_status
 from astock.services.sync_store import batch_upsert, count_rows, get_sync_meta, upsert_sync_meta
 from astock.sources.akshare import fetch_all_assets
 
@@ -38,7 +33,7 @@ def refresh_asset_highs(db: Session) -> dict:
                 "全球资产最高点刷新跳过: 已覆盖最近可结算日 (last_synced_date=%s)",
                 meta.last_synced_date,
             )
-            result = build_result(
+            return build_result(
                 imported=0,
                 total=total,
                 last_date=meta.last_synced_date,
@@ -47,38 +42,24 @@ def refresh_asset_highs(db: Session) -> dict:
                 last_synced_at=meta.last_synced_at,
                 elapsed=round(time.perf_counter() - start_ts, 2),
             )
-            return result
 
     cached_at = iso_now()
     records: list[dict] = []
-    errors: list[str] = []
     all_closes_for_latest: dict[str, dict[str, float]] = {}
 
-    fetch_results = fetch_all_assets()
-    for asset in GLOBAL_ASSETS:
+    parsed, errors = parse_asset_fetch_results(
+        GLOBAL_ASSETS, fetch_all_assets(), skip_pending=True
+    )
+    for asset, record, market, closes in parsed:
         ticker = asset["ticker"]
-        if asset.get("data_pending"):
-            continue
-        result = fetch_results.get(ticker)
-        if result is None or not result.ok or not result.records:
-            if result:
-                errors.extend(result.errors)
-            else:
-                errors.append(f"{ticker}: 未返回数据")
-            continue
-
-        record = result.records[0]
         try:
             all_time_high = float(record["all_time_high"])
             ath_date = str(record["ath_date"])
         except (KeyError, TypeError, ValueError) as e:
             errors.append(f"{ticker}: 历史最高点数据无效 ({e})")
             continue
-        closes = record.get("recent_closes") or {}
-        market = market_for_asset_type(asset["asset_type"])
         write_price_cache(ticker, closes, market=market)
-        all_closes_for_latest[ticker] = filter_settled_closes(closes, market)
-
+        all_closes_for_latest[ticker] = closes
         records.append(
             {
                 "ticker": ticker,
@@ -107,17 +88,10 @@ def refresh_asset_highs(db: Session) -> dict:
         db,
         "asset_high",
         last_synced_date=latest,
-        status=(
-            SyncStatus.SUCCESS
-            if ok
-            else SyncStatus.PARTIAL_FAILURE
-            if imported
-            else SyncStatus.FAILED
-        ),
+        status=resolve_status(ok, imported),
         error="; ".join(errors[:5]) if errors else None,
     )
 
-    elapsed = time.perf_counter() - start_ts
     result = build_result(
         imported=imported,
         total=len(records),
@@ -125,13 +99,5 @@ def refresh_asset_highs(db: Session) -> dict:
         ok=ok,
         source_errors={"global_assets": "; ".join(errors[:5]) if errors else None},
         last_synced_at=last_synced_at,
-        elapsed=round(elapsed, 2),
     )
-    logger.info(
-        "全球资产最高点刷新完成: imported=%s total=%s status=%s elapsed=%.2fs",
-        result["imported"],
-        result["total"],
-        result["status"],
-        elapsed,
-    )
-    return result
+    return finalize_import_result(result, start_ts=start_ts, log_label="全球资产最高点刷新")

@@ -16,7 +16,7 @@
 |---------|--------|-------------|--------|---------------------|------|
 | 多指数收盘价 | baostock / akshare | `baostock.fetch_point` / `akshare.fetch_cn_index_point` | SQLite `point` + `sync_meta.point_{code}` | `last_synced_date ≥ last_settled_date("cn")`（按指数） | 单线程，4 指数串行 |
 | 两市合计成交额 | baostock 两指数 `amount` 求和 | `baostock.fetch_turnover` | SQLite `turnover` + `sync_meta.turnover` | 同上 | 单线程 |
-| 全市场个股快照 | akshare `stock_zh_a_spot_em`（失败回退腾讯） | `akshare.spot` / `tencent.spot.fetch_spot_snapshot` | 不落库（筛选中间态） | — | akshare 1 次；腾讯回退 60 只/批 |
+| 全市场个股快照 | akshare `stock_zh_a_spot_em`（失败回退腾讯） | `akshare.spot` / `tencent.spot.iter_spot_batches` | 不落库（筛选中间态） | — | akshare 1 次；腾讯回退 60 只/批 |
 | 个股日线成交额 | baostock `query_history_k_data_plus` | `baostock.fetch_stock_amount_history` | SQLite `stock_turnover` | `turnover 最新日 ≤ last_synced` | **ProcessPool（默认 8 worker，仅 Path B）** |
 | 全市场股票代码 | baostock `query_all_stock` | `baostock.fetch_all_stock_codes` | 不落库（仅腾讯回退时用） | — | 单线程 |
 | 美股/贵金属 ATH | akshare | `akshare.global_asset.fetch_all_assets` | SQLite `asset_high` + Redis 最近价 | **`is_multi_market_synced`**（中/美水位均达标） | **故意串行** |
@@ -79,7 +79,7 @@ class SourceFetchResult:
 
 全站**不提供实时行情**：未完成日线的 K 线/现货价不入库、不参与涨跌计算；盘中刷新管理员导入时，已覆盖最近可结算日则跳过外部请求。
 
-实现位于 `core/datetime_utils.py` + `core/price_utils.py`（纯函数）+ `services/price_utils.py`（Redis closes 读写）：
+实现位于 `core/datetime_utils.py` + `core/price_utils.py`（纯函数）+ `services/closes_cache.py`（Redis closes 读写 / ensure）：
 
 | 函数 / 概念 | 说明 |
 |-------------|------|
@@ -120,7 +120,7 @@ class SourceFetchResult:
 - **批量**：60 只/批（`TENCENT_BATCH_SIZE`）
 - **字段**：名称(1)、成交额万元(37)×1e4、总市值亿元(44)×1e8
 - **用途**：akshare 全市场快照失败时，配合 `query_all_stock` 回退拉取 `{code,name,amount,market_cap}`
-- **函数**：`fetch_spot_snapshot` / `iter_spot_batches`
+- **函数**：`iter_spot_batches`
 
 ### akshare 包（全球资产 ATH + 科创50 + A 股快照）
 

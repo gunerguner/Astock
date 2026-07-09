@@ -1,5 +1,6 @@
 """导入器公共工具。"""
 
+import logging
 import time
 from typing import Any
 
@@ -8,6 +9,8 @@ from sqlmodel import Session
 from astock.core.sync_status import SyncStatus
 from astock.services.sync_store import count_rows, get_sync_meta, upsert_sync_meta
 from astock.sources.fetch_result import SourceFetchResult
+
+logger = logging.getLogger(__name__)
 
 _REQUIRED_FIELDS: dict[str, list[str]] = {
     "point": ["index_code", "close", "cached_at"],
@@ -130,3 +133,22 @@ def build_result(
         elapsed=elapsed,
     )
     return result.to_dict()
+
+
+def finalize_import_result(
+    result: dict[str, Any],
+    *,
+    start_ts: float,
+    log_label: str,
+) -> dict[str, Any]:
+    elapsed = time.perf_counter() - start_ts
+    logger.info(
+        "%s完成: imported=%s total=%s status=%s elapsed=%.2fs",
+        log_label,
+        result["imported"],
+        result["total"],
+        result["status"],
+        elapsed,
+    )
+    result["elapsed"] = round(elapsed, 2)
+    return result

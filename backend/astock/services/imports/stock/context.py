@@ -1,6 +1,5 @@
 """个股导入上下文与缓冲写入。"""
 
-import logging
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -13,11 +12,14 @@ from astock.core.exceptions import ExternalSourceAppError
 from astock.core.progress import ProgressReporter, SSEBridge
 from astock.core.sync_status import SyncStatus
 from astock.models.stock_turnover import StockTurnover
-from astock.services.imports._common import build_result, is_missing_value, resolve_status
+from astock.services.imports._common import (
+    build_result,
+    finalize_import_result,
+    is_missing_value,
+    resolve_status,
+)
 from astock.services.sync_store import batch_upsert, count_rows, upsert_sync_meta
 from astock.sources.fetch_result import SourceFetchResult
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -147,13 +149,6 @@ class StockImportContext:
                 f"个股切片导入失败: {result['source_errors'].get('stock')}"
             )
 
-        elapsed = time.perf_counter() - self.start_ts
-        logger.info(
-            "个股切片导入完成: imported=%s total=%s status=%s elapsed=%.2fs",
-            self.imported,
-            result["total"],
-            result["status"],
-            elapsed,
+        return finalize_import_result(
+            result, start_ts=self.start_ts, log_label="个股切片导入"
         )
-        result["elapsed"] = round(elapsed, 2)
-        return result

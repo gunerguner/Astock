@@ -8,7 +8,12 @@ from astock.config import (
     MARKET_OVERVIEW_FAILURE_TTL,
     MARKET_OVERVIEW_ITEMS,
 )
-from astock.core.datetime_utils import last_settled_date
+from astock.core.datetime_utils import iso_now, last_settled_date
+from astock.core.price_utils import (
+    anchor_date_excluding_today,
+    anchor_date_for_closes,
+    overview_item_markets,
+)
 from astock.core.redis_client import (
     MARKET_OVERVIEW_LATEST_DATE_KEY,
     delete_key,
@@ -24,12 +29,6 @@ from astock.schemas.analysis import (
     MarketOverviewResponse,
 )
 from astock.services.closes_cache import build_change_fields, ensure_closes, redis_closes_io
-from astock.services.price_utils import (
-    anchor_date_excluding_today,
-    anchor_date_for_closes,
-    iso_now,
-    overview_item_markets,
-)
 from astock.sources.market_overview import fetch_all_items
 
 logger = logging.getLogger(__name__)

@@ -3,14 +3,17 @@
 import logging
 import time
 from collections.abc import Callable
+from typing import Any
 
 from sqlmodel import Session
 
 from astock.core.exceptions import ExternalSourceAppError
 from astock.core.sync_status import SyncStatus
 from astock.services.imports._common import (
+    aggregate_status,
     build_result,
     build_skip_result,
+    finalize_import_result,
     prepare_records_for_upsert,
     resolve_status,
 )
@@ -99,14 +102,57 @@ def run_daily_import(
             f"{failure_message}: {result['source_errors'].get(source_key)}"
         )
 
-    elapsed = time.perf_counter() - start_ts
-    logger.info(
-        "%s导入完成: imported=%s total=%s status=%s elapsed=%.2fs",
-        log_label,
-        imported,
-        result["total"],
-        result["status"],
-        elapsed,
+    return finalize_import_result(result, start_ts=start_ts, log_label=f"{log_label}导入")
+
+
+def run_multi_daily_import(
+    db: Session,
+    items: list[dict[str, Any]],
+    *,
+    aggregate_failure_message: str,
+    log_label: str,
+    count_model: type,
+) -> dict:
+    """多实体日频导入：逐项 run_daily_import 后聚合 status / errors。"""
+    start_ts = time.perf_counter()
+    total_imported = 0
+    all_errors: list[str] = []
+    source_errors: dict[str, str | None] = {}
+    last_dates: list[str] = []
+    last_synced_ats: list[str] = []
+    statuses: list[SyncStatus] = []
+
+    for item in items:
+        error_label = item.get("error_label", item["log_label"])
+        kwargs = {k: v for k, v in item.items() if k != "error_label"}
+        result = run_daily_import(db, raise_on_failed=False, **kwargs)
+
+        total_imported += result["imported"]
+        statuses.append(result["status"])
+        if result.get("last_date"):
+            last_dates.append(result["last_date"])
+        if result.get("last_synced_at"):
+            last_synced_ats.append(result["last_synced_at"])
+        source_key = kwargs["source_key"]
+        err = (result.get("source_errors") or {}).get(source_key)
+        source_errors[source_key] = err
+        if err:
+            all_errors.append(f"{error_label}: {err}")
+
+    ok = len(all_errors) == 0
+    result = build_result(
+        imported=total_imported,
+        total=count_rows(db, count_model),
+        last_date=max(last_dates) if last_dates else None,
+        ok=ok,
+        source_errors=source_errors if source_errors else None,
+        last_synced_at=max(last_synced_ats) if last_synced_ats else None,
     )
-    result["elapsed"] = round(elapsed, 2)
-    return result
+    result["status"] = aggregate_status(*statuses)
+
+    if result["status"] == SyncStatus.FAILED:
+        raise ExternalSourceAppError(
+            f"{aggregate_failure_message}: {'; '.join(all_errors[:5])}"
+        )
+
+    return finalize_import_result(result, start_ts=start_ts, log_label=log_label)

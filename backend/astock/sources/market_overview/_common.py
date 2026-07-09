@@ -1,6 +1,8 @@
 """market_overview 抓取公共工具。"""
 
+from collections.abc import Callable
 from datetime import timedelta
+from typing import Any
 
 import pandas as pd
 
@@ -10,12 +12,6 @@ from astock.config import (
     EM_USER_AGENT,
 )
 from astock.core.datetime_utils import MarketCode, last_settled_date, normalize_date, now_local
-from astock.sources.retry import retry_call
-from astock.sources.symbols import cn_index_sina_symbol
-
-# 兼容旧 import 名
-_retry_call = retry_call
-_cn_index_sina_symbol = cn_index_sina_symbol
 
 
 def _tail_closes(
@@ -32,6 +28,43 @@ def _tail_closes(
         return {}
     sorted_pairs = sorted(filtered, key=lambda x: x[0])
     return dict(sorted_pairs[-n:])
+
+
+def df_to_tail_closes(
+    df: pd.DataFrame,
+    n: int,
+    *,
+    date_col: str,
+    value_col: str,
+    market: MarketCode = "cn",
+    scale: float = 1.0,
+) -> dict[str, float]:
+    pairs: list[tuple[str, float]] = []
+    for _, row in df.iterrows():
+        d = normalize_date(row.get(date_col))
+        val = pd.to_numeric(row.get(value_col), errors="coerce")
+        if d and pd.notna(val):
+            pairs.append((d, float(val) * scale))
+    return _tail_closes(pairs, n, market=market)
+
+
+def safe_retry_df(
+    label: str,
+    fn: Callable[[], Any],
+    *,
+    logger,
+) -> pd.DataFrame | None:
+    """retry_call + 空表守卫；失败或空表返回 None。"""
+    from astock.sources.retry import retry_call
+
+    try:
+        df = retry_call(label, fn)
+    except Exception as e:
+        logger.warning("%s 失败: %s", label, e)
+        return None
+    if df is None or getattr(df, "empty", True):
+        return None
+    return df
 
 
 def _em_udi_headers() -> dict[str, str]:
