@@ -16,7 +16,7 @@
 <script lang="ts" setup>
   import { useRouter } from 'vue-router';
 
-  import { DEFAULT_ROUTE_NAME } from '@/router/constants';
+  import DEFAULT_ROUTE_NAME from '@/router/constants';
 
   const router = useRouter();
   const back = () => {

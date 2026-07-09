@@ -23,7 +23,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, h, onMounted, onUnmounted, ref, type Ref } from 'vue';
+  import { computed, type Ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { TableColumnData } from '@arco-design/web-vue';
   import {
@@ -32,12 +32,12 @@
     type StockRanking,
     type TurnoverRanking,
   } from '@/api/analysis';
-  import { fetchSyncStatusApi, type SyncStatus } from '@/api/admin';
   import useAsyncRequest from '@/hooks/async-request';
+  import usePageRefresh from '@/hooks/use-page-refresh';
+  import useSyncStatus from '@/hooks/use-sync-status';
   import { formatAmount } from '@/utils/format';
-  import useTableScroll from '@/utils/table';
-  import formatSyncMeta from '@/utils/sync-meta';
-  import { offDataRefresh, onDataRefresh } from '@/utils/data-refresh';
+  import { renderNumCell } from '@/utils/table-cells';
+  import useTableScroll from '@/hooks/use-table-scroll';
 
   const { t } = useI18n();
   const tableScroll = useTableScroll();
@@ -49,7 +49,6 @@
   const DEFAULT_TOP = 20;
 
   type PanelSyncKey = 'turnover' | 'stock';
-
   type RankingResult = TurnoverRanking | StockRanking;
 
   interface RankingPanel {
@@ -57,7 +56,6 @@
     title: string;
     columns: TableColumnData[];
     syncKey: PanelSyncKey;
-    request: () => Promise<RankingResult>;
     loading: Ref<boolean>;
     data: Ref<RankingResult | null>;
     run: () => Promise<RankingResult>;
@@ -74,20 +72,17 @@
     {
       title: t('pages.turnoverRank.columns.sh'),
       align: 'right',
-      render: ({ record }) =>
-        h('span', { class: 'num' }, formatAmount(record.sse_amount)),
+      render: ({ record }) => renderNumCell(formatAmount(record.sse_amount)),
     },
     {
       title: t('pages.turnoverRank.columns.sz'),
       align: 'right',
-      render: ({ record }) =>
-        h('span', { class: 'num' }, formatAmount(record.szse_amount)),
+      render: ({ record }) => renderNumCell(formatAmount(record.szse_amount)),
     },
     {
       title: t('pages.turnoverRank.columns.total'),
       align: 'right',
-      render: ({ record }) =>
-        h('span', { class: 'num' }, formatAmount(record.turnover)),
+      render: ({ record }) => renderNumCell(formatAmount(record.turnover)),
     },
   ]);
 
@@ -111,8 +106,7 @@
     {
       title: t('pages.turnoverRank.columns.turnover'),
       align: 'right',
-      render: ({ record }) =>
-        h('span', { class: 'num' }, formatAmount(record.amount)),
+      render: ({ record }) => renderNumCell(formatAmount(record.amount)),
     },
   ]);
 
@@ -125,7 +119,6 @@
       title: t('pages.turnoverRank.marketTitle'),
       columns: marketColumns.value,
       syncKey: 'turnover',
-      request: () => fetchTurnoverRanking(DEFAULT_TOP),
       ...marketPanel,
     },
     {
@@ -133,41 +126,20 @@
       title: t('pages.turnoverRank.stockTitle'),
       columns: stockColumns.value,
       syncKey: 'stock',
-      request: () => fetchStockRanking(DEFAULT_TOP),
       ...stockPanel,
     },
   ]);
 
-  const syncStatus = ref<SyncStatus | null>(null);
-
-  const panelMetaText = (syncKey: PanelSyncKey) =>
-    formatSyncMeta(syncStatus.value?.[syncKey]);
+  const { panelMetaText, loadSyncStatus } = useSyncStatus();
 
   const getPanelItems = (panel: RankingPanel) => panel.data.value?.items ?? [];
 
   const isPanelLoading = (panel: RankingPanel) => panel.loading.value;
 
-  const loadSyncStatus = async () => {
-    try {
-      syncStatus.value = await fetchSyncStatusApi();
-    } catch {
-      // 静默失败，不影响主要数据展示
-    }
-  };
-
-  const reloadPageData = () => {
+  usePageRefresh(() => {
     Promise.all([
       ...panels.value.map((panel) => panel.run()),
       loadSyncStatus(),
     ]);
-  };
-
-  onMounted(() => {
-    onDataRefresh(reloadPageData);
-    reloadPageData();
-  });
-
-  onUnmounted(() => {
-    offDataRefresh(reloadPageData);
   });
 </script>

@@ -14,6 +14,6 @@ function formatModules(_modules: any, result: RouteRecordNormalized[]) {
   return result;
 }
 
-export const appRoutes: RouteRecordNormalized[] = formatModules(modules, []);
+const appRoutes: RouteRecordNormalized[] = formatModules(modules, []);
 
-export const appExternalRoutes: RouteRecordNormalized[] = [];
+export default appRoutes;

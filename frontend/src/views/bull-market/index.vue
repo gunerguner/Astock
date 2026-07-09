@@ -76,268 +76,31 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, h, onMounted, onUnmounted, reactive, ref } from 'vue';
-  import { useI18n } from 'vue-i18n';
-  import { Tooltip } from '@arco-design/web-vue';
-  import type { TableColumnData } from '@arco-design/web-vue';
-  import {
-    DEFAULT_POINT_THRESHOLDS,
-    fetchBullMarketPointStats,
-    fetchBullMarketTurnoverStats,
-    POINT_INDEX_CODES,
-    type BullMarketStats,
-    type MultiIndexPointStats,
-  } from '@/api/analysis';
-  import { fetchSyncStatusApi, type SyncStatus } from '@/api/admin';
-  import useAsyncRequest from '@/hooks/async-request';
-  import { formatAmount, formatPoint, numClass } from '@/utils/format';
-  import useTableScroll from '@/utils/table';
-  import formatSyncMeta from '@/utils/sync-meta';
-  import { offDataRefresh, onDataRefresh } from '@/utils/data-refresh';
-
-  const { t } = useI18n();
-  const tableScroll = useTableScroll();
+  import usePageRefresh from '@/hooks/use-page-refresh';
+  import useSyncStatus from '@/hooks/use-sync-status';
+  import useTableScroll from '@/hooks/use-table-scroll';
+  import useBullMarket from './use-bull-market';
 
   defineOptions({
     name: 'BullMarket',
   });
 
-  const indexConfigs = [
-    {
-      code: '000001',
-      nameKey: 'pages.bullMarket.indexSh',
-      filterKey: 'pages.bullMarket.filterSh',
-    },
-    {
-      code: '000300',
-      nameKey: 'pages.bullMarket.indexHS300',
-      filterKey: 'pages.bullMarket.filterHS300',
-    },
-    {
-      code: '399006',
-      nameKey: 'pages.bullMarket.indexCYB',
-      filterKey: 'pages.bullMarket.filterCYB',
-    },
-    {
-      code: '000688',
-      nameKey: 'pages.bullMarket.indexKCB50',
-      filterKey: 'pages.bullMarket.filterKCB50',
-    },
-  ] as const;
-
-  const formatPeriodCompact = (start: string, end: string) => `${start}~${end}`;
-
-  interface IndexCell {
-    days: number | null;
-    max: number | null;
-    notAvailable: boolean;
-  }
-
-  interface MergedRow {
-    market: string;
-    start: string;
-    end: string;
-    description?: string | null;
-    indices: Record<string, IndexCell>;
-    turnoverDays: number | null;
-    turnoverMax: number | null;
-  }
-
-  interface BullStatsPair {
-    point: MultiIndexPointStats;
-    turnover: BullMarketStats;
-  }
-
-  const filterForm = reactive({
-    pointThresholds: { ...DEFAULT_POINT_THRESHOLDS },
-    turnoverThresholdTrillion: 2,
-  });
-
+  const tableScroll = useTableScroll();
+  const { metaText, loadSyncStatus } = useSyncStatus('point', 'turnover');
   const {
+    indexConfigs,
+    filterForm,
     loading,
-    data: statsData,
-    run: loadStats,
-  } = useAsyncRequest(async (): Promise<BullStatsPair> => {
-    const [point, turnover] = await Promise.all([
-      fetchBullMarketPointStats(filterForm.pointThresholds),
-      fetchBullMarketTurnoverStats(filterForm.turnoverThresholdTrillion * 1e12),
-    ]);
-    return { point, turnover };
-  });
+    loadStats,
+    turnoverStats,
+    mergedRows,
+    mergedColumns,
+    getIndexTotalDays,
+  } = useBullMarket();
 
-  const pointStats = computed(() => statsData.value?.point ?? null);
-  const turnoverStats = computed(() => statsData.value?.turnover ?? null);
-  const syncStatus = ref<SyncStatus | null>(null);
-
-  const metaText = computed(() =>
-    formatSyncMeta(syncStatus.value?.point, syncStatus.value?.turnover)
-  );
-
-  const pointStatsByIndex = computed(() => {
-    const map = new Map(
-      (pointStats.value?.indices ?? []).map((item) => [item.index_code, item])
-    );
-    return map;
-  });
-
-  const getIndexTotalDays = (indexCode: string) => {
-    const stats = pointStatsByIndex.value.get(indexCode);
-    return stats?.total_days ?? '-';
-  };
-
-  const formatDays = (
-    value: number | null | undefined,
-    notAvailable = false
-  ) => {
-    if (notAvailable) {
-      return '—';
-    }
-    if (value === null || value === undefined) {
-      return '-';
-    }
-    return String(value);
-  };
-
-  const renderUnavailableCell = (content: string, notAvailable: boolean) => {
-    if (!notAvailable) {
-      return h('span', { class: 'num' }, content);
-    }
-    return h(
-      Tooltip,
-      { content: t('pages.bullMarket.notAvailable') },
-      {
-        default: () => h('span', { class: 'num unavailable' }, content),
-      }
-    );
-  };
-
-  const mergedRows = computed<MergedRow[]>(() => {
-    const base =
-      pointStats.value?.indices[0]?.items ?? turnoverStats.value?.items ?? [];
-    const turnoverByMarket = new Map(
-      (turnoverStats.value?.items ?? []).map((item) => [item.market, item])
-    );
-
-    return base.map((item) => {
-      const turnoverItem = turnoverByMarket.get(item.market);
-      const indices = Object.fromEntries(
-        POINT_INDEX_CODES.map((code) => {
-          const indexItem = pointStatsByIndex.value
-            .get(code)
-            ?.items.find((entry) => entry.market === item.market);
-          return [
-            code,
-            {
-              days: indexItem?.days ?? null,
-              max: indexItem?.max_value ?? null,
-              notAvailable: indexItem?.not_available ?? false,
-            },
-          ];
-        })
-      ) as Record<string, IndexCell>;
-
-      return {
-        market: item.market,
-        start: item.start,
-        end: item.end,
-        description: item.description,
-        indices,
-        turnoverDays: turnoverItem?.days ?? null,
-        turnoverMax: turnoverItem?.max_value ?? null,
-      };
-    });
-  });
-
-  const mergedColumns = computed<TableColumnData[]>(() => {
-    const indexColumns: TableColumnData[] = indexConfigs.map((index) => ({
-      title: t(index.filterKey),
-      children: [
-        {
-          title: t('pages.bullMarket.columns.standardDaysShort'),
-          align: 'right',
-          width: 56,
-          render: ({ record }) => {
-            const row = record as MergedRow;
-            const cell = row.indices[index.code];
-            return renderUnavailableCell(
-              formatDays(cell?.days, cell?.notAvailable),
-              cell?.notAvailable ?? false
-            );
-          },
-        },
-        {
-          title: t('pages.bullMarket.columns.maxPointShort'),
-          align: 'right',
-          width: 76,
-          render: ({ record }) => {
-            const row = record as MergedRow;
-            const cell = row.indices[index.code];
-            const content = cell?.notAvailable
-              ? '—'
-              : formatPoint(cell?.max ?? null);
-            if (cell?.notAvailable) {
-              return renderUnavailableCell(content, true);
-            }
-            return h('span', { class: numClass(cell?.max ?? null) }, content);
-          },
-        },
-      ],
-    }));
-
-    return [
-      {
-        title: t('pages.bullMarket.columns.market'),
-        dataIndex: 'market',
-        width: 88,
-      },
-      {
-        title: t('pages.bullMarket.columns.period'),
-        width: 168,
-        render: ({ record }) => formatPeriodCompact(record.start, record.end),
-      },
-      ...indexColumns,
-      {
-        title: t('pages.bullMarket.columns.turnoverDimensionShort'),
-        children: [
-          {
-            title: t('pages.bullMarket.columns.standardDaysShort'),
-            align: 'right',
-            width: 56,
-            render: ({ record }) =>
-              h('span', { class: 'num' }, formatDays(record.turnoverDays)),
-          },
-          {
-            title: t('pages.bullMarket.columns.maxTurnoverShort'),
-            align: 'right',
-            width: 88,
-            render: ({ record }) =>
-              h('span', { class: 'num' }, formatAmount(record.turnoverMax)),
-          },
-        ],
-      },
-    ];
-  });
-
-  const loadSyncStatus = async () => {
-    try {
-      syncStatus.value = await fetchSyncStatusApi();
-    } catch {
-      // 静默失败，不影响主要数据展示
-    }
-  };
-
-  const reloadPageData = () => {
+  usePageRefresh(() => {
     loadStats();
     loadSyncStatus();
-  };
-
-  onMounted(() => {
-    onDataRefresh(reloadPageData);
-    reloadPageData();
-  });
-
-  onUnmounted(() => {
-    offDataRefresh(reloadPageData);
   });
 </script>
 

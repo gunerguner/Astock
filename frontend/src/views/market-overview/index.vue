@@ -19,9 +19,9 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, h, onMounted, onUnmounted } from 'vue';
+  import { computed, h } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import type { TableColumnData } from '@arco-design/web-vue';
+  import type { TableColumnData, TableData } from '@arco-design/web-vue';
   import {
     fetchMarketOverview,
     isMarketOverviewError,
@@ -29,21 +29,17 @@
     type MarketOverviewRow,
   } from '@/api/analysis';
   import useAsyncRequest from '@/hooks/async-request';
+  import usePageRefresh from '@/hooks/use-page-refresh';
   import {
     isDividerRow,
     toTableRow,
     useDividerTable,
     type BaseDividerRow,
   } from '@/hooks/grouped-table';
-  import {
-    formatPercent,
-    formatPrice,
-    getPercentClass,
-    numClass,
-  } from '@/utils/format';
   import renderAssetNameWithTooltip from '@/utils/render-asset-cell';
-  import useTableScroll from '@/utils/table';
-  import { offDataRefresh, onDataRefresh } from '@/utils/data-refresh';
+  import { renderPercentCell, renderPriceCell } from '@/utils/table-cells';
+  import { formatLatestDateMeta } from '@/utils/sync-meta';
+  import useTableScroll from '@/hooks/use-table-scroll';
 
   const { t } = useI18n();
   const tableScroll = useTableScroll();
@@ -66,12 +62,9 @@
     fetchMarketOverview(forceRefresh ?? false)
   );
 
-  const metaText = computed(() => {
-    if (!overview.value?.latest_trading_date) return '';
-    return t('common.metaLatestDate', {
-      date: overview.value.latest_trading_date,
-    });
-  });
+  const metaText = computed(() =>
+    formatLatestDateMeta(overview.value?.latest_trading_date)
+  );
 
   const formatPeriod = (start: string | null, end: string | null) => {
     if (!start || !end) return '';
@@ -118,6 +111,17 @@
     return rows;
   });
 
+  const guardDataRow = (record: TableData) => {
+    const row = toTableRow<TableRow>(record);
+    if (isDividerRow(row)) {
+      return null;
+    }
+    if (isMarketOverviewError(row)) {
+      return 'error' as const;
+    }
+    return row;
+  };
+
   const columns = computed<TableColumnData[]>(() => [
     {
       title: t('pages.marketOverview.columns.asset'),
@@ -138,56 +142,37 @@
       title: t('pages.marketOverview.columns.currentPrice'),
       align: 'right',
       render: ({ record }) => {
-        const row = toTableRow<TableRow>(record);
-        if (isDividerRow(row)) return null;
-        if (isMarketOverviewError(row)) {
+        const row = guardDataRow(record);
+        if (!row) return null;
+        if (row === 'error') {
           return t('pages.marketOverview.fetchError');
         }
-        return h(
-          'span',
-          { class: `num-price ${numClass(row.current_price)}` },
-          formatPrice(row.current_price)
-        );
+        return renderPriceCell(row.current_price);
       },
     },
     {
       title: t('pages.marketOverview.columns.dailyChange'),
       align: 'right',
       render: ({ record }) => {
-        const row = toTableRow<TableRow>(record);
-        if (isDividerRow(row) || isMarketOverviewError(row)) return null;
-        return h(
-          'span',
-          { class: getPercentClass(row.daily_change) },
-          formatPercent(row.daily_change)
-        );
+        const row = guardDataRow(record);
+        if (!row || row === 'error') return null;
+        return renderPercentCell(row.daily_change);
       },
     },
     {
       title: t('pages.marketOverview.columns.weeklyChange'),
       align: 'right',
       render: ({ record }) => {
-        const row = toTableRow<TableRow>(record);
-        if (isDividerRow(row) || isMarketOverviewError(row)) return null;
-        return h(
-          'span',
-          { class: getPercentClass(row.weekly_change) },
-          formatPercent(row.weekly_change)
-        );
+        const row = guardDataRow(record);
+        if (!row || row === 'error') return null;
+        return renderPercentCell(row.weekly_change);
       },
     },
   ]);
 
   const { spanMethod, rowClass } = useDividerTable(columns);
 
-  const reloadOverview = () => loadOverview(true);
-
-  onMounted(() => {
-    onDataRefresh(reloadOverview);
-    loadOverview();
-  });
-
-  onUnmounted(() => {
-    offDataRefresh(reloadOverview);
+  usePageRefresh(() => loadOverview(true), {
+    initialLoad: () => loadOverview(),
   });
 </script>

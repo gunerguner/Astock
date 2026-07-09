@@ -19,10 +19,10 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, h, onMounted, onUnmounted } from 'vue';
+  import { computed, h } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { Tag } from '@arco-design/web-vue';
-  import type { TableColumnData } from '@arco-design/web-vue';
+  import type { TableColumnData, TableData } from '@arco-design/web-vue';
   import {
     fetchAssetPriceLevels,
     isPriceLevelPending,
@@ -30,22 +30,24 @@
     type PriceLevelRow,
   } from '@/api/analysis';
   import useAsyncRequest from '@/hooks/async-request';
+  import usePageRefresh from '@/hooks/use-page-refresh';
   import {
     isDividerRow,
     toTableRow,
     useDividerTable,
     type BaseDividerRow,
   } from '@/hooks/grouped-table';
-  import {
-    formatPercent,
-    formatPrice,
-    getPercentClass,
-    numClass,
-    CONCLUSION_I18N_KEYS,
-  } from '@/utils/format';
+  import { CONCLUSION_I18N_KEYS } from '@/utils/format';
   import renderAssetNameWithTooltip from '@/utils/render-asset-cell';
-  import useTableScroll from '@/utils/table';
-  import { offDataRefresh, onDataRefresh } from '@/utils/data-refresh';
+  import {
+    renderNumCell,
+    renderPendingDash,
+    renderPercentCell,
+    renderPlainPriceCell,
+    renderPriceCell,
+  } from '@/utils/table-cells';
+  import { formatLatestDateMeta } from '@/utils/sync-meta';
+  import useTableScroll from '@/hooks/use-table-scroll';
 
   const { t } = useI18n();
   const tableScroll = useTableScroll();
@@ -67,7 +69,6 @@
   ]);
 
   type DividerRow = BaseDividerRow;
-
   type TableRow = (PriceLevelRow & { key: string }) | DividerRow;
 
   const {
@@ -78,12 +79,9 @@
     fetchAssetPriceLevels(forceRefresh ?? false)
   );
 
-  const metaText = computed(() => {
-    if (!levels.value?.latest_trading_date) return '';
-    return t('common.metaLatestDate', {
-      date: levels.value.latest_trading_date,
-    });
-  });
+  const metaText = computed(() =>
+    formatLatestDateMeta(levels.value?.latest_trading_date)
+  );
 
   const conclusionColor = (conclusion: string) => {
     if (conclusion === 'pending') return 'gray';
@@ -162,6 +160,17 @@
     );
   };
 
+  const guardDataRow = (record: TableData) => {
+    const row = toTableRow<TableRow>(record);
+    if (isDividerRow(row)) {
+      return null;
+    }
+    if (isPriceLevelPending(row)) {
+      return 'pending' as const;
+    }
+    return row;
+  };
+
   const columns = computed<TableColumnData[]>(() => [
     {
       title: t('pages.assetPriceLevels.columns.asset'),
@@ -177,93 +186,65 @@
       title: t('pages.assetPriceLevels.columns.currentPrice'),
       align: 'right',
       render: ({ record }) => {
-        const row = toTableRow<TableRow>(record);
-        if (isDividerRow(row)) return null;
-        if (isPriceLevelPending(row)) {
-          return h('span', { class: 'num' }, '--');
-        }
-        return h(
-          'span',
-          { class: `num-price ${numClass(row.current_price)}` },
-          formatPrice(row.current_price)
-        );
+        const row = guardDataRow(record);
+        if (!row) return null;
+        if (row === 'pending') return renderPendingDash();
+        return renderPriceCell(row.current_price);
       },
     },
     {
       title: t('pages.assetPriceLevels.columns.athPrice'),
       align: 'right',
       render: ({ record }) => {
-        const row = toTableRow<TableRow>(record);
-        if (isDividerRow(row)) return null;
-        if (isPriceLevelPending(row)) {
-          return h('span', { class: 'num' }, '--');
-        }
-        return h(
-          'span',
-          { class: numClass(row.all_time_high) },
-          formatPrice(row.all_time_high)
-        );
+        const row = guardDataRow(record);
+        if (!row) return null;
+        if (row === 'pending') return renderPendingDash();
+        return renderPlainPriceCell(row.all_time_high);
       },
     },
     {
       title: t('pages.assetPriceLevels.columns.athDiff'),
       align: 'right',
       render: ({ record }) => {
-        const row = toTableRow<TableRow>(record);
-        if (isDividerRow(row)) return null;
-        if (isPriceLevelPending(row)) {
-          return h('span', { class: 'num' }, '--');
-        }
-        return h(
-          'span',
-          { class: getPercentClass(row.percentage_diff) },
-          formatPercent(row.percentage_diff)
-        );
+        const row = guardDataRow(record);
+        if (!row) return null;
+        if (row === 'pending') return renderPendingDash();
+        return renderPercentCell(row.percentage_diff);
       },
     },
     {
       title: t('pages.assetPriceLevels.columns.athDays'),
       align: 'right',
       render: ({ record }) => {
-        const row = toTableRow<TableRow>(record);
-        if (isDividerRow(row)) return null;
-        if (isPriceLevelPending(row)) {
-          return h('span', { class: 'num' }, '--');
-        }
-        return h('span', { class: 'num' }, String(row.ath_days));
+        const row = guardDataRow(record);
+        if (!row) return null;
+        if (row === 'pending') return renderPendingDash();
+        return renderNumCell(String(row.ath_days));
       },
     },
     {
       title: t('pages.assetPriceLevels.columns.dailyChange'),
       align: 'right',
       render: ({ record }) => {
-        const row = toTableRow<TableRow>(record);
-        if (isDividerRow(row) || isPriceLevelPending(row)) return null;
-        return h(
-          'span',
-          { class: getPercentClass(row.daily_change) },
-          formatPercent(row.daily_change)
-        );
+        const row = guardDataRow(record);
+        if (!row || row === 'pending') return null;
+        return renderPercentCell(row.daily_change);
       },
     },
     {
       title: t('pages.assetPriceLevels.columns.weeklyChange'),
       align: 'right',
       render: ({ record }) => {
-        const row = toTableRow<TableRow>(record);
-        if (isDividerRow(row) || isPriceLevelPending(row)) return null;
-        return h(
-          'span',
-          { class: getPercentClass(row.weekly_change) },
-          formatPercent(row.weekly_change)
-        );
+        const row = guardDataRow(record);
+        if (!row || row === 'pending') return null;
+        return renderPercentCell(row.weekly_change);
       },
     },
     {
       title: t('pages.assetPriceLevels.columns.conclusion'),
       render: ({ record }) => {
-        const row = toTableRow<TableRow>(record);
-        if (isDividerRow(row)) return null;
+        const row = guardDataRow(record);
+        if (!row || row === 'pending') return null;
         const conclusionKey = CONCLUSION_I18N_KEYS[row.conclusion];
         const label = conclusionKey ? t(conclusionKey) : row.conclusion;
         return h(Tag, { color: conclusionColor(row.conclusion) }, () => label);
@@ -273,14 +254,7 @@
 
   const { spanMethod, rowClass } = useDividerTable(columns);
 
-  const reloadLevels = () => loadLevels(true);
-
-  onMounted(() => {
-    onDataRefresh(reloadLevels);
-    loadLevels();
-  });
-
-  onUnmounted(() => {
-    offDataRefresh(reloadLevels);
+  usePageRefresh(() => loadLevels(true), {
+    initialLoad: () => loadLevels(),
   });
 </script>

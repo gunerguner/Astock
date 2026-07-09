@@ -73,10 +73,6 @@ export function numClass(value: number | null | undefined): string {
   return value < 0 ? 'num num-negative' : 'num';
 }
 
-export function formatPeriod(start: string, end: string): string {
-  return `${start} ~ ${end}`;
-}
-
 /** 后端返回结论 code，前端做 i18n 映射 */
 export const CONCLUSION_I18N_KEYS: Record<string, string> = {
   pending: 'pages.assetPriceLevels.conclusion.pending',

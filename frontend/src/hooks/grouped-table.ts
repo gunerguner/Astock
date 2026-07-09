@@ -43,5 +43,5 @@ export function useDividerTable(columns: MaybeRef<TableColumnData[]>) {
   const rowClass = (record: TableData) =>
     isDividerRow(record) ? 'section-divider-row' : '';
 
-  return { spanMethod, rowClass, isDividerRow, toTableRow };
+  return { spanMethod, rowClass };
 }

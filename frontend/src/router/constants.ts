@@ -1,9 +1,3 @@
-export const WHITE_LIST = [{ name: 'notFound', children: [] }];
+const DEFAULT_ROUTE_NAME = 'BullMarket';
 
-export const NOT_FOUND = {
-  name: 'notFound',
-};
-
-export const REDIRECT_ROUTE_NAME = 'Redirect';
-
-export const DEFAULT_ROUTE_NAME = 'BullMarket';
+export default DEFAULT_ROUTE_NAME;

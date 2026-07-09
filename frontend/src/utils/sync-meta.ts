@@ -1,6 +1,11 @@
 import type { SyncStatusItem } from '@/api/admin';
 import i18n from '@/locale';
 
+export function formatLatestDateMeta(date: string | null | undefined): string {
+  if (!date) return '';
+  return i18n.global.t('common.metaLatestDate', { date });
+}
+
 /**
  * 合并多个数据集的同步状态，取最新的数据日期，
  * 生成统一的"最新数据日期"展示文案。
@@ -17,7 +22,5 @@ export default function formatSyncMeta(
     .sort()
     .at(-1);
 
-  return latestDate
-    ? i18n.global.t('common.metaLatestDate', { date: latestDate })
-    : '';
+  return formatLatestDateMeta(latestDate);
 }

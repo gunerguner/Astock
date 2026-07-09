@@ -1,16 +1,12 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import NProgress from 'nprogress';
-import 'nprogress/nprogress.css';
 
-import { appRoutes } from './routes';
-import { REDIRECT_MAIN, NOT_FOUND_ROUTE } from './routes/base';
+import appRoutes from './routes';
+import { NOT_FOUND_ROUTE } from './routes/base';
 import createRouteGuard from './guard';
-
-NProgress.configure({ showSpinner: false });
 
 const router = createRouter({
   history: createWebHistory(),
-  routes: [...appRoutes, REDIRECT_MAIN, NOT_FOUND_ROUTE],
+  routes: [...appRoutes, NOT_FOUND_ROUTE],
   scrollBehavior() {
     return { top: 0 };
   },
