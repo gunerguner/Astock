@@ -8,6 +8,7 @@ from astock.sources.baostock.point_source import fetch_point
 from astock.sources.baostock.session import (
     BaostockRecvTimeoutError,
     baostock_session,
+    baostock_session_hold,
     configure_worker_socket,
 )
 from astock.sources.baostock.stock_source import (
@@ -19,6 +20,7 @@ from astock.sources.baostock.turnover_source import fetch_turnover
 __all__ = [
     "BaostockRecvTimeoutError",
     "baostock_session",
+    "baostock_session_hold",
     "configure_worker_socket",
     "fetch_all_stock_codes",
     "fetch_all_stock_codes_logged_in",

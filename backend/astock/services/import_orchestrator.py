@@ -11,6 +11,7 @@ from astock.services.global_asset.refresh import refresh_asset_highs
 from astock.services.imports import import_point, import_stock, import_turnover
 from astock.services.imports._common import aggregate_status
 from astock.services.imports.stock import import_stock_gen
+from astock.sources.baostock import baostock_session_hold
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,38 @@ def _stream_stock_phase(
     return stock_result
 
 
+def _stream_all_phases(
+    db: Session,
+    reporter: ProgressReporter,
+    bridge: SSEBridge,
+) -> Iterator[str]:
+    """全量刷新：baostock 三段共享登录；全球资产在主线程串行（akshare/mini_racer 不可进线程池）。"""
+    with baostock_session_hold():
+        turnover_result = yield from _stream_run_phase(
+            db, "turnover", import_turnover, reporter, bridge
+        )
+        point_result = yield from _stream_run_phase(
+            db, "point", import_point, reporter, bridge
+        )
+        stock_result = yield from _stream_stock_phase(db, reporter, bridge)
+
+    global_assets_result = yield from _stream_run_phase(
+        db, "global_assets", refresh_asset_highs, reporter, bridge
+    )
+    return {
+        "turnover": turnover_result,
+        "point": point_result,
+        "stock": stock_result,
+        "global_assets": global_assets_result,
+        "status": aggregate_status(
+            turnover_result["status"],
+            point_result["status"],
+            stock_result["status"],
+            global_assets_result["status"],
+        ),
+    }
+
+
 def import_dataset_stream(
     db: Session,
     dataset: ImportDataset,
@@ -72,28 +105,7 @@ def import_dataset_stream(
                     db, "global_assets", refresh_asset_highs, reporter, bridge
                 )
             case ImportDataset.all:
-                turnover_result = yield from _stream_run_phase(
-                    db, "turnover", import_turnover, reporter, bridge
-                )
-                point_result = yield from _stream_run_phase(
-                    db, "point", import_point, reporter, bridge
-                )
-                stock_result = yield from _stream_stock_phase(db, reporter, bridge)
-                global_assets_result = yield from _stream_run_phase(
-                    db, "global_assets", refresh_asset_highs, reporter, bridge
-                )
-                result = {
-                    "turnover": turnover_result,
-                    "point": point_result,
-                    "stock": stock_result,
-                    "global_assets": global_assets_result,
-                    "status": aggregate_status(
-                        turnover_result["status"],
-                        point_result["status"],
-                        stock_result["status"],
-                        global_assets_result["status"],
-                    ),
-                }
+                result = yield from _stream_all_phases(db, reporter, bridge)
             case _:
                 raise ValueError(f"unsupported dataset: {dataset}")
 

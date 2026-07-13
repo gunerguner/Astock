@@ -109,6 +109,7 @@ class SourceFetchResult:
 
 - **目录**：`sources/baostock/`（`session.py`、`point_source.py`、`turnover_source.py`、`stock_source.py`、`daily_market.py`）
 - **超时**：`session.configure_worker_socket()` 设置 socket 30s（需 **baostock≥0.9.3** 才有日更全市场 API）
+- **会话**：`baostock_session()` 可重入；`baostock_session_hold()` 供 `dataset=all` 推迟 logout（本身不 login）。**禁止**多线程并发调 baostock（全局单 socket）
 
 | 函数 | 拉取内容 | 说明 |
 |------|----------|------|
@@ -166,7 +167,7 @@ class SourceFetchResult:
 | `POST /admin/data/import/stream?dataset=point` | `imports/point` | baostock 三指数 + akshare 科创50 | 按指数独立水位；`cn` 结算日跳过 |
 | `POST /admin/data/import/stream?dataset=stock` | `imports/stock/` | baostock 日更全市场 TopN + `query_all_stock` 名称 | 依赖 turnover 最新日；无新交易日跳过 |
 | `POST /admin/data/import/stream?dataset=global_assets` | `global_asset/refresh.py` | akshare ATH + recent closes | SQLite + Redis；`is_multi_market_synced` 跳过 |
-| `POST /admin/data/import/stream?dataset=all` | `import_orchestrator` | 四阶段顺序执行 + SSE 进度 | 各阶段独立跳过 |
+| `POST /admin/data/import/stream?dataset=all` | `import_orchestrator` | baostock 三段共享 login；全球资产主线程串行 akshare；SSE 按四阶段顺序 | 各阶段独立跳过 |
 | `GET /analysis/asset-price-levels` | `global_asset/query.py` | 读 DB + Redis（miss 时 akshare 补拉） | 每股按 `us` 结算过滤；`force_refresh` 全部重拉；Redis TTL 86400s |
 | `GET /analysis/market-overview` | `market_overview/service` | Redis（未覆盖结算日 / 不足时 `fetch_all_items`） | 每项独立锚点；`closes_cover_settled` 复用；失败冷却 300s；`force_refresh` 全部重拉 |
 | 分析类只读 API（牛市统计/排名） | `services/queries/` | **无外部请求**，纯 SQLite 聚合 | — |
@@ -189,7 +190,7 @@ class SourceFetchResult:
 2. 不在 client 内操作 DB / Redis——写库归 `services/imports/` 或对应 service。
 3. 部分失败收集到 `errors`，不静默吞掉。
 4. 网络/限流类失败优先重试 + 退避。
-5. 并发注意：akshare **串行**（macOS V8 限制）；个股切片整段缺口共用一次 baostock login，按日串行调日更 API。
+5. 并发注意：akshare **串行**（macOS V8 限制）；个股切片整段缺口共用一次 baostock login，按日串行调日更 API；`dataset=all` 下成交额/点位/个股再经 `baostock_session_hold` 共享同一次 login，且不对 baostock 开多线程。
 
 ## 6. 依赖
 
@@ -395,9 +396,10 @@ flowchart TD
 
 ### 7.7 全量刷新编排（`dataset=all`）
 
-`import_orchestrator.import_dataset_stream` **固定顺序**：
+SSE 进度仍按固定顺序上报：`turnover` → `point` → `stock` → `global_assets`。墙钟上有两处优化：
 
-1. `turnover` → 2. `point` → 3. `stock` → 4. `global_assets`
+1. **共享 baostock 登录**：`baostock_session_hold()` 包住成交额 / 点位 / 个股三段；嵌套的 `baostock_session()` 可重入，整段只 login/logout 一次。hold 本身不 login——若三段均 skip 则不触网。
+2. **全球资产串行**：`global_assets` 在 baostock 段之后于**主线程**调用 akshare（`fetch_all_assets` 内 ticker 仍串行）。**不**用线程池预拉——macOS mini_racer 在非主线程或与科创50 并发会 fatal/挂死。**不对 baostock 开多线程**。
 
 每阶段经 `ProgressReporter` 推送 SSE `progress` 事件（`phase` / `imported` / `elapsed` / `last_date`）。`stock` 阶段为生成器，步骤间 `SSEBridge` 保活。
 

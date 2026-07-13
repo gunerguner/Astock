@@ -15,41 +15,60 @@ from astock.services.global_asset._cache import parse_asset_fetch_results, write
 from astock.services.imports._common import build_result, finalize_import_result, resolve_status
 from astock.services.sync_store import batch_upsert, count_rows, get_sync_meta, upsert_sync_meta
 from astock.sources.akshare import fetch_all_assets
+from astock.sources.fetch_result import SourceFetchResult
 
 logger = logging.getLogger(__name__)
 
 
-def refresh_asset_highs(db: Session) -> dict:
-    """刷新全球资产历史最高点入库，并同步价格缓存与最新交易日。"""
-    start_ts = time.perf_counter()
+def should_skip_asset_highs(db: Session) -> bool:
+    """水位已覆盖中美结算日且表非空时跳过外部拉取。"""
     meta = get_sync_meta(db, "asset_high")
-    if (
+    if not (
         meta
         and meta.last_status == SyncStatus.SUCCESS
         and is_multi_market_synced(meta.last_synced_date)
     ):
+        return False
+    return count_rows(db, AssetHigh) > 0
+
+
+def refresh_asset_highs(
+    db: Session,
+    *,
+    prefetched: dict[str, SourceFetchResult] | None = None,
+) -> dict:
+    """刷新全球资产历史最高点入库，并同步价格缓存与最新交易日。
+
+    prefetched: 编排层提前并行拉取的 akshare 结果；传入则不再调用 fetch_all_assets。
+    """
+    start_ts = time.perf_counter()
+    if should_skip_asset_highs(db):
+        meta = get_sync_meta(db, "asset_high")
+        assert meta is not None
         total = count_rows(db, AssetHigh)
-        if total > 0:
-            logger.info(
-                "全球资产最高点刷新跳过: 已覆盖最近可结算日 (last_synced_date=%s)",
-                meta.last_synced_date,
-            )
-            return build_result(
-                imported=0,
-                total=total,
-                last_date=meta.last_synced_date,
-                ok=True,
-                source_errors={"global_assets": None},
-                last_synced_at=meta.last_synced_at,
-                elapsed=round(time.perf_counter() - start_ts, 2),
-            )
+        logger.info(
+            "全球资产最高点刷新跳过: 已覆盖最近可结算日 (last_synced_date=%s)",
+            meta.last_synced_date,
+        )
+        return build_result(
+            imported=0,
+            total=total,
+            last_date=meta.last_synced_date,
+            ok=True,
+            source_errors={"global_assets": None},
+            last_synced_at=meta.last_synced_at,
+            elapsed=round(time.perf_counter() - start_ts, 2),
+        )
 
     cached_at = iso_now()
     records: list[dict] = []
     all_closes_for_latest: dict[str, dict[str, float]] = {}
 
+    fetch_results: dict[str, SourceFetchResult] = (
+        prefetched if prefetched is not None else fetch_all_assets()
+    )
     parsed, errors = parse_asset_fetch_results(
-        GLOBAL_ASSETS, fetch_all_assets(), skip_pending=True
+        GLOBAL_ASSETS, fetch_results, skip_pending=True
     )
     for row in parsed:
         ticker = row.asset["ticker"]

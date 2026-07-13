@@ -2,9 +2,9 @@
 
 import logging
 import socket
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import baostock as bs
 import baostock.common.context as bs_context
@@ -15,6 +15,10 @@ from astock.sources.fetch_result import SourceFetchResult
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
+
+# 可重入会话：外层 hold 推迟 logout，嵌套 with 共享同一次 login。
+_refcount = 0
+_login_result: Any = None
 
 
 class BaostockRecvTimeoutError(Exception):
@@ -28,15 +32,43 @@ def configure_worker_socket() -> None:
         sock.settimeout(BAOSTOCK_SOCKET_TIMEOUT)
 
 
+def _logout_if_idle() -> None:
+    global _refcount, _login_result
+    if _refcount == 0 and _login_result is not None:
+        bs.logout()
+        _login_result = None
+
+
+@contextmanager
+def baostock_session_hold() -> Iterator[None]:
+    """推迟 logout：嵌套的 baostock_session 在 hold 退出前保持登录。
+
+    本身不 login；若 hold 期间无人实际拉取，则不会触网。
+    """
+    global _refcount
+    _refcount += 1
+    try:
+        yield
+    finally:
+        _refcount -= 1
+        _logout_if_idle()
+
+
 @contextmanager
 def baostock_session():
-    lg = bs.login()
-    if lg.error_code == "0":
-        configure_worker_socket()
+    """baostock login 上下文；可重入，与 baostock_session_hold 共享引用计数。"""
+    global _refcount, _login_result
+    if _login_result is None:
+        lg = bs.login()
+        if lg.error_code == "0":
+            configure_worker_socket()
+        _login_result = lg
+    _refcount += 1
     try:
-        yield lg
+        yield _login_result
     finally:
-        bs.logout()
+        _refcount -= 1
+        _logout_if_idle()
 
 
 def _collect_rows(rs) -> list:
