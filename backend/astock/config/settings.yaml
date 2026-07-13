@@ -2,10 +2,7 @@
 business:
   start_date: "2005-01-01"
   turnover_threshold: 2000000000000
-  market_cap_threshold: 100000000000
-  stock_turnover_slice_threshold: 30000000000
-  stock_history_fetch_workers: 8
-  path_b_candidate_amount_floor: 10000000000
+  stock_slice_top_n: 20
   market_overview_recent_days: 10
   weekly_baseline_offset: 6
   price_level_conclusions:
@@ -16,10 +13,6 @@ business:
 
 # 外部数据源（端点、超时、重试）
 api:
-  tencent:
-    quote_url: "http://qt.gtimg.cn/q="
-    batch_size: 60
-    timeout: 10
   baostock:
     socket_timeout: 30
   eastmoney:

@@ -36,6 +36,7 @@ export default {
   'adminRefresh.progress.title': 'Refresh Progress',
   'adminRefresh.progress.overall': 'Overall',
   'adminRefresh.progress.rows': 'rows',
+  'adminRefresh.progress.days': 'days',
   'adminRefresh.progress.close': 'Close',
   'adminRefresh.progress.errorDetails': 'Error Details',
   'adminRefresh.progress.status.pending': 'Pending',

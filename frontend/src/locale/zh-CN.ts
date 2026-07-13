@@ -36,6 +36,7 @@ export default {
   'adminRefresh.progress.title': '刷新进度',
   'adminRefresh.progress.overall': '总进度',
   'adminRefresh.progress.rows': '行',
+  'adminRefresh.progress.days': '日',
   'adminRefresh.progress.close': '关闭',
   'adminRefresh.progress.errorDetails': '错误详情',
   'adminRefresh.progress.status.pending': '等待中',

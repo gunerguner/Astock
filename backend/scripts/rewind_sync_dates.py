@@ -164,7 +164,7 @@ def rewind(
 
         db.commit()
         _print_status(db, "回拨后")
-        print("\n完成。可重新触发管理员刷新测试 Path A/B。")
+        print("\n完成。可重新触发管理员刷新测试个股切片导入。")
 
 
 def main() -> None:

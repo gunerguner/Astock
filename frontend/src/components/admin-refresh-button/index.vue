@@ -20,9 +20,11 @@
     :ok-button-props="{ status: 'danger' }"
     @ok="handleConfirm"
     @cancel="handleClose"
+    @open="focusPasswordInput"
   >
     <p class="refresh-hint">{{ $t('adminRefresh.hint') }}</p>
     <a-input-password
+      ref="passwordInputRef"
       v-model="inputPassword"
       :placeholder="$t('adminRefresh.passwordPlaceholder')"
       allow-clear
@@ -34,7 +36,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { ref } from 'vue';
+  import { nextTick, ref } from 'vue';
   import { Message } from '@arco-design/web-vue';
   import { useI18n } from 'vue-i18n';
   import RefreshProgressModal from '@/components/refresh-progress-modal/index.vue';
@@ -46,11 +48,18 @@
   const { refreshAllData, refreshing } = useAdminDataRefresh();
   const modalVisible = ref(false);
   const inputPassword = ref('');
+  const passwordInputRef = ref<{ focus: () => void } | null>(null);
 
   function openConfirmModal() {
     if (refreshing.value) return;
     inputPassword.value = '';
     modalVisible.value = true;
+  }
+
+  function focusPasswordInput() {
+    nextTick(() => {
+      passwordInputRef.value?.focus();
+    });
   }
 
   function handleClose() {

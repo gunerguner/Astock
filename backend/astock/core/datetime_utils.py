@@ -4,6 +4,8 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
+from astock.core.trading_calendar import TradingCalendar
+
 _SHANGHAI = ZoneInfo("Asia/Shanghai")
 _NEW_YORK = ZoneInfo("America/New_York")
 
@@ -49,13 +51,16 @@ def last_settled_date(market: MarketCode = "cn") -> str:
 
     cn：上海 20:00 后算当日已结算（避免收盘后日线源空窗）；
     us：美东 16:00 后算当日已结算。
+    候选上界经 XSHG/XNYS 回退到最近交易日（跳过周末与休市）。
     """
     tz = _NEW_YORK if market == "us" else _SHANGHAI
     now = datetime.now(tz)
     today = now.strftime("%Y-%m-%d")
     if now.hour >= _MARKET_CLOSE_HOUR[market]:
-        return today
-    return add_calendar_days(today, -1)
+        candidate = today
+    else:
+        candidate = add_calendar_days(today, -1)
+    return TradingCalendar.previous_session_on_or_before(candidate, market)
 
 
 def filter_settled_closes(

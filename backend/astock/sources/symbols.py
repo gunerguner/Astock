@@ -27,11 +27,6 @@ def to_baostock_code(code: str) -> str:
     return f"{prefix}.{code}"
 
 
-def to_tencent_code(code: str) -> str:
-    prefix = "sh" if code.startswith("6") else "sz"
-    return f"{prefix}{code}"
-
-
 def parse_baostock_code(code: str) -> tuple[str, str] | None:
     """解析 baostock 代码 `sh.600000` → (exchange, digits)。"""
     m = _BAOSTOCK_CODE_RE.match(code)

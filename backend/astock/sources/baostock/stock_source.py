@@ -1,12 +1,10 @@
-"""baostock 个股代码与日线成交额。"""
+"""baostock 全市场股票代码清单。"""
 
 import logging
-import time
 
 import baostock as bs
 
-from astock.config import FETCH_RETRIES, FETCH_RETRY_DELAY, START_DATE, STOCK_CODE_PREFIXES
-from astock.core.datetime_utils import last_settled_date
+from astock.config import STOCK_CODE_PREFIXES
 from astock.sources.baostock.session import (
     _collect_rows,
     _login_failure,
@@ -15,94 +13,48 @@ from astock.sources.baostock.session import (
     baostock_session,
 )
 from astock.sources.fetch_result import SourceFetchResult
-from astock.sources.symbols import parse_baostock_code, to_baostock_code
+from astock.sources.symbols import parse_baostock_code
 
 logger = logging.getLogger(__name__)
 
 
-def fetch_all_stock_codes(as_of_date: str) -> SourceFetchResult:
-    """全市场正常交易的沪深主板/中小板/创业板/科创板股票代码清单（不含指数/基金/B股）。
+def _parse_stock_code_rows(rows: list) -> list[dict]:
+    records = []
+    for code, status, name in rows:
+        if status != "1":
+            continue
+        parsed = parse_baostock_code(code)
+        if not parsed:
+            continue
+        exchange, digits = parsed
+        prefixes = tuple(STOCK_CODE_PREFIXES.get(exchange, ()))
+        if prefixes and not digits.startswith(prefixes):
+            continue
+        records.append({"code": digits, "name": name})
+    return records
 
-    用于个股大市值筛选的候选代码池，替代 akshare 实时快照里的代码来源。
-    as_of_date 需为已知有效交易日（例如 turnover 表中的最新日期），
-    baostock 若传入非交易日会返回空结果。
-    """
+
+def fetch_all_stock_codes_logged_in(as_of_date: str) -> SourceFetchResult:
+    """已 login 的会话内拉取股票代码+名称清单。"""
+    rs = bs.query_all_stock(day=as_of_date)
+    if failed := _query_failure("全市场代码清单查询失败", rs):
+        return failed
+
+    result = _safe_baostock_call(
+        "全市场代码清单读取超时",
+        lambda: _collect_rows(rs),
+    )
+    if isinstance(result, SourceFetchResult):
+        return result
+
+    records = _parse_stock_code_rows(result)
+    logger.info("全市场股票代码清单获取完成: %s 只 (as_of=%s)", len(records), as_of_date)
+    return SourceFetchResult(records=records)
+
+
+def fetch_all_stock_codes(as_of_date: str) -> SourceFetchResult:
+    """全市场正常交易的沪深主板/中小板/创业板/科创板股票代码清单（自管 login/logout）。"""
     with baostock_session() as lg:
         if failed := _login_failure(lg):
             return failed
-
-        rs = bs.query_all_stock(day=as_of_date)
-        if failed := _query_failure("全市场代码清单查询失败", rs):
-            return failed
-
-        result = _safe_baostock_call(
-            "全市场代码清单读取超时",
-            lambda: _collect_rows(rs),
-        )
-        if isinstance(result, SourceFetchResult):
-            return result
-        rows = result
-
-        records = []
-        for code, status, name in rows:
-            if status != "1":
-                continue
-            parsed = parse_baostock_code(code)
-            if not parsed:
-                continue
-            exchange, digits = parsed
-            prefixes = tuple(STOCK_CODE_PREFIXES.get(exchange, ()))
-            if prefixes and not digits.startswith(prefixes):
-                continue
-            records.append({"code": digits, "name": name})
-
-        logger.info("全市场股票代码清单获取完成: %s 只 (as_of=%s)", len(records), as_of_date)
-        return SourceFetchResult(records=records)
-
-
-def fetch_stock_amount_history(
-    code: str,
-    start_date: str | None = None,
-    end_date: str | None = None,
-) -> SourceFetchResult:
-    """获取单只股票日线成交额。需在已 login 的 ProcessPool worker 中调用。
-
-    end_date 默认 last_settled_date("cn")；Path B 中间日可传入 as_of 前一交易日。
-    """
-    start = start_date or START_DATE
-    end = end_date or last_settled_date()
-    prefixed = to_baostock_code(code)
-
-    def _query() -> SourceFetchResult:
-        rs = bs.query_history_k_data_plus(
-            prefixed,
-            "date,amount",
-            start_date=start,
-            end_date=end,
-            frequency="d",
-        )
-        if failed := _query_failure(f"个股 {code} 日线查询失败", rs):
-            return failed
-        rows = _collect_rows(rs)
-        records = [
-            {"date": row[0], "amount": float(row[1])}
-            for row in rows
-            if row[1] not in ("", None)
-        ]
-        return SourceFetchResult(records=records)
-
-    last_result: SourceFetchResult | None = None
-    for attempt in range(FETCH_RETRIES):
-        result = _safe_baostock_call(
-            f"个股 {code} 日线查询超时/连接异常",
-            _query,
-            log_level="warning",
-        )
-        if isinstance(result, SourceFetchResult):
-            last_result = result
-            if result.ok or attempt >= FETCH_RETRIES - 1:
-                return result
-            time.sleep(FETCH_RETRY_DELAY * (attempt + 1))
-            continue
-        return result
-    return last_result or SourceFetchResult.failure(f"个股 {code} 日线查询失败")
+        return fetch_all_stock_codes_logged_in(as_of_date)

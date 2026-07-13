@@ -116,8 +116,11 @@
   function phaseMetric(key: PhaseKey): string {
     const item = progressState.value.phases[key];
     if (item.status === 'pending') return '—';
-    if (key === 'stock' && item.total > 0) {
-      return `${item.current}/${item.total.toLocaleString()}`;
+    // 个股切片：进行中按缺口交易日进度；完成/失败与其它阶段一致显示写入行数
+    if (key === 'stock' && item.status === 'running' && item.total > 0) {
+      return `${item.current}/${item.total.toLocaleString()} ${t(
+        'adminRefresh.progress.days'
+      )}`;
     }
     if (
       item.imported > 0 ||
