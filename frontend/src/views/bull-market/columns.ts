@@ -7,14 +7,11 @@ import type { IndexConfig, MergedRow } from './use-bull-market';
 
 const formatPeriodCompact = (start: string, end: string) => `${start}~${end}`;
 
-const formatDays = (
-  value: number | null | undefined,
-  notAvailable = false
-) => {
+const formatDays = (value: number | null, notAvailable = false) => {
   if (notAvailable) {
     return '—';
   }
-  if (value === null || value === undefined) {
+  if (value === null) {
     return '-';
   }
   return String(value);
@@ -53,7 +50,7 @@ export default function buildMergedColumns(
           const cell = row.indices[index.code];
           return renderUnavailableCell(
             t,
-            formatDays(cell?.days, cell?.notAvailable),
+            formatDays(cell?.days ?? null, cell?.notAvailable),
             cell?.notAvailable ?? false
           );
         },
@@ -103,8 +100,12 @@ export default function buildMergedColumns(
           title: t('pages.bullMarket.columns.maxTurnoverShort'),
           align: 'right',
           width: 88,
-          render: ({ record }) =>
-            h('span', { class: 'num' }, formatAmount(record.turnoverMax)),
+          render: ({ record }) => {
+            const row = record as MergedRow;
+            const text =
+              row.turnoverMax === null ? '-' : formatAmount(row.turnoverMax);
+            return h('span', { class: 'num' }, text);
+          },
         },
       ],
     },

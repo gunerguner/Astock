@@ -131,9 +131,12 @@ EXCHANGE_TURNOVER_CODES: dict[str, str] = dict(
     )
 )
 US_BOND_COLUMNS: dict[str, str] = {
-    "us_bond_5y": "美国国债收益率5年",
+    "us_bond_2y": "美国国债收益率2年",
     "us_bond_10y": "美国国债收益率10年",
     "us_bond_30y": "美国国债收益率30年",
+    "cn_bond_2y": "中国国债收益率2年",
+    "cn_bond_10y": "中国国债收益率10年",
+    "cn_bond_30y": "中国国债收益率30年",
 }
 GLOBAL_INDEX_SINA_FALLBACK: dict[str, str] = {
     "道琼斯": ".DJI",

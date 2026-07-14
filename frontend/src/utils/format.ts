@@ -18,10 +18,7 @@ function getAmountUnits(): [string, number][] {
   ];
 }
 
-export function formatAmount(value: number | null | undefined): string {
-  if (value === null || value === undefined) {
-    return '-';
-  }
+export function formatAmount(value: number): string {
   const matched = getAmountUnits().find(([, base]) => Math.abs(value) >= base);
   if (matched) {
     const [label, base] = matched;
@@ -30,22 +27,19 @@ export function formatAmount(value: number | null | undefined): string {
   return `${value.toFixed(0)}${t('common.unit.yuan')}`;
 }
 
-export function formatPoint(value: number | null | undefined): string {
-  if (value === null || value === undefined) {
+export function formatPoint(value: number | null): string {
+  if (value === null) {
     return '-';
   }
   return value.toFixed(2);
 }
 
-export function formatPrice(value: number | null | undefined): string {
-  if (value === null || value === undefined) {
-    return '--';
-  }
-  return value.toFixed(2);
+export function formatPrice(value: number, digits = 2): string {
+  return value.toFixed(digits);
 }
 
-export function formatPercent(value: number | null | undefined): string {
-  if (value === null || value === undefined) {
+export function formatPercent(value: number | null): string {
+  if (value === null) {
     return '--';
   }
   const prefix = value > 0 ? '+' : '';
@@ -53,8 +47,8 @@ export function formatPercent(value: number | null | undefined): string {
 }
 
 /** A 股语义：红涨绿跌 */
-export function getPercentClass(value: number | null | undefined): string {
-  if (value === null || value === undefined) {
+export function getPercentClass(value: number | null): string {
+  if (value === null) {
     return 'pct-cell num';
   }
   if (value > 0) {
@@ -66,8 +60,8 @@ export function getPercentClass(value: number | null | undefined): string {
   return 'pct-cell num pct-flat';
 }
 
-export function numClass(value: number | null | undefined): string {
-  if (value === null || value === undefined) {
+export function numClass(value: number | null): string {
+  if (value === null) {
     return 'num';
   }
   return value < 0 ? 'num num-negative' : 'num';

@@ -106,7 +106,6 @@
 
 <style scoped lang="less">
   .section-card {
-    height: auto;
     margin-bottom: 16px;
   }
 
@@ -139,7 +138,7 @@
 
     :deep(.arco-table-cell) {
       padding: 8px 4px;
-      font-size: 13px;
+      font-size: var(--fs-body);
     }
   }
 
@@ -158,7 +157,7 @@
 
     :deep(.arco-form-item-label) {
       padding-right: 6px;
-      font-size: 13px;
+      font-size: var(--fs-body);
       white-space: nowrap;
     }
 

@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 def fetch_us_bond_rates() -> dict[str, dict[str, float]]:
-    """一次调用返回 5/10/30 年美债 recent_closes。"""
+    """一次调用返回配置中的中美国债 recent_closes。"""
     df = safe_retry_df("bond_zh_us_rate", ak.bond_zh_us_rate, logger=logger)
     if df is None:
         return {}

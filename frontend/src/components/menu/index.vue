@@ -37,7 +37,6 @@
           class="top-nav-menu"
           mode="horizontal"
           selected-keys={selectedKey.value}
-          style="height: 100%;width:100%;"
         >
           {menuItems.value.map((item) => (
             <a-menu-item

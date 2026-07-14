@@ -60,12 +60,21 @@ categories:
   - key: bonds
     display_name: 债券
     items:
-      - name: 美债5年
-        code: us_bond_5y
+      - name: 美债2年
+        code: us_bond_2y
         source: us_bond
       - name: 美债10年
         code: us_bond_10y
         source: us_bond
       - name: 美债30年
         code: us_bond_30y
+        source: us_bond
+      - name: 中国国债2年
+        code: cn_bond_2y
+        source: us_bond
+      - name: 中国国债10年
+        code: cn_bond_10y
+        source: us_bond
+      - name: 中国国债30年
+        code: cn_bond_30y
         source: us_bond

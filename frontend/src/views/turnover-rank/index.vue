@@ -2,7 +2,7 @@
   <div class="page-container">
     <a-row :gutter="[20, 20]">
       <a-col v-for="panel in panels" :key="panel.key" :xs="24" :md="12">
-        <a-card :title="panel.title" class="section-card">
+        <a-card :title="panel.title" class="section-card section-card--fill">
           <template #extra>
             <span v-if="panelMetaText(panel.syncKey)" class="meta-text">
               {{ panelMetaText(panel.syncKey) }}

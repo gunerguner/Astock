@@ -3,6 +3,7 @@ import { useDebounceFn } from '@vueuse/core';
 import { useAppStore } from '@/store';
 import { addEventListen, removeEventListen } from '@/utils/event';
 
+// Keep in sync with global.less `@media (max-width: 992px)` and Arco Grid md.
 const WIDTH = 992; // https://arco.design/vue/component/grid#responsivevalue
 
 function queryDevice() {

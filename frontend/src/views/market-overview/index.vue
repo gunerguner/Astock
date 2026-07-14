@@ -72,6 +72,10 @@
     return `${start} ${t('pages.marketOverview.periodTo')} ${end}`;
   };
 
+  /** 债券、汇率展示到小数点后 3 位 */
+  const priceDigitsForRow = (key: string) =>
+    key.startsWith('bonds:') || key.startsWith('forex:') ? 3 : 2;
+
   const tableRows = computed<TableRow[]>(() => {
     const categories = overview.value?.categories ?? [];
     const rows: TableRow[] = [];
@@ -147,7 +151,7 @@
         if (row === 'error') {
           return t('pages.marketOverview.fetchError');
         }
-        return renderPriceCell(row.current_price);
+        return renderPriceCell(row.current_price, priceDigitsForRow(row.key));
       },
     },
     {

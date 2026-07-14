@@ -92,7 +92,7 @@
     transition: color 0.2s;
 
     &:not(:last-child) {
-      border-right: 1px solid var(--color-border);
+      border-right: 1px solid var(--color-border-2);
     }
 
     &:hover {
