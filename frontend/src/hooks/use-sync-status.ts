@@ -2,7 +2,7 @@ import { computed, ref } from 'vue';
 import {
   fetchSyncStatusApi,
   type SyncStatus,
-  type SyncStatusItem,
+  type SyncStatusItem
 } from '@/api/admin';
 import formatSyncMeta from '@/utils/sync-meta';
 
@@ -36,6 +36,6 @@ export default function useSyncStatus(
     syncStatus,
     loadSyncStatus,
     metaText,
-    panelMetaText,
+    panelMetaText
   };
 }

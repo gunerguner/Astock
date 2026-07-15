@@ -11,6 +11,7 @@ from astock.services.global_asset.refresh import refresh_asset_highs
 from astock.services.imports import import_point, import_stock, import_turnover
 from astock.services.imports._common import aggregate_status
 from astock.services.imports.stock import import_stock_gen
+from astock.services.market_overview import warmup_market_overview
 from astock.sources.baostock import baostock_session_hold
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,11 @@ def _stream_all_phases(
     global_assets_result = yield from _stream_run_phase(
         db, "global_assets", refresh_asset_highs, reporter, bridge
     )
+    # 点位/贵金属已入库后预热概览 Redis，减少用户首次进入外网串行
+    try:
+        warmup_market_overview()
+    except Exception:
+        logger.exception("市场概览预热失败（不影响导入结果）")
     return {
         "turnover": turnover_result,
         "point": point_result,

@@ -8,16 +8,9 @@ export default mergeConfig(
     mode: 'production',
     plugins: [configVisualizerPlugin(), configArcoResolverPlugin()],
     build: {
-      rollupOptions: {
-        output: {
-          manualChunks: {
-            arco: ['@arco-design/web-vue'],
-            vue: ['vue', 'vue-router', 'pinia', '@vueuse/core', 'vue-i18n'],
-          },
-        },
-      },
-      chunkSizeWarningLimit: 2000,
-    },
+      // Vite 6 默认拆包即可；静态 manualChunks(arco/vue) 会触发 Circular chunk 警告
+      chunkSizeWarningLimit: 2000
+    }
   },
   baseConfig
 );

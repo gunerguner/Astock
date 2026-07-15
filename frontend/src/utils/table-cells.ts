@@ -3,7 +3,7 @@ import {
   formatPercent,
   formatPrice,
   getPercentClass,
-  numClass,
+  numClass
 } from '@/utils/format';
 
 export function renderNumCell(text: string) {

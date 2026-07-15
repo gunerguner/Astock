@@ -38,23 +38,23 @@
     {
       key: 'arco-design-pro-vue',
       title: 'Arco Design Pro Vue',
-      href: 'https://pro.arco.design/',
+      href: 'https://pro.arco.design/'
     },
     {
       key: 'fastapi',
       title: 'FastAPI',
-      href: 'https://fastapi.tiangolo.com/',
+      href: 'https://fastapi.tiangolo.com/'
     },
     {
       key: 'github',
       title: 'GitHub',
-      href: 'https://github.com/gunerguner/Astock',
+      href: 'https://github.com/gunerguner/Astock'
     },
     {
       key: 'icp',
       title: '沪ICP备2020026170号',
-      href: 'https://beian.miit.gov.cn/',
-    },
+      href: 'https://beian.miit.gov.cn/'
+    }
   ];
 </script>
 

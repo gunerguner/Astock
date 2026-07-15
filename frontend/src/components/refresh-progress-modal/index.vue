@@ -74,7 +74,7 @@
   import {
     PHASE_ORDER,
     type PhaseKey,
-    type PhaseStatus,
+    type PhaseStatus
   } from '@/hooks/admin-data-refresh.types';
 
   const { t } = useI18n();
@@ -145,7 +145,7 @@
       pending: t('adminRefresh.progress.status.pending'),
       running: t('adminRefresh.progress.status.running'),
       done: t('adminRefresh.progress.status.done'),
-      failed: t('adminRefresh.progress.status.failed'),
+      failed: t('adminRefresh.progress.status.failed')
     };
     return map[status];
   }

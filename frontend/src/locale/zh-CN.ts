@@ -108,5 +108,5 @@ export default {
   'pages.marketOverview.columns.currentPrice': '最新价',
   'pages.marketOverview.columns.dailyChange': '日涨跌',
   'pages.marketOverview.columns.weeklyChange': '周涨跌',
-  'pages.marketOverview.periodTo': '至',
+  'pages.marketOverview.periodTo': '至'
 };

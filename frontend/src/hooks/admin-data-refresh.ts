@@ -3,7 +3,7 @@ import {
   refreshAllDataStream,
   type ImportAllResult,
   type ImportProgressEvent,
-  type ImportStreamError,
+  type ImportStreamError
 } from '@/api/admin';
 import i18n from '@/locale';
 import { emitDataRefresh } from '@/utils/data-refresh';
@@ -14,7 +14,7 @@ import {
   createInitialProgressState,
   PHASE_ORDER,
   type PhaseKey,
-  type RefreshProgressState,
+  type RefreshProgressState
 } from '@/hooks/admin-data-refresh.types';
 
 const { t } = i18n.global;
@@ -30,7 +30,7 @@ function getDatasetLabels(): Record<PhaseKey, string> {
     turnover: t('adminRefresh.dataset.turnover'),
     point: t('adminRefresh.dataset.point'),
     stock: t('adminRefresh.dataset.stock'),
-    global_assets: t('adminRefresh.dataset.globalAssets'),
+    global_assets: t('adminRefresh.dataset.globalAssets')
   };
 }
 
@@ -70,7 +70,7 @@ export default function useAdminDataRefresh() {
         progressState.value = applyStreamError(progressState.value, error);
         refreshing.value = false;
         abortController = null;
-      },
+      }
     });
   }
 
@@ -88,6 +88,6 @@ export default function useAdminDataRefresh() {
     progressVisible,
     progressState,
     refreshAllData,
-    closeProgressModal,
+    closeProgressModal
   };
 }

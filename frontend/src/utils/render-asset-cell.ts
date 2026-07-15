@@ -13,8 +13,8 @@ export default function renderAssetNameWithTooltip(
       default: () =>
         h('span', { class: 'asset-name-cell' }, [
           h('span', { class: 'asset-name-text asset-name-hover' }, name),
-          extra?.(),
-        ]),
+          extra?.()
+        ])
     }
   );
 }

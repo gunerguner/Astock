@@ -36,6 +36,7 @@ from astock.services.closes_cache import (
     ensure_closes,
     redis_closes_io,
 )
+from astock.services.market_overview.local_closes import fill_closes_from_local
 from astock.sources.market_overview import fetch_all_items
 
 logger = logging.getLogger(__name__)
@@ -62,7 +63,12 @@ def _clear_failure_marker(item_key: str) -> None:
 
 
 def _fetch_missing(missing: list[dict[str, str]]) -> ClosesFetchResult:
-    return fetch_all_items(missing)
+    """先本地（point / 全球资产 Redis），不足项再外网抓取。"""
+    local_closes, still_missing = fill_closes_from_local(missing)
+    if not still_missing:
+        return ClosesFetchResult(local_closes, [])
+    remote = fetch_all_items(still_missing)
+    return ClosesFetchResult({**local_closes, **remote.closes}, list(remote.errors))
 
 
 def _ensure_closes(*, force_refresh: bool = False) -> ClosesFetchResult:
@@ -115,6 +121,17 @@ def _error_item(item: dict[str, str], message: str) -> MarketOverviewErrorItem:
         code=item["code"],
         error=message,
     )
+
+
+def warmup_market_overview() -> ClosesFetchResult:
+    """管理员导入后轻量预热 Redis（仅补落后项，不 force 全量打源）。"""
+    result = _ensure_closes(force_refresh=False)
+    logger.info(
+        "市场概览预热完成: items=%d errors=%d",
+        len(result.closes),
+        len(result.errors),
+    )
+    return result
 
 
 def get_market_overview(*, force_refresh: bool = False) -> MarketOverviewResponse:

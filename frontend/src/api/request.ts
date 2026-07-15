@@ -25,7 +25,7 @@ export interface RequestInstance {
 }
 
 const instance = axios.create({
-  baseURL: '/api/v1',
+  baseURL: '/api/v1'
 });
 
 instance.interceptors.request.use(
@@ -39,7 +39,7 @@ instance.interceptors.response.use(
     if (res.code !== 0) {
       Message.error({
         content: res.message || t('common.requestFailed'),
-        duration: 5 * 1000,
+        duration: 5 * 1000
       });
       return Promise.reject(
         new Error(res.message || t('common.requestFailed'))
@@ -54,7 +54,7 @@ instance.interceptors.response.use(
       t('common.networkFailed');
     Message.error({
       content: message,
-      duration: 5 * 1000,
+      duration: 5 * 1000
     });
     return Promise.reject(error);
   }
@@ -66,7 +66,7 @@ const request: RequestInstance = {
   },
   post<T, D = unknown>(url: string, data?: D, config?: AxiosRequestConfig<D>) {
     return instance.post(url, data, config) as Promise<T>;
-  },
+  }
 };
 
 export default request;

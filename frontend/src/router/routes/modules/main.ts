@@ -9,7 +9,7 @@ const MAIN: AppRouteRecordRaw = {
   meta: {
     hideInMenu: true,
     requiresAuth: false,
-    order: 0,
+    order: 0
   },
   children: [
     {
@@ -20,8 +20,8 @@ const MAIN: AppRouteRecordRaw = {
         locale: 'menu.bullMarket',
         requiresAuth: false,
         icon: 'icon-bar-chart',
-        order: 1,
-      },
+        order: 1
+      }
     },
     {
       path: 'turnover-rank',
@@ -31,8 +31,8 @@ const MAIN: AppRouteRecordRaw = {
         locale: 'menu.turnoverRank',
         requiresAuth: false,
         icon: 'icon-sort',
-        order: 2,
-      },
+        order: 2
+      }
     },
     {
       path: 'asset-price-levels',
@@ -42,8 +42,8 @@ const MAIN: AppRouteRecordRaw = {
         locale: 'menu.assetPriceLevels',
         requiresAuth: false,
         icon: 'icon-fire',
-        order: 3,
-      },
+        order: 3
+      }
     },
     {
       path: 'market-overview',
@@ -53,10 +53,10 @@ const MAIN: AppRouteRecordRaw = {
         locale: 'menu.marketOverview',
         requiresAuth: false,
         icon: 'icon-apps',
-        order: 4,
-      },
-    },
-  ],
+        order: 4
+      }
+    }
+  ]
 };
 
 export default MAIN;

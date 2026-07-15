@@ -111,9 +111,9 @@ export function streamPost<
       const response = await fetch(`${url}${search}`, {
         method: 'POST',
         headers: {
-          Accept: 'text/event-stream',
+          Accept: 'text/event-stream'
         },
-        signal: options.signal ?? controller.signal,
+        signal: options.signal ?? controller.signal
       });
 
       if (!response.ok) {

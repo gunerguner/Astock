@@ -77,7 +77,7 @@
     storageKey: 'arco-theme',
     onChanged(dark: boolean) {
       appStore.toggleTheme(dark);
-    },
+    }
   });
   const toggleTheme = useToggle(isDark);
   const handleToggleTheme = () => {

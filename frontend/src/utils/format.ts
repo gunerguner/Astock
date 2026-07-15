@@ -8,13 +8,13 @@ function getAmountUnits(): [string, number][] {
     return [
       [t('common.unit.trillion'), 1e12],
       [t('common.unit.billion'), 1e9],
-      [t('common.unit.million'), 1e6],
+      [t('common.unit.million'), 1e6]
     ];
   }
   return [
     [t('common.unit.trillion'), 1e12],
     [t('common.unit.billion'), 1e8],
-    [t('common.unit.million'), 1e4],
+    [t('common.unit.million'), 1e4]
   ];
 }
 
@@ -73,5 +73,5 @@ export const CONCLUSION_I18N_KEYS: Record<string, string> = {
   nearAth: 'pages.assetPriceLevels.conclusion.nearAth',
   moderatePullback: 'pages.assetPriceLevels.conclusion.moderatePullback',
   significantPullback: 'pages.assetPriceLevels.conclusion.significantPullback',
-  deepPullback: 'pages.assetPriceLevels.conclusion.deepPullback',
+  deepPullback: 'pages.assetPriceLevels.conclusion.deepPullback'
 };

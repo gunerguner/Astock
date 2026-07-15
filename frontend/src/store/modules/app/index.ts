@@ -21,8 +21,8 @@ const useAppStore = defineStore('app', {
     },
     toggleDevice(device: string) {
       this.device = device;
-    },
-  },
+    }
+  }
 });
 
 export default useAppStore;

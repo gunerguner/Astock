@@ -6,7 +6,7 @@ import {
   fetchBullMarketTurnoverStats,
   POINT_INDEX_CODES,
   type BullMarketStats,
-  type MultiIndexPointStats,
+  type MultiIndexPointStats
 } from '@/api/analysis';
 import useAsyncRequest from '@/hooks/async-request';
 import buildMergedColumns from './columns';
@@ -15,23 +15,23 @@ export const indexConfigs = [
   {
     code: '000001',
     nameKey: 'pages.bullMarket.indexSh',
-    filterKey: 'pages.bullMarket.filterSh',
+    filterKey: 'pages.bullMarket.filterSh'
   },
   {
     code: '000300',
     nameKey: 'pages.bullMarket.indexHS300',
-    filterKey: 'pages.bullMarket.filterHS300',
+    filterKey: 'pages.bullMarket.filterHS300'
   },
   {
     code: '399006',
     nameKey: 'pages.bullMarket.indexCYB',
-    filterKey: 'pages.bullMarket.filterCYB',
+    filterKey: 'pages.bullMarket.filterCYB'
   },
   {
     code: '000688',
     nameKey: 'pages.bullMarket.indexKCB50',
-    filterKey: 'pages.bullMarket.filterKCB50',
-  },
+    filterKey: 'pages.bullMarket.filterKCB50'
+  }
 ] as const;
 
 export type IndexConfig = (typeof indexConfigs)[number];
@@ -62,17 +62,17 @@ export default function useBullMarket() {
 
   const filterForm = reactive({
     pointThresholds: { ...DEFAULT_POINT_THRESHOLDS },
-    turnoverThresholdTrillion: 2,
+    turnoverThresholdTrillion: 2
   });
 
   const {
     loading,
     data: statsData,
-    run: loadStats,
+    run: loadStats
   } = useAsyncRequest(async (): Promise<BullStatsPair> => {
     const [point, turnover] = await Promise.all([
       fetchBullMarketPointStats(filterForm.pointThresholds),
-      fetchBullMarketTurnoverStats(filterForm.turnoverThresholdTrillion * 1e12),
+      fetchBullMarketTurnoverStats(filterForm.turnoverThresholdTrillion * 1e12)
     ]);
     return { point, turnover };
   });
@@ -111,8 +111,8 @@ export default function useBullMarket() {
             {
               days: indexItem?.days ?? null,
               max: indexItem?.max_value ?? null,
-              notAvailable: indexItem?.not_available ?? false,
-            },
+              notAvailable: indexItem?.not_available ?? false
+            }
           ];
         })
       ) as Record<string, IndexCell>;
@@ -124,7 +124,7 @@ export default function useBullMarket() {
         description: item.description,
         indices,
         turnoverDays: turnoverItem?.days ?? null,
-        turnoverMax: turnoverItem?.max_value ?? null,
+        turnoverMax: turnoverItem?.max_value ?? null
       };
     });
   });
@@ -139,6 +139,6 @@ export default function useBullMarket() {
     turnoverStats,
     mergedRows,
     mergedColumns,
-    getIndexTotalDays,
+    getIndexTotalDays
   };
 }

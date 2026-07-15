@@ -22,12 +22,14 @@
 | 个股高成交额切片 | — | baostock 日更 `query_daily_history_k_AStock` | `baostock.fetch_daily_astock_amounts_logged_in` | 缺口整段共用一次 login；逐日全市场 amount TopN（默认 20） | SQLite `stock_turnover` | `max(turnover.date) ≤ last_synced` | 单 session 串行 |
 | 全市场股票名称 | 服务个股切片 | baostock `query_all_stock` | `baostock.fetch_all_stock_codes_logged_in` | 日 K 无名称；按 `as_of` 拉一次，缺口期内复用 | 不落库 | — | 同 session 一次 |
 | 美股/贵金属 ATH | — | akshare | `akshare.global_asset.fetch_all_assets` | 美股日线 + 外盘期货（GC/SI）同一套接口拿 ATH 与近期收盘 | SQLite `asset_high` + Redis | **`is_multi_market_synced`**（中/美均达标） | **故意串行**（macOS V8） |
-| 市场概览·美股三指数 | — | akshare `index_us_stock_sina` | `market_overview.global_index` | 道指/标普/纳指有稳定新浪符号（`.DJI`/`.INX`/`.IXIC`） | **仅 Redis** | 项级 `closes_cover_settled` | ThreadPool 4（与非美债项共享） |
-| 市场概览·A股指数 | — | akshare `stock_zh_index_daily` | `market_overview.cn_index` | 与点位科创50同底层；概览只取近 N 日 | 同上 | 同上 | 同上 |
-| 市场概览·贵金属/原油 | — | akshare `futures_foreign_hist` | `market_overview.foreign_futures` | 外盘期货日线；与全球资产贵金属共用底层 | 同上 | 同上 | 同上 |
-| 市场概览·人民币汇率 | — | akshare `currency_boc_sina` | `market_overview.boc_forex` | 央行中间价日频，÷100 后展示 | 同上 | 同上 | 同上 |
-| 市场概览·美债 | — | akshare `bond_zh_us_rate` | `market_overview.us_bond` | **一次**批量出 5y/10y/30y，避免三项各打一遍 | 同上 | 同上 | **单独批量**（不进线程池） |
-| 市场概览·美元指数历史 | ①主 | 新浪 DINIW 日线 | `usd_index`（经 `global_index`） | 生产机东财/akshare 常不可达，新浪日线最稳 | 同上 | 同上 | 同 ThreadPool |
+| 市场概览·美股三指数 | — | akshare `index_us_stock_sina` | `market_overview.global_index` | 道指/标普/纳指有稳定新浪符号（`.DJI`/`.INX`/`.IXIC`） | **仅 Redis** | 项级 `closes_cover_settled`；缺项先本地再外网 | darwin 串行 / Linux 并行（与非美债项共享） |
+| 市场概览·A股指数 | ①主·本地 | SQLite `point` | `services/market_overview/local_closes` | 四指数（含科创50）点位导入已入库；概览优先读库 | 同上 | 本地覆盖结算日且基准够则跳过外网 | — |
+| ↳ | ②备·外网 | akshare `stock_zh_index_daily` | `market_overview.cn_index` | 库不足时回退；与点位科创50同底层 | 同上 | 同上 | 同非美债批次 |
+| 市场概览·贵金属 | ①主·本地 | 全球资产 Redis | `local_closes`（读 `global_asset:recent`） | GC/SI 与全球资产共用；导入后可复用 | 同上 | 本地够用则跳过外网 | — |
+| ↳ | ②备·外网 / 原油 | akshare `futures_foreign_hist` | `market_overview.foreign_futures` | WTI(CL) 无全球资产缓存；GC/SI 本地不足时回退 | 同上 | 同上 | 同非美债批次 |
+| 市场概览·人民币汇率 | — | akshare `currency_boc_sina` | `market_overview.boc_forex` | 央行中间价日频，÷100 后展示 | 同上 | 同上 | 同非美债批次 |
+| 市场概览·美债/中债 | — | akshare `bond_zh_us_rate` | `market_overview.us_bond` | **一次**批量出美债+中债 2y/10y/30y | 同上 | 同上 | **单独批量**（不进线程池） |
+| 市场概览·美元指数历史 | ①主 | 新浪 DINIW 日线 | `usd_index`（经 `global_index`） | 生产机东财/akshare 常不可达，新浪日线最稳 | 同上 | 同上 | 同非美债批次 |
 | ↳ | ②备 | akshare `index_global_hist_em` | 同上 | 新浪失败时的日线兜底 | 同上 | 同上 | 同上 |
 | ↳ | ③备 | 东财 push2his（多 host） | 同上 | akshare 也失败时再试东财 K 线 | 同上 | 同上 | 同上 |
 | 市场概览·美元指数现货 | 补丁·①② | 新浪 hq → 东财 push2delay | 同上 | **仅当**历史未盖住 `us` 结算日或基准点不足时合并；够用则不打现货 | 同上 | 同上 | 同上 |
@@ -136,18 +138,19 @@ class SourceFetchResult:
 
 ### market_overview 包（全球市场概览）
 
-- **目录**：`sources/market_overview/`（`dispatcher.py` + 按 source 拆分：`global_index` / `cn_index` / `foreign_futures` / `boc_forex` / `us_bond` / **`usd_index`**）
+- **目录**：`sources/market_overview/`（`dispatcher.py` + 按 source 拆分：`global_index` / `cn_index` / `foreign_futures` / `boc_forex` / `us_bond` / **`usd_index`**）；本地优先在 `services/market_overview/local_closes.py`
 - **重试**：`FETCH_RETRIES=4`，退避 `FETCH_RETRY_DELAY=2s × attempt`（`sources/retry.py`）
-- **并发**：美债 `us_bond` 一次批量；其余项 `ThreadPoolExecutor(max_workers=4)`
-- **类目定义**：`backend/astock/config/market_overview.yaml`（6 类 13 项）
+- **并发**：美债 `us_bond` 一次批量；其余项 **darwin 串行 / Linux 小线程池（max 4）**（macOS mini_racer 勿进线程池）
+- **类目定义**：`backend/astock/config/market_overview.yaml`（6 类 **18** 项）
+- **本地优先**：回填前 `fill_closes_from_local`——A 股四指数读 SQLite `point`；GC/SI 读全球资产 Redis；不足再外网
 
 | source | 接口 | 覆盖 |
 |--------|------|------|
 | `global_index` | 美股三指数：`ak.index_us_stock_sina`（`.DJI`/`.INX`/`.IXIC`）；美元指数走 `usd_index.fetch_usd_index` | 道琼斯/标普/纳斯达克/美元指数 |
-| `cn_index` | `ak.stock_zh_index_daily`（回溯 `CN_INDEX_LOOKBACK_DAYS=180`） | A 股指数 |
-| `foreign_futures` | `ak.futures_foreign_hist`（复用 `akshare.global_asset.fetch_commodity_history`） | 黄金 GC、白银 SI、WTI CL |
+| `cn_index` | 优先 `point` 表；不足再 `ak.stock_zh_index_daily` | A 股指数（含科创50） |
+| `foreign_futures` | GC/SI 优先全球资产 Redis；不足或 WTI 再 `ak.futures_foreign_hist` | 黄金 GC、白银 SI、WTI CL |
 | `boc_forex` | `ak.currency_boc_sina`（央行中间价 ÷100） | 人民币汇率 |
-| `us_bond` | `ak.bond_zh_us_rate`（一次拉取填 5y/10y/30y） | 美债收益率 |
+| `us_bond` | `ak.bond_zh_us_rate`（一次拉取填美债+中债 2y/10y/30y） | 债券收益率 |
 
 **美元指数（`usd_index.py`）**：日线历史为主，现货仅补丁。
 
@@ -167,9 +170,9 @@ class SourceFetchResult:
 | `POST /admin/data/import/stream?dataset=point` | `imports/point` | baostock 三指数 + akshare 科创50 | 按指数独立水位；`cn` 结算日跳过 |
 | `POST /admin/data/import/stream?dataset=stock` | `imports/stock/` | baostock 日更全市场 TopN + `query_all_stock` 名称 | 依赖 turnover 最新日；无新交易日跳过 |
 | `POST /admin/data/import/stream?dataset=global_assets` | `global_asset/refresh.py` | akshare ATH + recent closes | SQLite + Redis；`is_multi_market_synced` 跳过 |
-| `POST /admin/data/import/stream?dataset=all` | `import_orchestrator` | baostock 三段共享 login；全球资产主线程串行 akshare；SSE 按四阶段顺序 | 各阶段独立跳过 |
+| `POST /admin/data/import/stream?dataset=all` | `import_orchestrator` | baostock 三段共享 login；全球资产主线程串行 akshare；结束后 `warmup_market_overview` | 各阶段独立跳过；概览预热仅补落后项 |
 | `GET /analysis/asset-price-levels` | `global_asset/query.py` | 读 DB + Redis（miss 时 akshare 补拉） | 每股按 `us` 结算过滤；`force_refresh` 全部重拉；Redis TTL 86400s |
-| `GET /analysis/market-overview` | `market_overview/service` | Redis（未覆盖结算日 / 不足时 `fetch_all_items`） | 每项独立锚点；`closes_cover_settled` 复用；失败冷却 300s；`force_refresh` 全部重拉 |
+| `GET /analysis/market-overview` | `market_overview/service` | Redis（未覆盖结算日 / 不足时：本地 point/全球资产 → `fetch_all_items`） | 每项独立锚点；`closes_cover_settled` 复用；失败冷却 300s；`force_refresh` 全部重拉 |
 | 分析类只读 API（牛市统计/排名） | `services/queries/` | **无外部请求**，纯 SQLite 聚合 | — |
 
 ## 4. 失败行为
@@ -336,40 +339,44 @@ flowchart TD
 | `force_refresh` | 读 API 参数：对**全部资产**重拉 akshare（与概览同一 `ensure_closes` 语义）；默认模式仅回填未覆盖结算日 / 缺失项 |
 | 结论标签 | `percentage_diff` 绝对值对照 `price_level_conclusions`（5%/20%/50% 档） |
 
-### 7.5 全球市场概览（13 项，6 类）
+### 7.5 全球市场概览（18 项，6 类）
 
-**页面**：全球市场概览。**无 SQLite 导入阶段**，打开页面或 `force_refresh` 时按需拉取。
+**页面**：全球市场概览。**无独立 SQLite 导入阶段**；打开页面或 `force_refresh` 时按需回填 Redis。管理员 `dataset=all` 结束后会 `warmup_market_overview`（增量 ensure）。前端管理员刷新后默认 `force_refresh=false`（只补落后项）。
 
 ```mermaid
 flowchart TD
   A["GET /analysis/market-overview"] --> B["_ensure_closes"]
   B --> C{每项是否需回填?}
   C -->|已覆盖最近结算日且基准点够| D["直接复用 Redis"]
-  C -->|force_refresh / 未覆盖结算日 / 缺失 / 不足| E["fetch_all_items(missing)"]
-  E --> F["写 market_overview:recent:{key}"]
-  F --> G["每项 anchor_date_for_closes(按 source 映射 cn/us)"]
-  G --> H["baseline_prices_at_anchor 算日/周涨跌 / period"]
+  C -->|force_refresh / 未覆盖结算日 / 缺失 / 不足| E["fill_closes_from_local"]
+  E --> F{本地是否够用?}
+  F -->|是| G["写 market_overview:recent"]
+  F -->|否| H["fetch_all_items 外网"]
+  H --> G
+  G --> I["每项 anchor_date_for_closes"]
+  I --> J["baseline_prices_at_anchor 算日/周涨跌"]
 ```
 
-| 类目 | 项 | source 模块 | 外部接口 |
-|------|-----|-------------|----------|
+| 类目 | 项 | source / 本地 | 外部接口（回退） |
+|------|-----|-------------|------------------|
 | 美股 | 道琼斯、标普、纳斯达克 | `global_index` | `ak.index_us_stock_sina`（`.DJI`/`.INX`/`.IXIC`） |
-| A股 | 上证、沪深300、创业板、科创板 | `cn_index` | `ak.stock_zh_index_daily`（回溯 `CN_INDEX_LOOKBACK_DAYS=180`） |
-| 贵金属 | 黄金、白银 | `foreign_futures` | `ak.futures_foreign_hist` |
-| 汇率 | 美元指数、美元/人民币 | `usd_index`（经 `global_index`） / `boc_forex` | 美元指数：见 §2 历史①新浪 DINIW →②akshare →③东财；现货仅补丁。人民币：`ak.currency_boc_sina`（中间价 ÷100） |
+| A股 | 上证、沪深300、创业板、科创板 | **优先** SQLite `point`；回退 `cn_index` | `ak.stock_zh_index_daily` |
+| 贵金属 | 黄金、白银 | **优先** 全球资产 Redis；回退 `foreign_futures` | `ak.futures_foreign_hist` |
+| 汇率 | 美元指数、美元/人民币 | `usd_index` / `boc_forex` | 美元指数：见 §2；人民币：`ak.currency_boc_sina` |
 | 大宗 | WTI 原油 | `foreign_futures` | `ak.futures_foreign_hist`（CL） |
-| 债券 | 美债 5y/10y/30y | `us_bond` | `ak.bond_zh_us_rate`（一次拉取填三项） |
+| 债券 | 美债/中债 2y/10y/30y | `us_bond` | `ak.bond_zh_us_rate`（一次批量） |
 
 | 项 | 说明 |
 |----|------|
 | Redis Key | `market_overview:recent:{category_key}:{code}`；`market_overview:meta:latest_trading_date` |
 | 失败冷却 | `market_overview:failure:{key}`，TTL `MARKET_OVERVIEW_FAILURE_TTL=300s`；默认模式下带标记项不重复打源 |
-| `force_refresh` | 对**全部项**重拉外部源（忽略未过期成功缓存） |
-| 新鲜度 | 缓存须 `closes_cover_settled`（`max(date) ≥ last_settled_date(market)`）；落后则回填。节假日空窗回填后仍落后则写失败冷却 |
+| `force_refresh` | 对**全部项**重拉（忽略未过期成功缓存）；日常页面刷新用增量 |
+| 新鲜度 | 缓存须 `closes_cover_settled`；落后则回填。节假日空窗回填后仍落后则写失败冷却 |
 | 结算过滤 | 抓取层 `_tail_closes(..., market=...)`；缓存读写带 `market_for_source(source)` |
-| 锚点日 / 当前价 | **按项独立** `anchor_date_for_closes` → 该日收盘价即「当前价」（最近一个已结算收盘日） |
+| 锚点日 / 当前价 | **按项独立** `anchor_date_for_closes` → 该日收盘价即「当前价」 |
 | `latest_trading_date` | 响应优先 `anchor_date_excluding_today(..., markets=overview_item_markets)`，兜底 `last_settled_date("cn")` |
-| 并发 | 美债单独批量；其余项 `ThreadPoolExecutor(max_workers=4)`；单项内重试 `FETCH_RETRIES=4`，退避 `2s×attempt` |
+| 并发 | 美债单独批量；其余 **darwin 串行 / Linux 线程池 max 4**；日志含 `key/source/elapsed` 便于线上核对 |
+| 预热 | `dataset=all` 四阶段结束后调用 `warmup_market_overview` |
 
 **source → market 映射**（`datetime_utils._MARKET_SOURCE`）：
 
@@ -377,7 +384,7 @@ flowchart TD
 |--------|--------|--------|
 | `cn_index` | `cn` | 上证、沪深300、创业板、科创板 |
 | `boc_forex` | `cn` | 美元/人民币 |
-| `us_bond` | `cn` | 美债 5y/10y/30y（在岸数据源日频） |
+| `us_bond` | `cn` | 美债/中债 2y/10y/30y（在岸数据源日频） |
 | `global_index` | `us` | 道琼斯、标普、纳斯达克、美元指数 |
 | `foreign_futures` | `us` | 黄金、白银、WTI |
 
@@ -396,10 +403,11 @@ flowchart TD
 
 ### 7.7 全量刷新编排（`dataset=all`）
 
-SSE 进度仍按固定顺序上报：`turnover` → `point` → `stock` → `global_assets`。墙钟上有两处优化：
+SSE 进度仍按固定顺序上报：`turnover` → `point` → `stock` → `global_assets`。墙钟上有三处优化：
 
 1. **共享 baostock 登录**：`baostock_session_hold()` 包住成交额 / 点位 / 个股三段；嵌套的 `baostock_session()` 可重入，整段只 login/logout 一次。hold 本身不 login——若三段均 skip 则不触网。
 2. **全球资产串行**：`global_assets` 在 baostock 段之后于**主线程**调用 akshare（`fetch_all_assets` 内 ticker 仍串行）。**不**用线程池预拉——macOS mini_racer 在非主线程或与科创50 并发会 fatal/挂死。**不对 baostock 开多线程**。
+3. **市场概览预热**：四阶段结束后调用 `warmup_market_overview()`（`force_refresh=False`），把 A 股 point / GC·SI 缓存写入概览 Redis，用户首次打开尽量零外网。
 
 每阶段经 `ProgressReporter` 推送 SSE `progress` 事件（`phase` / `imported` / `elapsed` / `last_date`）。`stock` 阶段为生成器，步骤间 `SSEBridge` 保活。
 
@@ -411,7 +419,7 @@ SSE 进度仍按固定顺序上报：`turnover` → `point` → `stock` → `glo
 | 指数点位 | 管理员导入 | `point` | `point_{code}` | — | 否 |
 | 个股切片 | 管理员导入 | `stock_turnover` | `stock_turnover` | — | 否 |
 | 全球资产 ATH | 管理员导入 | `asset_high` | `asset_high` | 最近价 | 未覆盖结算日 / miss / `force_refresh` 时 akshare 补拉 |
-| 市场概览 | **无导入** | — | — | 最近价 | 未覆盖结算日 / 基准不足 / `force_refresh` 全部重拉 |
+| 市场概览 | 读时回填 + `dataset=all` 后预热 | —（A 股可读 `point`） | — | 最近价 | 未覆盖结算日 / 基准不足时：本地 → 外网；`force_refresh` 全部重拉 |
 | 牛市统计/排名 | — | 读上表 | — | — | 否 |
 
 ### 7.9 跳过逻辑对照（避免重复拉取）
@@ -421,4 +429,4 @@ SSE 进度仍按固定顺序上报：`turnover` → `point` → `stock` → `glo
 | turnover / point | `is_synced_through_settled(last_synced_date, "cn")` 且 `last_status=success` | 不请求 baostock/akshare，`imported=0`；拉取 `end_date=last_settled_date("cn")` |
 | stock | `max(turnover.date) <= stock_turnover.last_synced_date` | 不请求 baostock 日更，`imported=0` |
 | global_assets | `is_multi_market_synced(last_synced_date)` 且 `last_status=success` 且表非空 | 不请求 akshare，`imported=0` |
-| market_overview | 各项已 `closes_cover_settled` 且（若需要）基准点足够；失败冷却期内落后缓存可暂复用 | 否则回填；`force_refresh` 全部重拉 |
+| market_overview | 各项已 `closes_cover_settled` 且基准点足够；失败冷却期内落后缓存可暂复用；回填时 A 股/`GC`/`SI` 优先本地 | 否则本地不足再外网；`force_refresh` 全部重拉 |

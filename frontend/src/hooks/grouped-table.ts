@@ -26,7 +26,7 @@ export function useDividerTable(columns: MaybeRef<TableColumnData[]>) {
 
   const spanMethod = ({
     record,
-    columnIndex,
+    columnIndex
   }: {
     record: TableData;
     columnIndex: number;
