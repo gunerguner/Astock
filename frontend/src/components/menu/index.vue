@@ -25,7 +25,7 @@
             selectedKey.value = [String(name)];
           }
         },
-        { immediate: true }
+        { immediate: true },
       );
 
       const goto = (name: string) => {
@@ -48,6 +48,6 @@
           ))}
         </a-menu>
       );
-    }
+    },
   });
 </script>

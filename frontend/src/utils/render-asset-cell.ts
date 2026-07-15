@@ -4,7 +4,7 @@ import { Tooltip } from '@arco-design/web-vue';
 export default function renderAssetNameWithTooltip(
   name: string,
   code: string,
-  extra?: () => VNode | null
+  extra?: () => VNode | null,
 ) {
   return h(
     Tooltip,
@@ -13,8 +13,8 @@ export default function renderAssetNameWithTooltip(
       default: () =>
         h('span', { class: 'asset-name-cell' }, [
           h('span', { class: 'asset-name-text asset-name-hover' }, name),
-          extra?.()
-        ])
-    }
+          extra?.(),
+        ]),
+    },
   );
 }

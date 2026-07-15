@@ -9,7 +9,7 @@ const router = createRouter({
   routes: [...appRoutes, NOT_FOUND_ROUTE],
   scrollBehavior() {
     return { top: 0 };
-  }
+  },
 });
 
 createRouteGuard(router);

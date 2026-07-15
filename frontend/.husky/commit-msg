@@ -1,2 +1,4 @@
 #!/usr/bin/env sh
-pnpm commitlint --edit "$1"
+cd "$(dirname "$0")/../.." || exit 1
+cd frontend || exit 1
+pnpm exec commitlint --edit "$1"

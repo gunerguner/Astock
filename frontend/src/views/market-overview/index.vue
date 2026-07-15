@@ -26,7 +26,7 @@
     fetchMarketOverview,
     isMarketOverviewError,
     type MarketOverviewDataItem,
-    type MarketOverviewRow
+    type MarketOverviewRow,
   } from '@/api/analysis';
   import useAsyncRequest from '@/hooks/async-request';
   import usePageRefresh from '@/hooks/use-page-refresh';
@@ -34,7 +34,7 @@
     isDividerRow,
     toTableRow,
     useDividerTable,
-    type BaseDividerRow
+    type BaseDividerRow,
   } from '@/hooks/grouped-table';
   import renderAssetNameWithTooltip from '@/utils/render-asset-cell';
   import { renderPercentCell, renderPriceCell } from '@/utils/table-cells';
@@ -45,7 +45,7 @@
   const tableScroll = useTableScroll();
 
   defineOptions({
-    name: 'MarketOverview'
+    name: 'MarketOverview',
   });
 
   interface DividerRow extends BaseDividerRow {
@@ -57,13 +57,13 @@
   const {
     loading,
     data: overview,
-    run: loadOverview
+    run: loadOverview,
   } = useAsyncRequest((forceRefresh?: boolean) =>
-    fetchMarketOverview(forceRefresh ?? false)
+    fetchMarketOverview(forceRefresh ?? false),
   );
 
   const metaText = computed(() =>
-    formatLatestDateMeta(overview.value?.latest_trading_date)
+    formatLatestDateMeta(overview.value?.latest_trading_date),
   );
 
   const formatPeriod = (start: string | null, end: string | null) => {
@@ -82,7 +82,7 @@
 
     categories.forEach((cat) => {
       const validItems = cat.items.filter(
-        (item): item is MarketOverviewDataItem => !isMarketOverviewError(item)
+        (item): item is MarketOverviewDataItem => !isMarketOverviewError(item),
       );
       const periodStarts = validItems
         .map((item) => item.period_start)
@@ -104,7 +104,7 @@
         key: `divider-${cat.key}`,
         rowKind: 'divider',
         label: cat.name,
-        periodText
+        periodText,
       });
 
       cat.items.forEach((item) => {
@@ -136,11 +136,11 @@
           return h(
             'span',
             { class: 'section-divider-label' },
-            `${row.label}${suffix}`
+            `${row.label}${suffix}`,
           );
         }
         return renderAssetNameWithTooltip(row.name, row.code);
-      }
+      },
     },
     {
       title: t('pages.marketOverview.columns.currentPrice'),
@@ -152,7 +152,7 @@
           return t('pages.marketOverview.fetchError');
         }
         return renderPriceCell(row.current_price, priceDigitsForRow(row.key));
-      }
+      },
     },
     {
       title: t('pages.marketOverview.columns.dailyChange'),
@@ -161,7 +161,7 @@
         const row = guardDataRow(record);
         if (!row || row === 'error') return null;
         return renderPercentCell(row.daily_change);
-      }
+      },
     },
     {
       title: t('pages.marketOverview.columns.weeklyChange'),
@@ -170,14 +170,14 @@
         const row = guardDataRow(record);
         if (!row || row === 'error') return null;
         return renderPercentCell(row.weekly_change);
-      }
-    }
+      },
+    },
   ]);
 
   const { spanMethod, rowClass } = useDividerTable(columns);
 
   // 管理员刷新后仅补落后项；概览由后端导入后预热，勿 force 全量打源
   usePageRefresh(() => loadOverview(false), {
-    initialLoad: () => loadOverview()
+    initialLoad: () => loadOverview(),
   });
 </script>

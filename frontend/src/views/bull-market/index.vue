@@ -10,7 +10,7 @@
         >
           {{
             $t('pages.bullMarket.indexStandardDays', {
-              name: $t(index.nameKey)
+              name: $t(index.nameKey),
             })
           }}
           <strong>{{ getIndexTotalDays(index.code) }}</strong>
@@ -82,7 +82,7 @@
   import useBullMarket from './use-bull-market';
 
   defineOptions({
-    name: 'BullMarket'
+    name: 'BullMarket',
   });
 
   const tableScroll = useTableScroll();
@@ -95,7 +95,7 @@
     turnoverStats,
     mergedRows,
     mergedColumns,
-    getIndexTotalDays
+    getIndexTotalDays,
   } = useBullMarket();
 
   usePageRefresh(() => {

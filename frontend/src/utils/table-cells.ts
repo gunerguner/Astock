@@ -3,7 +3,7 @@ import {
   formatPercent,
   formatPrice,
   getPercentClass,
-  numClass
+  numClass,
 } from '@/utils/format';
 
 export function renderNumCell(text: string) {
@@ -19,7 +19,7 @@ export function renderPriceCell(value: number, digits = 2) {
   return h(
     'span',
     { class: `num-price ${numClass(value)}` },
-    formatPrice(value, digits)
+    formatPrice(value, digits),
   );
 }
 

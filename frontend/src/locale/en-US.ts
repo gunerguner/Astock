@@ -109,5 +109,5 @@ export default {
   'pages.marketOverview.columns.currentPrice': 'Latest Price',
   'pages.marketOverview.columns.dailyChange': 'Daily Change',
   'pages.marketOverview.columns.weeklyChange': 'Weekly Change',
-  'pages.marketOverview.periodTo': 'to'
+  'pages.marketOverview.periodTo': 'to',
 };

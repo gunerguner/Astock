@@ -4,12 +4,15 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  stylelint-config-recommended: 9.0.0
+
 importers:
 
   .:
     dependencies:
       '@arco-design/web-vue':
-        specifier: ^2.44.7
+        specifier: ^2.58.0
         version: 2.58.0(vue@3.5.39(typescript@6.0.3))
       '@vueuse/core':
         specifier: ^9.3.0
@@ -34,7 +37,7 @@ importers:
         version: 4.6.4(vue@3.5.39(typescript@6.0.3))
     devDependencies:
       '@arco-plugins/vite-vue':
-        specifier: ^1.4.5
+        specifier: ^1.4.6
         version: 1.4.6
       '@commitlint/cli':
         specifier: ^17.1.2
@@ -87,6 +90,9 @@ importers:
       lint-staged:
         specifier: ^15.5.2
         version: 15.5.2
+      postcss-html:
+        specifier: ^1.8.1
+        version: 1.8.1
       prettier:
         specifier: ^3.9.5
         version: 3.9.5
@@ -96,6 +102,9 @@ importers:
       stylelint:
         specifier: ^14.13.0
         version: 14.16.1
+      stylelint-config-recommended:
+        specifier: 9.0.0
+        version: 9.0.0(stylelint@14.16.1)
       stylelint-config-recommended-vue:
         specifier: ^1.4.0
         version: 1.6.1(postcss-html@1.8.1)(stylelint@14.16.1)
@@ -3008,12 +3017,6 @@ packages:
     peerDependencies:
       postcss-html: ^1.0.0
       stylelint: '>=14.0.0'
-
-  stylelint-config-recommended@18.0.0:
-    resolution: {integrity: sha512-mxgT2XY6YZ3HWWe3Di8umG6aBmWmHTblTgu/f10rqFXnyWxjKWwNdjSWkgkwCtxIKnqjSJzvFmPT5yabVIRxZg==}
-    engines: {node: '>=20.19.0'}
-    peerDependencies:
-      stylelint: ^17.0.0
 
   stylelint-config-recommended@9.0.0:
     resolution: {integrity: sha512-9YQSrJq4NvvRuTbzDsWX3rrFOzOlYBmZP+o513BJN/yfEmGSr0AxdvrWs0P/ilSpVV/wisamAHu5XSk8Rcf4CQ==}
@@ -6486,11 +6489,7 @@ snapshots:
       semver: 7.8.5
       stylelint: 14.16.1
       stylelint-config-html: 1.1.0(postcss-html@1.8.1)(stylelint@14.16.1)
-      stylelint-config-recommended: 18.0.0(stylelint@14.16.1)
-
-  stylelint-config-recommended@18.0.0(stylelint@14.16.1):
-    dependencies:
-      stylelint: 14.16.1
+      stylelint-config-recommended: 9.0.0(stylelint@14.16.1)
 
   stylelint-config-recommended@9.0.0(stylelint@14.16.1):
     dependencies:

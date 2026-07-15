@@ -30,7 +30,7 @@
     fetchStockRanking,
     fetchTurnoverRanking,
     type StockRanking,
-    type TurnoverRanking
+    type TurnoverRanking,
   } from '@/api/analysis';
   import useAsyncRequest from '@/hooks/async-request';
   import usePageRefresh from '@/hooks/use-page-refresh';
@@ -43,7 +43,7 @@
   const tableScroll = useTableScroll();
 
   defineOptions({
-    name: 'TurnoverRank'
+    name: 'TurnoverRank',
   });
 
   const DEFAULT_TOP = 20;
@@ -66,24 +66,24 @@
       title: t('pages.turnoverRank.columns.rank'),
       dataIndex: 'rank',
       width: 72,
-      align: 'right'
+      align: 'right',
     },
     { title: t('pages.turnoverRank.columns.date'), dataIndex: 'date' },
     {
       title: t('pages.turnoverRank.columns.sh'),
       align: 'right',
-      render: ({ record }) => renderNumCell(formatAmount(record.sse_amount))
+      render: ({ record }) => renderNumCell(formatAmount(record.sse_amount)),
     },
     {
       title: t('pages.turnoverRank.columns.sz'),
       align: 'right',
-      render: ({ record }) => renderNumCell(formatAmount(record.szse_amount))
+      render: ({ record }) => renderNumCell(formatAmount(record.szse_amount)),
     },
     {
       title: t('pages.turnoverRank.columns.total'),
       align: 'right',
-      render: ({ record }) => renderNumCell(formatAmount(record.turnover))
-    }
+      render: ({ record }) => renderNumCell(formatAmount(record.turnover)),
+    },
   ]);
 
   const stockColumns = computed<TableColumnData[]>(() => [
@@ -91,23 +91,23 @@
       title: t('pages.turnoverRank.columns.rank'),
       dataIndex: 'rank',
       width: 72,
-      align: 'right'
+      align: 'right',
     },
     { title: t('pages.turnoverRank.columns.date'), dataIndex: 'date' },
     {
       title: t('pages.turnoverRank.columns.stockName'),
-      dataIndex: 'name'
+      dataIndex: 'name',
     },
     {
       title: t('pages.turnoverRank.columns.stockCode'),
       dataIndex: 'code',
-      width: 96
+      width: 96,
     },
     {
       title: t('pages.turnoverRank.columns.turnover'),
       align: 'right',
-      render: ({ record }) => renderNumCell(formatAmount(record.amount))
-    }
+      render: ({ record }) => renderNumCell(formatAmount(record.amount)),
+    },
   ]);
 
   const marketPanel = useAsyncRequest(() => fetchTurnoverRanking(DEFAULT_TOP));
@@ -119,15 +119,15 @@
       title: t('pages.turnoverRank.marketTitle'),
       columns: marketColumns.value,
       syncKey: 'turnover',
-      ...marketPanel
+      ...marketPanel,
     },
     {
       key: 'stock',
       title: t('pages.turnoverRank.stockTitle'),
       columns: stockColumns.value,
       syncKey: 'stock',
-      ...stockPanel
-    }
+      ...stockPanel,
+    },
   ]);
 
   const { panelMetaText, loadSyncStatus } = useSyncStatus();
@@ -139,7 +139,7 @@
   usePageRefresh(() => {
     Promise.all([
       ...panels.value.map((panel) => panel.run()),
-      loadSyncStatus()
+      loadSyncStatus(),
     ]);
   });
 </script>

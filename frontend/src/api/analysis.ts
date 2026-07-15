@@ -32,14 +32,14 @@ export const POINT_INDEX_CODES = [
   '000001',
   '000300',
   '399006',
-  '000688'
+  '000688',
 ] as const;
 
 export const DEFAULT_POINT_THRESHOLDS: Record<string, number> = {
   '000001': 4000,
   '000300': 4500,
   '399006': 2500,
-  '000688': 1200
+  '000688': 1200,
 };
 
 export interface TurnoverRankingItem {
@@ -71,47 +71,47 @@ export interface StockRanking {
 }
 
 export function fetchBullMarketPointStats(
-  thresholds: Record<string, number>
+  thresholds: Record<string, number>,
 ): Promise<MultiIndexPointStats> {
   return request.get('/analysis/bull-markets/point', {
     params: {
       threshold_000001: thresholds['000001'],
       threshold_000300: thresholds['000300'],
       threshold_399006: thresholds['399006'],
-      threshold_000688: thresholds['000688']
-    }
+      threshold_000688: thresholds['000688'],
+    },
   });
 }
 
 export function fetchBullMarketTurnoverStats(
-  threshold: number
+  threshold: number,
 ): Promise<BullMarketStats> {
   return request.get('/analysis/bull-markets/turnover', {
-    params: { threshold }
+    params: { threshold },
   });
 }
 
 export function fetchTurnoverRanking(
   top: number,
-  bullMarket?: string
+  bullMarket?: string,
 ): Promise<TurnoverRanking> {
   return request.get('/analysis/turnover/ranking', {
     params: {
       top,
-      bull_market: bullMarket && bullMarket !== 'all' ? bullMarket : undefined
-    }
+      bull_market: bullMarket && bullMarket !== 'all' ? bullMarket : undefined,
+    },
   });
 }
 
 export function fetchStockRanking(
   top: number,
-  bullMarket?: string
+  bullMarket?: string,
 ): Promise<StockRanking> {
   return request.get('/analysis/stock/ranking', {
     params: {
       top,
-      bull_market: bullMarket && bullMarket !== 'all' ? bullMarket : undefined
-    }
+      bull_market: bullMarket && bullMarket !== 'all' ? bullMarket : undefined,
+    },
   });
 }
 
@@ -140,7 +140,7 @@ export interface PriceLevelDataItem {
 export type PriceLevelRow = PriceLevelDataItem | PriceLevelPendingItem;
 
 export function isPriceLevelPending(
-  item: PriceLevelRow
+  item: PriceLevelRow,
 ): item is PriceLevelPendingItem {
   return 'data_pending' in item && item.data_pending === true;
 }
@@ -154,10 +154,10 @@ export interface AssetPriceLevels {
 }
 
 export function fetchAssetPriceLevels(
-  forceRefresh = false
+  forceRefresh = false,
 ): Promise<AssetPriceLevels> {
   return request.get('/analysis/asset-price-levels', {
-    params: { force_refresh: forceRefresh || undefined }
+    params: { force_refresh: forceRefresh || undefined },
   });
 }
 
@@ -183,7 +183,7 @@ export type MarketOverviewRow =
   MarketOverviewDataItem | MarketOverviewErrorItem;
 
 export function isMarketOverviewError(
-  item: MarketOverviewRow
+  item: MarketOverviewRow,
 ): item is MarketOverviewErrorItem {
   return 'error' in item;
 }
@@ -202,9 +202,9 @@ export interface MarketOverview {
 }
 
 export function fetchMarketOverview(
-  forceRefresh = false
+  forceRefresh = false,
 ): Promise<MarketOverview> {
   return request.get('/analysis/market-overview', {
-    params: { force_refresh: forceRefresh || undefined }
+    params: { force_refresh: forceRefresh || undefined },
   });
 }

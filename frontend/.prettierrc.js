@@ -4,8 +4,8 @@ module.exports = {
   printWidth: 80,
   singleQuote: true,
   quoteProps: 'consistent',
-  // 关闭尾随逗号，避免与 IDE / Airbnb 规则冲突（含 TS 泛型参数）
-  trailingComma: 'none',
+  // Prettier 3 默认；与 eslint prettier/prettier、vite-plugin-eslint 对齐
+  trailingComma: 'all',
   htmlWhitespaceSensitivity: 'strict',
   vueIndentScriptAndStyle: true,
 };

@@ -2,7 +2,7 @@ import { computed, ref } from 'vue';
 import {
   fetchSyncStatusApi,
   type SyncStatus,
-  type SyncStatusItem
+  type SyncStatusItem,
 } from '@/api/admin';
 import formatSyncMeta from '@/utils/sync-meta';
 
@@ -24,7 +24,7 @@ export default function useSyncStatus(
       return '';
     }
     const items = metaKeys.map((key) =>
-      key ? syncStatus.value?.[key] : undefined
+      key ? syncStatus.value?.[key] : undefined,
     ) as Array<SyncStatusItem | undefined | null>;
     return formatSyncMeta(...items);
   });
@@ -36,6 +36,6 @@ export default function useSyncStatus(
     syncStatus,
     loadSyncStatus,
     metaText,
-    panelMetaText
+    panelMetaText,
   };
 }

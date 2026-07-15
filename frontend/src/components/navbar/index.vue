@@ -67,7 +67,7 @@
   const localeToggleHint = computed(() =>
     currentLocale.value === 'zh-CN'
       ? t('navbar.action.switchToEn')
-      : t('navbar.action.switchToZh')
+      : t('navbar.action.switchToZh'),
   );
   const isDark = useDark({
     selector: 'body',
@@ -77,7 +77,7 @@
     storageKey: 'arco-theme',
     onChanged(dark: boolean) {
       appStore.toggleTheme(dark);
-    }
+    },
   });
   const toggleTheme = useToggle(isDark);
   const handleToggleTheme = () => {

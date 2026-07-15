@@ -1,2 +1,5 @@
 #!/usr/bin/env sh
+cd "$(dirname "$0")/../.." || exit 1
+# husky 在仓库根执行；进入 frontend 再跑，保证 stylelint/eslint 能解析本地依赖
+cd frontend || exit 1
 pnpm lint-staged

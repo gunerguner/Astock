@@ -5,6 +5,6 @@ import { useAppStore } from '@/store';
 export default function useTableScroll() {
   const appStore = useAppStore();
   return computed(() =>
-    appStore.device === 'mobile' ? { x: 'max-content' } : undefined
+    appStore.device === 'mobile' ? { x: 'max-content' } : undefined,
   );
 }

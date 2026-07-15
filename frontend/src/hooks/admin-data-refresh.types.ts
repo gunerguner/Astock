@@ -1,7 +1,7 @@
 import type {
   ImportAllResult,
   ImportProgressEvent,
-  ImportStreamError
+  ImportStreamError,
 } from '@/api/admin';
 
 export type PhaseKey = 'turnover' | 'point' | 'stock' | 'global_assets';
@@ -36,7 +36,7 @@ export const PHASE_ORDER: PhaseKey[] = [
   'turnover',
   'point',
   'stock',
-  'global_assets'
+  'global_assets',
 ];
 
 export function createInitialProgressState(): RefreshProgressState {
@@ -48,7 +48,7 @@ export function createInitialProgressState(): RefreshProgressState {
         status: 'pending',
         current: 0,
         total: 1,
-        imported: 0
+        imported: 0,
       },
       point: {
         phase: 'point',
@@ -56,7 +56,7 @@ export function createInitialProgressState(): RefreshProgressState {
         status: 'pending',
         current: 0,
         total: 1,
-        imported: 0
+        imported: 0,
       },
       stock: {
         phase: 'stock',
@@ -64,7 +64,7 @@ export function createInitialProgressState(): RefreshProgressState {
         status: 'pending',
         current: 0,
         total: 0,
-        imported: 0
+        imported: 0,
       },
       global_assets: {
         phase: 'global_assets',
@@ -72,15 +72,15 @@ export function createInitialProgressState(): RefreshProgressState {
         status: 'pending',
         current: 0,
         total: 1,
-        imported: 0
-      }
+        imported: 0,
+      },
     },
     completedCount: 0,
     totalPhases: PHASE_ORDER.length,
     overallStatus: 'idle',
     finalResult: null,
     errorMessage: null,
-    errorPhase: null
+    errorPhase: null,
   };
 }
 
@@ -93,7 +93,7 @@ function mapProgressStatus(status: ImportProgressEvent['status']): PhaseStatus {
 
 export function applyProgressEvent(
   state: RefreshProgressState,
-  event: ImportProgressEvent
+  event: ImportProgressEvent,
 ): RefreshProgressState {
   const { phase } = event;
   const nextPhases = { ...state.phases };
@@ -110,7 +110,7 @@ export function applyProgressEvent(
     imported: event.imported ?? prev.imported,
     detail: event.detail ?? prev.detail,
     elapsed: event.elapsed ?? prev.elapsed,
-    source_errors: event.source_errors ?? prev.source_errors
+    source_errors: event.source_errors ?? prev.source_errors,
   };
 
   const completedCount = PHASE_ORDER.filter((key) => {
@@ -122,20 +122,20 @@ export function applyProgressEvent(
     ...state,
     phases: nextPhases,
     completedCount,
-    overallStatus: 'running'
+    overallStatus: 'running',
   };
 }
 
 export function applyStreamError(
   state: RefreshProgressState,
-  error: ImportStreamError
+  error: ImportStreamError,
 ): RefreshProgressState {
   const errorPhase = (error.phase as PhaseKey | undefined) ?? null;
   const nextPhases = { ...state.phases };
   if (errorPhase && nextPhases[errorPhase]) {
     nextPhases[errorPhase] = {
       ...nextPhases[errorPhase],
-      status: 'failed'
+      status: 'failed',
     };
   }
 
@@ -144,13 +144,13 @@ export function applyStreamError(
     phases: nextPhases,
     overallStatus: 'error',
     errorMessage: error.message,
-    errorPhase
+    errorPhase,
   };
 }
 
 export function applyStreamDone(
   state: RefreshProgressState,
-  result: ImportAllResult
+  result: ImportAllResult,
 ): RefreshProgressState {
   const nextPhases = { ...state.phases };
   PHASE_ORDER.forEach((key) => {
@@ -162,7 +162,7 @@ export function applyStreamDone(
       imported: item.imported,
       total: item.total,
       elapsed: item.elapsed,
-      source_errors: item.source_errors
+      source_errors: item.source_errors,
     };
   });
 
@@ -173,6 +173,6 @@ export function applyStreamDone(
     overallStatus: 'done',
     finalResult: result,
     errorMessage: null,
-    errorPhase: null
+    errorPhase: null,
   };
 }

@@ -20,7 +20,7 @@ const formatDays = (value: number | null, notAvailable = false) => {
 const renderUnavailableCell = (
   t: ComposerTranslation,
   content: string,
-  notAvailable: boolean
+  notAvailable: boolean,
 ) => {
   if (!notAvailable) {
     return h('span', { class: 'num' }, content);
@@ -29,14 +29,14 @@ const renderUnavailableCell = (
     Tooltip,
     { content: t('pages.bullMarket.notAvailable') },
     {
-      default: () => h('span', { class: 'num unavailable' }, content)
-    }
+      default: () => h('span', { class: 'num unavailable' }, content),
+    },
   );
 };
 
 export default function buildMergedColumns(
   t: ComposerTranslation,
-  indexConfigs: readonly IndexConfig[]
+  indexConfigs: readonly IndexConfig[],
 ): TableColumnData[] {
   const indexColumns: TableColumnData[] = indexConfigs.map((index) => ({
     title: t(index.filterKey),
@@ -51,9 +51,9 @@ export default function buildMergedColumns(
           return renderUnavailableCell(
             t,
             formatDays(cell?.days ?? null, cell?.notAvailable),
-            cell?.notAvailable ?? false
+            cell?.notAvailable ?? false,
           );
-        }
+        },
       },
       {
         title: t('pages.bullMarket.columns.maxPointShort'),
@@ -69,21 +69,21 @@ export default function buildMergedColumns(
             return renderUnavailableCell(t, content, true);
           }
           return h('span', { class: numClass(cell?.max ?? null) }, content);
-        }
-      }
-    ]
+        },
+      },
+    ],
   }));
 
   return [
     {
       title: t('pages.bullMarket.columns.market'),
       dataIndex: 'market',
-      width: 88
+      width: 88,
     },
     {
       title: t('pages.bullMarket.columns.period'),
       width: 168,
-      render: ({ record }) => formatPeriodCompact(record.start, record.end)
+      render: ({ record }) => formatPeriodCompact(record.start, record.end),
     },
     ...indexColumns,
     {
@@ -94,7 +94,7 @@ export default function buildMergedColumns(
           align: 'right',
           width: 56,
           render: ({ record }) =>
-            h('span', { class: 'num' }, formatDays(record.turnoverDays))
+            h('span', { class: 'num' }, formatDays(record.turnoverDays)),
         },
         {
           title: t('pages.bullMarket.columns.maxTurnoverShort'),
@@ -105,9 +105,9 @@ export default function buildMergedColumns(
             const text =
               row.turnoverMax === null ? '-' : formatAmount(row.turnoverMax);
             return h('span', { class: 'num' }, text);
-          }
-        }
-      ]
-    }
+          },
+        },
+      ],
+    },
   ];
 }

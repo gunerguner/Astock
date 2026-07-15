@@ -10,20 +10,20 @@ export default mergeConfig(
       proxy: {
         '/api': {
           target: 'http://localhost:8000',
-          changeOrigin: true
-        }
+          changeOrigin: true,
+        },
       },
       fs: {
-        strict: true
-      }
+        strict: true,
+      },
     },
     plugins: [
       eslint({
         cache: false,
         include: ['src/**/*.ts', 'src/**/*.tsx', 'src/**/*.vue'],
-        exclude: ['node_modules']
-      })
-    ]
+        exclude: ['node_modules'],
+      }),
+    ],
   },
-  baseConfig
+  baseConfig,
 );

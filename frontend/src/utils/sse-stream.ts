@@ -1,7 +1,7 @@
 export interface SSEHandlers<
   TProgress = unknown,
   TDone = unknown,
-  TError = unknown
+  TError = unknown,
 > {
   onOpen?: () => void;
   onProgress?: (data: TProgress) => void;
@@ -41,11 +41,11 @@ function parseSSEFrame(raw: string): { event: string; data: string } | null {
 export function streamPost<
   TProgress = unknown,
   TDone = unknown,
-  TError = unknown
+  TError = unknown,
 >(
   url: string,
   handlers: SSEHandlers<TProgress, TDone, TError>,
-  options: StreamPostOptions = {}
+  options: StreamPostOptions = {},
 ): AbortController {
   const controller = new AbortController();
   const idleTimeoutMs = options.idleTimeoutMs ?? 30_000;
@@ -111,9 +111,9 @@ export function streamPost<
       const response = await fetch(`${url}${search}`, {
         method: 'POST',
         headers: {
-          Accept: 'text/event-stream'
+          Accept: 'text/event-stream',
         },
-        signal: options.signal ?? controller.signal
+        signal: options.signal ?? controller.signal,
       });
 
       if (!response.ok) {

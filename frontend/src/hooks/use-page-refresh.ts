@@ -7,7 +7,7 @@ interface PageRefreshOptions {
 
 export default function usePageRefresh(
   reload: () => void,
-  options?: PageRefreshOptions
+  options?: PageRefreshOptions,
 ) {
   onMounted(() => {
     onDataRefresh(reload);

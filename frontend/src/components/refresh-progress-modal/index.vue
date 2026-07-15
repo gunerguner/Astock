@@ -74,7 +74,7 @@
   import {
     PHASE_ORDER,
     type PhaseKey,
-    type PhaseStatus
+    type PhaseStatus,
   } from '@/hooks/admin-data-refresh.types';
 
   const { t } = useI18n();
@@ -88,7 +88,7 @@
     () =>
       !refreshing.value &&
       (progressState.value.overallStatus === 'done' ||
-        progressState.value.overallStatus === 'error')
+        progressState.value.overallStatus === 'error'),
   );
 
   const errorDetails = computed(() => {
@@ -119,7 +119,7 @@
     // 个股切片：进行中按缺口交易日进度；完成/失败与其它阶段一致显示写入行数
     if (key === 'stock' && item.status === 'running' && item.total > 0) {
       return `${item.current}/${item.total.toLocaleString()} ${t(
-        'adminRefresh.progress.days'
+        'adminRefresh.progress.days',
       )}`;
     }
     if (
@@ -128,7 +128,7 @@
       item.status === 'failed'
     ) {
       return `${item.imported.toLocaleString()} ${t(
-        'adminRefresh.progress.rows'
+        'adminRefresh.progress.rows',
       )}`;
     }
     return item.detail || '—';
@@ -145,7 +145,7 @@
       pending: t('adminRefresh.progress.status.pending'),
       running: t('adminRefresh.progress.status.running'),
       done: t('adminRefresh.progress.status.done'),
-      failed: t('adminRefresh.progress.status.failed')
+      failed: t('adminRefresh.progress.status.failed'),
     };
     return map[status];
   }

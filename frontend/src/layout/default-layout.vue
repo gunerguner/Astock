@@ -26,7 +26,7 @@
   const navbar = computed(() => appStore.navbar);
   const footer = computed(() => appStore.footer);
   const paddingStyle = computed(() =>
-    navbar.value ? { paddingTop: navbarHeight } : {}
+    navbar.value ? { paddingTop: navbarHeight } : {},
   );
 </script>
 

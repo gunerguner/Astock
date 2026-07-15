@@ -66,7 +66,7 @@ module.exports = {
     'no-param-reassign': 0,
     'prefer-regex-literals': 0,
     'import/no-extraneous-dependencies': 0,
-    // 交给 Prettier（trailingComma: es5）统一处理，避免与 airbnb comma-dangle 冲突
+    // 交给 Prettier（trailingComma: all）统一处理，避免与 airbnb comma-dangle 冲突
     'comma-dangle': 0,
   },
 };

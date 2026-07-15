@@ -21,6 +21,6 @@ export default function useLocale() {
   return {
     currentLocale,
     changeLocale,
-    toggleLocale
+    toggleLocale,
   };
 }

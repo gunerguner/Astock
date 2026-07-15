@@ -52,12 +52,12 @@ const STREAM_URL = '/api/v1/admin/data/import/stream';
 const IMPORT_STREAM_IDLE_TIMEOUT_MS = 300_000;
 
 export function refreshAllDataStream(
-  handlers: ImportStreamHandlers
+  handlers: ImportStreamHandlers,
 ): AbortController {
   return streamPost<ImportProgressEvent, ImportAllResult, ImportStreamError>(
     STREAM_URL,
     handlers,
-    { idleTimeoutMs: IMPORT_STREAM_IDLE_TIMEOUT_MS }
+    { idleTimeoutMs: IMPORT_STREAM_IDLE_TIMEOUT_MS },
   );
 }
 
