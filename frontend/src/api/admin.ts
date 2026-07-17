@@ -37,13 +37,13 @@ export interface ImportProgressEvent {
 
 export interface ImportStreamError {
   message: string;
-  phase?: string;
+  phase?: ImportPhaseKey;
 }
 
 export interface ImportStreamHandlers {
   onProgress?: (event: ImportProgressEvent) => void;
   onDone?: (result: ImportAllResult) => void;
-  onError?: (error: ImportStreamError) => void;
+  onError?: (error: ImportStreamError | { message: string }) => void;
 }
 
 const STREAM_URL = '/api/v1/admin/data/import/stream';
@@ -64,7 +64,7 @@ export function refreshAllDataStream(
 export interface SyncStatusItem {
   last_synced_date: string | null;
   last_synced_at: string | null;
-  status: string | null;
+  status: ImportStatus | null;
 }
 
 export interface SyncStatus {

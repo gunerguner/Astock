@@ -1,7 +1,8 @@
 import { h } from 'vue';
 import { Tooltip } from '@arco-design/web-vue';
-import type { TableColumnData } from '@arco-design/web-vue';
+import type { TableColumnData, TableData } from '@arco-design/web-vue';
 import type { ComposerTranslation } from 'vue-i18n';
+import { toTableRow } from '@/hooks/grouped-table';
 import { formatAmount, formatPoint, numClass } from '@/utils/format';
 import type { IndexConfig, MergedRow } from './use-bull-market';
 
@@ -45,8 +46,8 @@ export default function buildMergedColumns(
         title: t('pages.bullMarket.columns.standardDaysShort'),
         align: 'right',
         width: 56,
-        render: ({ record }) => {
-          const row = record as MergedRow;
+        render: ({ record }: { record: TableData }) => {
+          const row = toTableRow<MergedRow>(record);
           const cell = row.indices[index.code];
           return renderUnavailableCell(
             t,
@@ -59,8 +60,8 @@ export default function buildMergedColumns(
         title: t('pages.bullMarket.columns.maxPointShort'),
         align: 'right',
         width: 76,
-        render: ({ record }) => {
-          const row = record as MergedRow;
+        render: ({ record }: { record: TableData }) => {
+          const row = toTableRow<MergedRow>(record);
           const cell = row.indices[index.code];
           const content = cell?.notAvailable
             ? '—'
@@ -83,7 +84,10 @@ export default function buildMergedColumns(
     {
       title: t('pages.bullMarket.columns.period'),
       width: 168,
-      render: ({ record }) => formatPeriodCompact(record.start, record.end),
+      render: ({ record }: { record: TableData }) => {
+        const row = toTableRow<MergedRow>(record);
+        return formatPeriodCompact(row.start, row.end);
+      },
     },
     ...indexColumns,
     {
@@ -93,15 +97,17 @@ export default function buildMergedColumns(
           title: t('pages.bullMarket.columns.standardDaysShort'),
           align: 'right',
           width: 56,
-          render: ({ record }) =>
-            h('span', { class: 'num' }, formatDays(record.turnoverDays)),
+          render: ({ record }: { record: TableData }) => {
+            const row = toTableRow<MergedRow>(record);
+            return h('span', { class: 'num' }, formatDays(row.turnoverDays));
+          },
         },
         {
           title: t('pages.bullMarket.columns.maxTurnoverShort'),
           align: 'right',
           width: 88,
-          render: ({ record }) => {
-            const row = record as MergedRow;
+          render: ({ record }: { record: TableData }) => {
+            const row = toTableRow<MergedRow>(record);
             const text =
               row.turnoverMax === null ? '-' : formatAmount(row.turnoverMax);
             return h('span', { class: 'num' }, text);

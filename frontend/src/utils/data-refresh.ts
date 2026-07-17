@@ -1,16 +1,19 @@
 import mitt from 'mitt';
 
-const emitter = mitt();
-const DATA_REFRESH_KEY = 'DATA_REFRESH';
+type DataRefreshEvents = {
+  DATA_REFRESH: undefined;
+};
+
+const emitter = mitt<DataRefreshEvents>();
 
 export function emitDataRefresh() {
-  emitter.emit(DATA_REFRESH_KEY);
+  emitter.emit('DATA_REFRESH');
 }
 
 export function onDataRefresh(handler: () => void) {
-  emitter.on(DATA_REFRESH_KEY, handler);
+  emitter.on('DATA_REFRESH', handler);
 }
 
 export function offDataRefresh(handler: () => void) {
-  emitter.off(DATA_REFRESH_KEY, handler);
+  emitter.off('DATA_REFRESH', handler);
 }

@@ -10,8 +10,6 @@ export interface ApiResponse<T = unknown> {
   data: T;
 }
 
-export type HttpResponse<T = unknown> = ApiResponse<T>;
-
 export interface RequestInstance {
   get<T = unknown, D = unknown>(
     url: string,
@@ -45,7 +43,9 @@ instance.interceptors.response.use(
         new Error(res.message || t('common.requestFailed')),
       );
     }
-    return res.data as unknown as AxiosResponse<ApiResponse>;
+    // Axios 拦截器类型要求返回 AxiosResponse，实际解包为业务 data
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return res.data as any;
   },
   (error) => {
     const message =

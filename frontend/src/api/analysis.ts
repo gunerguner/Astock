@@ -35,7 +35,11 @@ export const POINT_INDEX_CODES = [
   '000688',
 ] as const;
 
-export const DEFAULT_POINT_THRESHOLDS: Record<string, number> = {
+export type PointIndexCode = (typeof POINT_INDEX_CODES)[number];
+
+export type PointThresholds = Record<PointIndexCode, number>;
+
+export const DEFAULT_POINT_THRESHOLDS: PointThresholds = {
   '000001': 4000,
   '000300': 4500,
   '399006': 2500,
@@ -71,7 +75,7 @@ export interface StockRanking {
 }
 
 export function fetchBullMarketPointStats(
-  thresholds: Record<string, number>,
+  thresholds: PointThresholds,
 ): Promise<MultiIndexPointStats> {
   return request.get('/analysis/bull-markets/point', {
     params: {
@@ -115,11 +119,18 @@ export function fetchStockRanking(
   });
 }
 
+export type PriceLevelConclusion =
+  | 'pending'
+  | 'nearAth'
+  | 'moderatePullback'
+  | 'significantPullback'
+  | 'deepPullback';
+
 export interface PriceLevelPendingItem {
   ticker: string;
   name: string;
   asset_type: 'stock' | 'metal';
-  conclusion: string;
+  conclusion: PriceLevelConclusion;
   data_pending: true;
 }
 
@@ -134,7 +145,7 @@ export interface PriceLevelDataItem {
   ath_days: number;
   daily_change: number | null;
   weekly_change: number | null;
-  conclusion: string;
+  conclusion: PriceLevelConclusion;
 }
 
 export type PriceLevelRow = PriceLevelDataItem | PriceLevelPendingItem;

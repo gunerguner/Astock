@@ -1,10 +1,19 @@
 import type { RouteRecordNormalized } from 'vue-router';
 
-const modules = import.meta.glob('./modules/*.ts', { eager: true });
+type RouteModule = {
+  default?: RouteRecordNormalized | RouteRecordNormalized[];
+};
 
-function formatModules(_modules: any, result: RouteRecordNormalized[]) {
-  Object.keys(_modules).forEach((key) => {
-    const defaultModule = _modules[key].default;
+const modules = import.meta.glob('./modules/*.ts', {
+  eager: true,
+}) as Record<string, RouteModule>;
+
+function formatModules(
+  routeModules: Record<string, RouteModule>,
+  result: RouteRecordNormalized[],
+) {
+  Object.keys(routeModules).forEach((key) => {
+    const defaultModule = routeModules[key].default;
     if (!defaultModule) return;
     const moduleList = Array.isArray(defaultModule)
       ? [...defaultModule]

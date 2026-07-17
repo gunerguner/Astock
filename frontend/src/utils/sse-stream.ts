@@ -1,12 +1,13 @@
 export interface SSEHandlers<
   TProgress = unknown,
   TDone = unknown,
-  TError = unknown,
+  TError extends { message: string } = { message: string },
 > {
   onOpen?: () => void;
   onProgress?: (data: TProgress) => void;
   onDone?: (data: TDone) => void;
-  onError?: (data: TError) => void;
+  /** 服务端 error 事件为 TError；本地断连/超时等仅保证有 message */
+  onError?: (data: TError | { message: string }) => void;
   onPing?: () => void;
 }
 
@@ -41,7 +42,7 @@ function parseSSEFrame(raw: string): { event: string; data: string } | null {
 export function streamPost<
   TProgress = unknown,
   TDone = unknown,
-  TError = unknown,
+  TError extends { message: string } = { message: string },
 >(
   url: string,
   handlers: SSEHandlers<TProgress, TDone, TError>,
@@ -55,13 +56,17 @@ export function streamPost<
 
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
+  const emitLocalError = (message: string) => {
+    handlers.onError?.({ message });
+  };
+
   const resetIdleTimer = () => {
     if (idleTimer) {
       clearTimeout(idleTimer);
     }
     idleTimer = setTimeout(() => {
       controller.abort();
-      handlers.onError?.({ message: '连接超时' } as TError);
+      emitLocalError('连接超时');
     }, idleTimeoutMs);
   };
 
@@ -125,7 +130,7 @@ export function streamPost<
           // ignore parse error
         }
         receivedTerminalEvent = true;
-        handlers.onError?.({ message } as TError);
+        emitLocalError(message);
         return;
       }
 
@@ -134,7 +139,7 @@ export function streamPost<
       const reader = response.body?.getReader();
       if (!reader) {
         receivedTerminalEvent = true;
-        handlers.onError?.({ message: '无法读取响应流' } as TError);
+        emitLocalError('无法读取响应流');
         return;
       }
 
@@ -172,14 +177,14 @@ export function streamPost<
       }
 
       if (!receivedTerminalEvent) {
-        handlers.onError?.({ message: '连接意外断开' } as TError);
+        emitLocalError('连接意外断开');
       }
     } catch (error) {
       if (controller.signal.aborted) {
         return;
       }
       const message = error instanceof Error ? error.message : '网络请求失败';
-      handlers.onError?.({ message } as TError);
+      emitLocalError(message);
     } finally {
       clearIdleTimer();
     }

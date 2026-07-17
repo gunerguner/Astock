@@ -23,9 +23,9 @@ export default function useSyncStatus(
     if (metaKeys.length === 0) {
       return '';
     }
-    const items = metaKeys.map((key) =>
+    const items: Array<SyncStatusItem | undefined> = metaKeys.map((key) =>
       key ? syncStatus.value?.[key] : undefined,
-    ) as Array<SyncStatusItem | undefined | null>;
+    );
     return formatSyncMeta(...items);
   });
 

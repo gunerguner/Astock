@@ -39,6 +39,15 @@ export const PHASE_ORDER: PhaseKey[] = [
   'global_assets',
 ];
 
+export function isPhaseKey(value: string | undefined): value is PhaseKey {
+  return (
+    value === 'turnover' ||
+    value === 'point' ||
+    value === 'stock' ||
+    value === 'global_assets'
+  );
+}
+
 export function createInitialProgressState(): RefreshProgressState {
   return {
     phases: {
@@ -130,9 +139,9 @@ export function applyStreamError(
   state: RefreshProgressState,
   error: ImportStreamError,
 ): RefreshProgressState {
-  const errorPhase = (error.phase as PhaseKey | undefined) ?? null;
+  const errorPhase = isPhaseKey(error.phase) ? error.phase : null;
   const nextPhases = { ...state.phases };
-  if (errorPhase && nextPhases[errorPhase]) {
+  if (errorPhase) {
     nextPhases[errorPhase] = {
       ...nextPhases[errorPhase],
       status: 'failed',

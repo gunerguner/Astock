@@ -129,7 +129,7 @@
   const columns = computed<TableColumnData[]>(() => [
     {
       title: t('pages.marketOverview.columns.asset'),
-      render: ({ record }) => {
+      render: ({ record }: { record: TableData }) => {
         const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) {
           const suffix = row.periodText ? `（${row.periodText}）` : '';
@@ -145,7 +145,7 @@
     {
       title: t('pages.marketOverview.columns.currentPrice'),
       align: 'right',
-      render: ({ record }) => {
+      render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row) return null;
         if (row === 'error') {
@@ -157,7 +157,7 @@
     {
       title: t('pages.marketOverview.columns.dailyChange'),
       align: 'right',
-      render: ({ record }) => {
+      render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row || row === 'error') return null;
         return renderPercentCell(row.daily_change);
@@ -166,7 +166,7 @@
     {
       title: t('pages.marketOverview.columns.weeklyChange'),
       align: 'right',
-      render: ({ record }) => {
+      render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row || row === 'error') return null;
         return renderPercentCell(row.weekly_change);

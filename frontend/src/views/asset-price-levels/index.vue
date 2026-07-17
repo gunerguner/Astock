@@ -26,6 +26,7 @@
   import {
     fetchAssetPriceLevels,
     isPriceLevelPending,
+    type PriceLevelConclusion,
     type PriceLevelDataItem,
     type PriceLevelRow,
   } from '@/api/analysis';
@@ -83,7 +84,7 @@
     formatLatestDateMeta(levels.value?.latest_trading_date),
   );
 
-  const conclusionColor = (conclusion: string) => {
+  const conclusionColor = (conclusion: PriceLevelConclusion) => {
     if (conclusion === 'pending') return 'gray';
     if (conclusion === 'nearAth') return 'arcoblue';
     if (conclusion === 'moderatePullback') return 'gold';
@@ -174,7 +175,7 @@
   const columns = computed<TableColumnData[]>(() => [
     {
       title: t('pages.assetPriceLevels.columns.asset'),
-      render: ({ record }) => {
+      render: ({ record }: { record: TableData }) => {
         const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) {
           return h('span', { class: 'section-divider-label' }, row.label);
@@ -185,7 +186,7 @@
     {
       title: t('pages.assetPriceLevels.columns.currentPrice'),
       align: 'right',
-      render: ({ record }) => {
+      render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row) return null;
         if (row === 'pending') return renderPendingDash();
@@ -195,7 +196,7 @@
     {
       title: t('pages.assetPriceLevels.columns.athPrice'),
       align: 'right',
-      render: ({ record }) => {
+      render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row) return null;
         if (row === 'pending') return renderPendingDash();
@@ -205,7 +206,7 @@
     {
       title: t('pages.assetPriceLevels.columns.athDiff'),
       align: 'right',
-      render: ({ record }) => {
+      render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row) return null;
         if (row === 'pending') return renderPendingDash();
@@ -215,7 +216,7 @@
     {
       title: t('pages.assetPriceLevels.columns.athDays'),
       align: 'right',
-      render: ({ record }) => {
+      render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row) return null;
         if (row === 'pending') return renderPendingDash();
@@ -225,7 +226,7 @@
     {
       title: t('pages.assetPriceLevels.columns.dailyChange'),
       align: 'right',
-      render: ({ record }) => {
+      render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row || row === 'pending') return null;
         return renderPercentCell(row.daily_change);
@@ -234,7 +235,7 @@
     {
       title: t('pages.assetPriceLevels.columns.weeklyChange'),
       align: 'right',
-      render: ({ record }) => {
+      render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row || row === 'pending') return null;
         return renderPercentCell(row.weekly_change);
@@ -242,7 +243,7 @@
     },
     {
       title: t('pages.assetPriceLevels.columns.conclusion'),
-      render: ({ record }) => {
+      render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row || row === 'pending') return null;
         const conclusionKey = CONCLUSION_I18N_KEYS[row.conclusion];

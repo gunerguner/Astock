@@ -9,12 +9,10 @@ export interface BaseDividerRow {
 }
 
 export function isDividerRow(record: unknown): record is BaseDividerRow {
-  return (
-    typeof record === 'object' &&
-    record !== null &&
-    'rowKind' in record &&
-    (record as { rowKind?: string }).rowKind === 'divider'
-  );
+  if (typeof record !== 'object' || record === null || !('rowKind' in record)) {
+    return false;
+  }
+  return (record as Record<string, unknown>).rowKind === 'divider';
 }
 
 export function toTableRow<T>(record: TableData): T {
