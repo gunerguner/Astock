@@ -6,11 +6,9 @@ import baostock as bs
 
 from astock.config import STOCK_CODE_PREFIXES
 from astock.sources.baostock.session import (
-    _collect_rows,
-    _login_failure,
-    _query_failure,
-    _safe_baostock_call,
-    baostock_session,
+    collect_rows,
+    query_failure,
+    safe_baostock_call,
 )
 from astock.sources.fetch_result import SourceFetchResult
 from astock.sources.symbols import parse_baostock_code
@@ -37,12 +35,12 @@ def _parse_stock_code_rows(rows: list) -> list[dict]:
 def fetch_all_stock_codes_logged_in(as_of_date: str) -> SourceFetchResult:
     """已 login 的会话内拉取股票代码+名称清单。"""
     rs = bs.query_all_stock(day=as_of_date)
-    if failed := _query_failure("全市场代码清单查询失败", rs):
+    if failed := query_failure("全市场代码清单查询失败", rs):
         return failed
 
-    result = _safe_baostock_call(
+    result = safe_baostock_call(
         "全市场代码清单读取超时",
-        lambda: _collect_rows(rs),
+        lambda: collect_rows(rs),
     )
     if isinstance(result, SourceFetchResult):
         return result
@@ -50,11 +48,3 @@ def fetch_all_stock_codes_logged_in(as_of_date: str) -> SourceFetchResult:
     records = _parse_stock_code_rows(result)
     logger.info("全市场股票代码清单获取完成: %s 只 (as_of=%s)", len(records), as_of_date)
     return SourceFetchResult(records=records)
-
-
-def fetch_all_stock_codes(as_of_date: str) -> SourceFetchResult:
-    """全市场正常交易的沪深主板/中小板/创业板/科创板股票代码清单（自管 login/logout）。"""
-    with baostock_session() as lg:
-        if failed := _login_failure(lg):
-            return failed
-        return fetch_all_stock_codes_logged_in(as_of_date)

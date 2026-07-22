@@ -6,10 +6,8 @@ import baostock as bs
 import pandas as pd
 
 from astock.sources.baostock.session import (
-    _login_failure,
-    _query_failure,
-    _safe_baostock_call,
-    baostock_session,
+    query_failure,
+    safe_baostock_call,
 )
 from astock.sources.fetch_result import SourceFetchResult
 from astock.sources.symbols import parse_baostock_code
@@ -55,7 +53,7 @@ def fetch_daily_astock_amounts_logged_in(trade_date: str) -> SourceFetchResult:
 
     def _query() -> SourceFetchResult:
         rs = bs.query_daily_history_k_AStock(date=trade_date)
-        if failed := _query_failure(f"全市场日K失败({trade_date})", rs):
+        if failed := query_failure(f"全市场日K失败({trade_date})", rs):
             return failed
         result = _parse_daily_amount_rows(rs)
         if not result.ok:
@@ -71,12 +69,4 @@ def fetch_daily_astock_amounts_logged_in(trade_date: str) -> SourceFetchResult:
         logger.info("全市场日K完成: date=%s stocks=%s", trade_date, len(result.records))
         return result
 
-    return _safe_baostock_call(f"全市场日K超时/连接异常({trade_date})", _query)
-
-
-def fetch_daily_astock_amounts(trade_date: str) -> SourceFetchResult:
-    """拉取指定交易日全市场个股成交额（自管 login/logout）。"""
-    with baostock_session() as lg:
-        if failed := _login_failure(lg):
-            return failed
-        return fetch_daily_astock_amounts_logged_in(trade_date)
+    return safe_baostock_call(f"全市场日K超时/连接异常({trade_date})", _query)

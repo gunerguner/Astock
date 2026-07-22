@@ -28,7 +28,7 @@ def _normalize_history_df(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def fetch_stock_history(ticker: str) -> pd.DataFrame:
+def _fetch_stock_history(ticker: str) -> pd.DataFrame:
     try:
         df = ak.stock_us_daily(symbol=ticker, adjust="qfq")
     except ValueError as e:
@@ -41,6 +41,7 @@ def fetch_stock_history(ticker: str) -> pd.DataFrame:
 
 
 def fetch_commodity_history(code: str) -> pd.DataFrame:
+    """外盘期货/贵金属历史（市场概览 foreign_futures 也会直接调用）。"""
     df = retry_call(
         f"futures_foreign_hist:{code}",
         lambda: ak.futures_foreign_hist(symbol=code),
@@ -48,13 +49,13 @@ def fetch_commodity_history(code: str) -> pd.DataFrame:
     return _normalize_history_df(df)
 
 
-def fetch_asset_history(ticker: str, asset_type: str) -> pd.DataFrame:
+def _fetch_asset_history(ticker: str, asset_type: str) -> pd.DataFrame:
     if asset_type == "stock":
-        return fetch_stock_history(ticker)
+        return _fetch_stock_history(ticker)
     return fetch_commodity_history(ticker)
 
 
-def extract_ath(df: pd.DataFrame) -> tuple[float, str] | None:
+def _extract_ath(df: pd.DataFrame) -> tuple[float, str] | None:
     if df.empty:
         return None
     idx = df["high"].astype(float).idxmax()
@@ -62,7 +63,7 @@ def extract_ath(df: pd.DataFrame) -> tuple[float, str] | None:
     return float(row["high"]), normalize_date(row["date"])
 
 
-def extract_recent_closes(
+def _extract_recent_closes(
     df: pd.DataFrame,
     n: int = 10,
     *,
@@ -81,20 +82,20 @@ def extract_recent_closes(
     }
 
 
-def fetch_one_asset(asset: dict[str, str]) -> tuple[str, SourceFetchResult]:
+def _fetch_one_asset(asset: dict[str, str]) -> tuple[str, SourceFetchResult]:
     ticker = asset["ticker"]
     if asset.get("data_pending"):
         return ticker, SourceFetchResult.failure(f"{ticker}: 待接入数据源")
     asset_type = asset["asset_type"]
     try:
-        df = fetch_asset_history(ticker, asset_type)
+        df = _fetch_asset_history(ticker, asset_type)
         if df.empty:
             return ticker, SourceFetchResult.failure(f"{ticker} 历史数据为空")
-        ath = extract_ath(df)
+        ath = _extract_ath(df)
         if ath is None:
             return ticker, SourceFetchResult.failure(f"{ticker} 无法提取历史最高点")
         all_time_high, ath_date = ath
-        recent_closes = extract_recent_closes(df, market=market_for_asset_type(asset_type))
+        recent_closes = _extract_recent_closes(df, market=market_for_asset_type(asset_type))
         return ticker, SourceFetchResult(
             records=[
                 {
@@ -117,6 +118,6 @@ def fetch_all_assets(
     results: dict[str, SourceFetchResult] = {}
     # 故意串行：akshare 底层 mini_racer 多线程会在 macOS 上 fatal crash。
     for asset in assets:
-        ticker, result = fetch_one_asset(asset)
+        ticker, result = _fetch_one_asset(asset)
         results[ticker] = result
     return results

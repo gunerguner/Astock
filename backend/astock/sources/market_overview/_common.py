@@ -14,7 +14,7 @@ from astock.config import (
 from astock.core.datetime_utils import MarketCode, last_settled_date, normalize_date, now_local
 
 
-def _tail_closes(
+def tail_closes(
     date_close_pairs: list[tuple[str, float]],
     n: int,
     *,
@@ -47,7 +47,7 @@ def df_to_tail_closes(
         val = pd.to_numeric(row.get(value_col), errors="coerce")
         if d and pd.notna(val):
             pairs.append((d, float(val) * scale))
-    return _tail_closes(pairs, n, market=market)
+    return tail_closes(pairs, n, market=market)
 
 
 def safe_retry_df(
@@ -69,7 +69,7 @@ def safe_retry_df(
     return df
 
 
-def _em_udi_headers() -> dict[str, str]:
+def em_udi_headers() -> dict[str, str]:
     return {
         "User-Agent": EM_USER_AGENT,
         "Referer": EM_UDI_REFERER,
@@ -77,7 +77,7 @@ def _em_udi_headers() -> dict[str, str]:
     }
 
 
-def _parse_em_kline_lines(klines: list[str]) -> list[tuple[str, float]]:
+def parse_em_kline_lines(klines: list[str]) -> list[tuple[str, float]]:
     pairs: list[tuple[str, float]] = []
     for line in klines:
         parts = line.split(",")
@@ -90,13 +90,13 @@ def _parse_em_kline_lines(klines: list[str]) -> list[tuple[str, float]]:
     return pairs
 
 
-def _merge_close_dicts(*sources: dict[str, float], n: int, market: MarketCode = "cn") -> dict[str, float]:
+def merge_close_dicts(*sources: dict[str, float], n: int, market: MarketCode = "cn") -> dict[str, float]:
     """合并多段收盘价字典后取近期 n 个结算日。"""
     merged: dict[str, float] = {}
     for src in sources:
         merged.update(src)
-    return _tail_closes(sorted(merged.items()), n, market=market)
+    return tail_closes(sorted(merged.items()), n, market=market)
 
 
-def _cn_index_cutoff():
+def cn_index_cutoff():
     return now_local() - timedelta(days=CN_INDEX_LOOKBACK_DAYS)

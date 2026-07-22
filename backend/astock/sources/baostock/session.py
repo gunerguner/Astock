@@ -71,7 +71,7 @@ def baostock_session():
         _logout_if_idle()
 
 
-def _collect_rows(rs) -> list:
+def collect_rows(rs) -> list:
     """读取 ResultSet 全部行；socket 超时/连接异常时抛 BaostockRecvTimeoutError。"""
     try:
         return [rs.get_row_data() for _ in iter(rs.next, False)]
@@ -79,7 +79,7 @@ def _collect_rows(rs) -> list:
         raise BaostockRecvTimeoutError(str(e)) from e
 
 
-def _login_failure(lg) -> SourceFetchResult | None:
+def login_failure(lg) -> SourceFetchResult | None:
     if lg.error_code != "0":
         msg = f"baostock 登录失败: {lg.error_msg}"
         logger.error(msg)
@@ -87,7 +87,7 @@ def _login_failure(lg) -> SourceFetchResult | None:
     return None
 
 
-def _query_failure(label: str, rs) -> SourceFetchResult | None:
+def query_failure(label: str, rs) -> SourceFetchResult | None:
     if rs.error_code != "0":
         msg = f"{label}: {rs.error_msg}"
         logger.error(msg)
@@ -101,7 +101,7 @@ def _read_failure(label: str, exc: BaostockRecvTimeoutError) -> SourceFetchResul
     return SourceFetchResult.failure(msg)
 
 
-def _safe_baostock_call[T](
+def safe_baostock_call[T](
     label: str,
     fn: Callable[[], T],
     *,

@@ -8,10 +8,10 @@ import pandas as pd
 from astock.config import POINT_INDEX_CONFIG, START_DATE
 from astock.core.datetime_utils import iso_now, last_settled_date
 from astock.sources.baostock.session import (
-    _collect_rows,
-    _login_failure,
-    _query_failure,
-    _safe_baostock_call,
+    collect_rows,
+    login_failure,
+    query_failure,
+    safe_baostock_call,
     baostock_session,
 )
 from astock.sources.fetch_result import SourceFetchResult
@@ -37,7 +37,7 @@ def fetch_point(
     end = last_settled_date()
 
     with baostock_session() as lg:
-        if failed := _login_failure(lg):
+        if failed := login_failure(lg):
             return failed
 
         def _query() -> SourceFetchResult:
@@ -48,9 +48,9 @@ def fetch_point(
                 end_date=end,
                 frequency="d",
             )
-            if failed := _query_failure(f"{index_name}点位查询失败", rs):
+            if failed := query_failure(f"{index_name}点位查询失败", rs):
                 return failed
-            rows = _collect_rows(rs)
+            rows = collect_rows(rs)
             if not rows:
                 logger.info("%s点位无新增数据: %s → %s", index_name, start, end)
                 return SourceFetchResult.empty()
@@ -82,7 +82,7 @@ def fetch_point(
             )
             return SourceFetchResult(records=records)
 
-        result = _safe_baostock_call(f"{index_name}点位查询超时/连接异常", _query)
+        result = safe_baostock_call(f"{index_name}点位查询超时/连接异常", _query)
         if isinstance(result, SourceFetchResult):
             return result
         return result

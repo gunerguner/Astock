@@ -1,6 +1,5 @@
 """分析查询公共工具。"""
 
-from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlmodel import Session, SQLModel, select
 
 from astock.config import BULL_MARKETS

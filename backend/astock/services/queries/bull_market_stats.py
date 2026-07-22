@@ -78,30 +78,6 @@ def build_bull_market_stats(
     )
 
 
-def bull_market_point_stats(
-    db: Session, threshold: float, index_code: str = "000001"
-) -> BullMarketStatsResponse:
-    config = POINT_INDEX_CONFIG.get(index_code)
-    if config is None:
-        raise AppError(message=f"未知指数代码: {index_code}")
-
-    index_name = str(config["name"])
-    exists = db.exec(
-        select(Point).where(Point.index_code == index_code).limit(1)
-    ).first()
-    if exists is None:
-        raise AppError(message=f"{index_name}点位数据为空，请先导入数据")
-
-    return build_bull_market_stats(
-        db,
-        Point,
-        Point.close,
-        threshold,
-        extra_where=[Point.index_code == index_code],
-        available_from=str(config["available_from"]),
-    )
-
-
 def bull_market_multi_index_point_stats(
     db: Session, thresholds: dict[str, float]
 ) -> MultiIndexPointStatsResponse:

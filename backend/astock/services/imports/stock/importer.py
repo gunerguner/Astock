@@ -34,7 +34,7 @@ from astock.sources.baostock import (
     fetch_all_stock_codes_logged_in,
     fetch_daily_astock_amounts_logged_in,
 )
-from astock.sources.baostock.session import _login_failure
+from astock.sources.baostock.session import login_failure
 
 logger = logging.getLogger(__name__)
 
@@ -186,7 +186,7 @@ def import_stock_gen(
     yield from _drain_bridge(bridge)
 
     with baostock_session() as lg:
-        if failed := _login_failure(lg):
+        if failed := login_failure(lg):
             raise ExternalSourceAppError(failed.errors[0])
 
         # 名称按锚点日拉一次，缺口期内复用
@@ -285,14 +285,3 @@ def import_stock_gen(
         result, start_ts=start_ts, log_label="个股切片导入"
     )
 
-
-def import_stock(
-    db: Session,
-    on_progress: ProgressReporter | None = None,
-) -> dict[str, Any]:
-    gen = import_stock_gen(db, on_progress=on_progress)
-    try:
-        while True:
-            next(gen)
-    except StopIteration as exc:
-        return exc.value

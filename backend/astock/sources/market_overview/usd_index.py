@@ -22,10 +22,10 @@ from astock.config import (
 from astock.core.datetime_utils import last_settled_date, normalize_date, now_local
 from astock.core.price_utils import has_sufficient_baseline_points
 from astock.sources.market_overview._common import (
-    _em_udi_headers,
-    _merge_close_dicts,
-    _parse_em_kline_lines,
-    _tail_closes,
+    em_udi_headers,
+    merge_close_dicts,
+    parse_em_kline_lines,
+    tail_closes,
     df_to_tail_closes,
 )
 
@@ -54,7 +54,7 @@ def _spot_pairs_to_closes(
     pairs: list[tuple[str, float]] = [(quote_date, current * scale)]
     if prev is not None and not pd.isna(prev):
         pairs.insert(0, (_previous_weekday(quote_date), float(prev) * scale))
-    return _tail_closes(pairs, MARKET_OVERVIEW_RECENT_DAYS, market="us")
+    return tail_closes(pairs, MARKET_OVERVIEW_RECENT_DAYS, market="us")
 
 
 def _fetch_usd_index_spot_em() -> dict[str, float]:
@@ -152,12 +152,12 @@ def _fetch_usd_index_history_em(host: str, n: int) -> dict[str, float]:
         "forcect": "1",
     }
     with httpx.Client(
-        timeout=USD_HISTORY_TIMEOUT, headers=_em_udi_headers(), http2=False
+        timeout=USD_HISTORY_TIMEOUT, headers=em_udi_headers(), http2=False
     ) as client:
         resp = client.get(f"{host}/api/qt/stock/kline/get", params=params)
         resp.raise_for_status()
         klines = (resp.json().get("data") or {}).get("klines") or []
-        return _tail_closes(_parse_em_kline_lines(klines), n, market="us")
+        return tail_closes(parse_em_kline_lines(klines), n, market="us")
 
 
 def _fetch_usd_index_history_sina(n: int) -> dict[str, float]:
@@ -182,7 +182,7 @@ def _fetch_usd_index_history_sina(n: int) -> dict[str, float]:
         close = pd.to_numeric(parts[4], errors="coerce")
         if d and pd.notna(close):
             pairs.append((d, float(close)))
-    closes = _tail_closes(pairs, n, market="us")
+    closes = tail_closes(pairs, n, market="us")
     if closes:
         logger.info("美元指数历史来自新浪 DINIW: %s 点", len(closes))
     return closes
@@ -255,12 +255,12 @@ def fetch_usd_index(n: int) -> dict[str, float]:
     if not spot:
         return history
 
-    merged = _merge_close_dicts(history, spot, n=n, market="us")
+    merged = merge_close_dicts(history, spot, n=n, market="us")
     if has_sufficient_baseline_points(merged, market="us"):
         return merged
 
     # 现货补丁仍不够：再拉更长历史一次
     longer = _fetch_usd_index_history(history_n + 10)
     if longer:
-        merged = _merge_close_dicts(longer, spot, n=n, market="us")
+        merged = merge_close_dicts(longer, spot, n=n, market="us")
     return merged

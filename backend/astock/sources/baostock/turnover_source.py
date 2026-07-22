@@ -8,9 +8,9 @@ import pandas as pd
 from astock.config import EXCHANGE_TURNOVER_CODES, START_DATE
 from astock.core.datetime_utils import iso_now, last_settled_date
 from astock.sources.baostock.session import (
-    _collect_rows,
-    _login_failure,
-    _safe_baostock_call,
+    collect_rows,
+    login_failure,
+    safe_baostock_call,
     baostock_session,
 )
 from astock.sources.fetch_result import SourceFetchResult
@@ -26,7 +26,7 @@ def fetch_turnover(start_date: str | None = None) -> SourceFetchResult:
     index_codes = EXCHANGE_TURNOVER_CODES
 
     with baostock_session() as lg:
-        if failed := _login_failure(lg):
+        if failed := login_failure(lg):
             return failed
 
         all_records: list[pd.DataFrame] = []
@@ -41,7 +41,7 @@ def fetch_turnover(start_date: str | None = None) -> SourceFetchResult:
                 )
                 if rs.error_code != "0":
                     raise RuntimeError(f"{col_name} 查询失败: {rs.error_msg}")
-                rows = _collect_rows(rs)
+                rows = collect_rows(rs)
                 if not rows:
                     return None
                 df = pd.DataFrame(rows, columns=rs.fields)
@@ -53,7 +53,7 @@ def fetch_turnover(start_date: str | None = None) -> SourceFetchResult:
                 df.rename(columns={"amount": col_name}, inplace=True)
                 return df[["date", col_name]]
 
-            result = _safe_baostock_call(
+            result = safe_baostock_call(
                 f"{col_name} 查询超时/连接异常",
                 _fetch_one,
                 log_level="warning",

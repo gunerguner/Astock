@@ -15,7 +15,6 @@ __all__ = [
     "BaselinePrices",
     "sorted_dates",
     "pct_change",
-    "baseline_prices",
     "baseline_prices_at_anchor",
     "anchor_date_for_closes",
     "anchor_date_excluding_today",
@@ -45,17 +44,6 @@ def pct_change(cur: float, base: float | None) -> float | None:
     if base and base > 0:
         return (cur - base) / base * 100
     return None
-
-
-def baseline_prices(closes: dict[str, float]) -> BaselinePrices:
-    """返回最近交易日的当前价、昨收基准与约 5 个交易日前基准。"""
-    dates = sorted_dates(closes)
-    if not dates:
-        return BaselinePrices(None, None, None)
-    current = closes[dates[-1]]
-    prev = closes[dates[-2]] if len(dates) >= 2 else None
-    week_ago = closes[dates[-WEEKLY_BASELINE_OFFSET]] if len(dates) >= WEEKLY_BASELINE_OFFSET else None
-    return BaselinePrices(current, prev, week_ago)
 
 
 def baseline_prices_at_anchor(closes: dict[str, float], anchor_date: str) -> BaselinePrices:

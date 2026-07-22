@@ -3,7 +3,7 @@
 import logging
 
 from astock.sources.akshare.global_asset import fetch_commodity_history
-from astock.sources.market_overview._common import _tail_closes
+from astock.sources.market_overview._common import tail_closes
 
 logger = logging.getLogger(__name__)
 
@@ -17,4 +17,4 @@ def fetch_foreign_futures(code: str, n: int) -> dict[str, float]:
     if df.empty:
         return {}
     pairs = [(str(row["date"]), float(row["close"])) for _, row in df.iterrows()]
-    return _tail_closes(pairs, n, market="us")
+    return tail_closes(pairs, n, market="us")

@@ -8,7 +8,7 @@ from sqlmodel import Session
 from astock.core.progress import ProgressReporter, SSEBridge
 from astock.schemas.imports import ImportDataset
 from astock.services.global_asset.refresh import refresh_asset_highs
-from astock.services.imports import import_point, import_stock, import_turnover
+from astock.services.imports import import_point, import_turnover
 from astock.services.imports._common import aggregate_status
 from astock.services.imports.stock import import_stock_gen
 from astock.services.market_overview import warmup_market_overview
