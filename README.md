@@ -1,160 +1,206 @@
 # Astock
 
-Astock 是一个 A 股历史行情数据平台，基于 FastAPI + SQLite 构建，支持从 BaoStock / akshare 等源增量拉取数据并缓存到本地数据库。
+Astock 是一个 **A 股历史行情 + 全球资产水位** 分析平台：从外部数据源增量拉取行情，缓存到本地 SQLite / Redis，再通过 Web 页面做牛市统计、成交额排名、全球资产价格水位与市场概览。
 
-## 功能特性
-
-- 全市场成交额（上证 + 深证）增量导入与 SQLite 缓存
-- 多指数收盘价增量导入与缓存
-- 个股高成交额切片（缺口日全市场 TopN）导入
-- 统一 REST API，支持按数据集类型触发导入
-- Web 前端：牛市点位/成交额统计、大盘与个股成交额排名
-
-## 数据源说明
+## 功能一览
 
 
-| 数据         | 来源                                   | 说明                                  |
-| ---------- | ------------------------------------ | ----------------------------------- |
-| 指数成交额 / 点位 | BaoStock（科创50 用 akshare）            | `astock/sources/baostock/`、`akshare/` |
-| 全市场股票代码清单  | BaoStock `query_all_stock`           | 沪深主板/中小板/创业板/科创板，排除指数、基金、B股；补个股名称 |
-| 个股高成交额切片   | BaoStock `query_daily_history_k_AStock`（≥0.9.3） | 按缺口日一次拉全市场，保留当日 amount TopN |
+| 页面       | 路径                    | 做什么                          |
+| -------- | --------------------- | ---------------------------- |
+| 牛市统计     | `/bull-market`        | 多轮牛市区间内，指数点位 / 成交额达标天数与极值    |
+| 成交额排名    | `/turnover-rank`      | 大盘合计成交额 TopN、个股高水位成交额切片 TopN |
+| 全球资产价格水位 | `/asset-price-levels` | 美股 / 贵金属相对历史最高点（ATH）的水位与结论标签 |
+| 全球市场概览   | `/market-overview`    | 股指、汇率、国债、贵金属、原油等约 18 项概览     |
 
 
-## 环境要求
+数据首次为空；本地跑起来后需在页面上触发一次「刷新全部数据」（见下文）。
 
-- Python 3.10+
-- Node.js 14+、pnpm 8+（前端开发）
-- 可访问 BaoStock / akshare 相关数据服务的网络环境
+## 技术方案
 
 
+| 层   | 技术                                                     |
+| --- | ------------------------------------------------------ |
+| 后端  | FastAPI + SQLModel（SQLite）+ Redis + Pandas；开发用 Uvicorn |
+| 前端  | Vue 3 + Vite + TypeScript + Arco Design Vue            |
 
-## 安装依赖
+
+业务范围（牛市区间、指数清单、全球资产、概览类目）主要由 `backend/astock/config/*.yaml` 驱动，改范围优先改 YAML，而不是硬编码。
+
+数据流：
+
+```mermaid
+flowchart TB
+  subgraph sources["外部数据源"]
+    bao["BaoStock"]
+    ak["akshare"]
+    web["新浪 / 东财"]
+  end
+
+  subgraph backend["后端 FastAPI"]
+    src["sources/<br/>纯拉取、标准化"]
+    svc["services/<br/>导入编排 + 分析聚合"]
+    api["REST API<br/>{ code, message, data }"]
+  end
+
+  subgraph store["本地存储"]
+    sqlite[("SQLite<br/>日频行情")]
+    redis[("Redis<br/>近期价缓存")]
+  end
+
+  subgraph frontend["前端 Vue3 + Arco"]
+    pages["业务页面<br/>牛市 / 排名 / 水位 / 概览"]
+  end
+
+  bao --> src
+  ak --> src
+  web --> src
+  src --> svc
+  svc --> sqlite
+  svc --> redis
+  svc --> api
+  api --> pages
+  sqlite -.-> pages
+  redis -.-> pages
+```
+
+
+
+
+
+## 数据来源
+
+
+| 数据                         | 来源                          | 落库 / 缓存        |
+| -------------------------- | --------------------------- | -------------- |
+| 上证 / 沪深300 / 创业板点位、两市合计成交额 | BaoStock                    | SQLite         |
+| 科创50 点位                    | akshare（BaoStock 未覆盖）       | SQLite         |
+| 个股高成交额切片（缺口日全市场 TopN）      | BaoStock 日更接口               | SQLite         |
+| 全球资产 ATH / 近期价             | akshare                     | SQLite + Redis |
+| 市场概览（美股指数、汇率、国债、美元指数等）     | akshare / 新浪 / 东财等，部分可复用本地库 | 主要 Redis       |
+
+
+需能访问上述外网数据服务。Redis 不可用时后端会降级直连外源，但全球资产 / 市场概览体验会变差，**本地开发建议起一个 Redis**。
+
+---
+
+
+
+## 本地开发：从零跑起来
+
+
+
+### 0. 环境要求
+
+- Python **3.10+**（仓库常用 3.13）
+- Node.js **22**（见根目录 `.nvmrc`），包管理器用 **pnpm 8+**
+- Redis（本机安装即可）
+- 能访问 BaoStock / akshare 相关外网
+
+
+
+### 1. 克隆仓库
+
+```bash
+git clone https://github.com/gunerguner/Astock.git
+cd Astock
+```
+
+
+
+### 2. 启动 Redis
+
+全球资产与市场概览依赖 Redis 缓存。本机示例：
+
+```bash
+# macOS Homebrew
+brew services start redis
+# 或前台：redis-server
+```
+
+默认连接串为 `redis://localhost:6379/0`（与 `backend/.env.example` 一致）。
+
+### 3. 后端：依赖 + 配置 + 启动
 
 ```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-```
 
-复制环境变量配置：
-
-```bash
 cp .env.example .env
 ```
 
+按需编辑 `backend/.env`（一般开发可先不改）：
 
 
-## 启动服务
+| 变量                      | 默认                         | 说明                       |
+| ----------------------- | -------------------------- | ------------------------ |
+| `DB_PATH`               | `db/astock.db`             | SQLite 路径（相对 `backend/`） |
+| `FASTAPI_PORT`          | `8000`                     | 后端端口                     |
+| `REDIS_URL`             | `redis://localhost:6379/0` | Redis                    |
+| `LOG_LEVEL` / `LOG_DIR` | `INFO` / `logs`            | 日志                       |
+| `ASSET_PRICE_CACHE_TTL` | `86400`                    | 全球资产等缓存 TTL（秒）           |
+
+
+历史起始日、成交额阈值、个股 TopN 等业务常量在 `backend/astock/config.py` 与同目录 YAML 中，不是 `.env`。
+
+启动后端（在已激活的 venv、且 cwd 为 `backend/`）：
 
 ```bash
-cd backend
 python -m astock.main
 ```
 
-默认监听 `http://0.0.0.0:8000`，可通过 `.env` 中 `FASTAPI_PORT` 修改。
+成功后：
 
-### 启动前端
+- API：`http://127.0.0.1:8000`
+- OpenAPI（调试用）：`http://127.0.0.1:8000/docs`
+
+首次启动会自动建表；库文件默认在 `backend/db/astock.db`。
+
+### 4. 前端：依赖 + 配置 + 启动
+
+新开一个终端：
 
 ```bash
 cd frontend
 pnpm install
+```
+
+开发环境变量在 `frontend/.env.development`（仓库已带示例，通常只需确认）：
+
+
+| 变量                            | 说明                                                     |
+| ----------------------------- | ------------------------------------------------------ |
+| `VITE_API_BASE_URL`           | 开发保持为空；请求走同源 `/api`，由 Vite 代理到 `http://localhost:8000` |
+| `VITE_ADMIN_REFRESH_PASSWORD` | 页面「刷新全部数据」确认密码（前端门禁，后端无鉴权）                             |
+
+
+启动：
+
+```bash
 pnpm dev
 ```
 
-前端默认通过 Vite proxy 将 `/api` 代理到 `http://localhost:8000`，访问开发地址即可使用页面：
+浏览器打开终端提示的本地地址（一般为 `http://127.0.0.1:5173`）。
 
-- `/bull-market` — 牛市点位统计 + 牛市成交额统计
-- `/turnover-rank` — 大盘成交额排名 + 个股成交额排名
+### 5. 第一次拉数据（推荐走页面）
 
+刚启动时各页多为空，需要先导入历史数据：
 
+1. 打开前端页面，点导航栏右上角的 **刷新** 按钮（「刷新全部数据」）。
+2. 输入 `frontend/.env.development` 里配置的 `VITE_ADMIN_REFRESH_PASSWORD`。
+3. 确认后会出现 SSE 进度弹窗，依次导入成交额、指数点位、个股切片、全球资产等；**首次全量可能较久**（个股阶段最慢），请保持网络畅通。
+4. 完成后各业务页会自动 reload；之后可按需再刷新做增量。
 
-## API 接口
+导入依赖外网数据源，失败时可看后端 `backend/logs/` 或进度弹窗中的错误提示；确认 Redis 与后端已启动后再重试。
 
+日常浏览四个菜单页即可验证功能，无需先记 API。需要调试接口时再打开 `http://127.0.0.1:8000/docs`。
 
+### 6. 本地开发检查清单
 
-### 数据导入（SSE 流式）
-
-```bash
-# 导入全部数据集（turnover → point → stock → global_assets）
-curl -N -X POST "http://localhost:8000/api/v1/admin/data/import/stream?dataset=all"
-
-# 仅导入全市场成交额
-curl -N -X POST "http://localhost:8000/api/v1/admin/data/import/stream?dataset=turnover"
-
-# 仅导入指数点位
-curl -N -X POST "http://localhost:8000/api/v1/admin/data/import/stream?dataset=point"
-
-# 仅导入个股成交额切片
-curl -N -X POST "http://localhost:8000/api/v1/admin/data/import/stream?dataset=stock"
-```
-
-`done` 事件 payload 示例（单 dataset）：
-
-```json
-{
-  "imported": 123,
-  "total": 4567,
-  "last_date": "2026-07-04",
-  "status": "success",
-  "elapsed": 12.34
-}
-```
-
-
-
-### 分析查询
-
-```bash
-# 牛市点位统计（threshold 单位：点）
-curl "http://localhost:8000/api/v1/analysis/bull-markets/point?threshold=4000"
-
-# 牛市成交额统计（threshold 单位：元，默认 2 万亿）
-curl "http://localhost:8000/api/v1/analysis/bull-markets/turnover?threshold=2000000000000"
-
-# 大盘成交额 TopN（可选 bull_market 过滤牛市区间）
-curl "http://localhost:8000/api/v1/analysis/turnover/ranking?top=20&bull_market=2024年牛市"
-
-# 个股成交额 TopN
-curl "http://localhost:8000/api/v1/analysis/stock/ranking?top=20"
-```
-
-
-
-### 交互式文档
-
-启动后访问 [http://localhost:8000/docs](http://localhost:8000/docs) 查看 Swagger UI。
-
-## 项目结构
-
-```text
-.
-├── backend/
-│   ├── astock/
-│   │   ├── main.py         # FastAPI app + 本地开发启动入口
-│   │   ├── config.py       # 环境变量 + 业务常量
-│   │   ├── core/           # 数据库、异常、日志、装饰器
-│   │   ├── models/         # SQLModel 表定义
-│   │   ├── schemas/        # Pydantic 请求/响应
-│   │   ├── sources/        # 外部数据源客户端
-│   │   ├── services/       # 业务逻辑
-│   │   └── routers/        # HTTP 路由
-│   ├── db/astock.db        # SQLite 数据库
-│   ├── logs/               # 应用日志
-│   └── requirements.txt
-└── frontend/               # Vue3 + Arco Design Pro 前端
-```
-
-
-
-## 配置说明
-
-
-| 配置项                              | 默认值            | 说明                           |
-| -------------------------------- | -------------- | ---------------------------- |
-| `DB_PATH`                        | `db/astock.db` | SQLite 库路径（相对 `backend/` 目录） |
-| `FASTAPI_PORT`                   | `8000`         | 服务端口                         |
-| `START_DATE`                     | `2005-01-01`   | 历史数据起始日期                     |
-| `STOCK_SLICE_TOP_N`              | `20`           | 个股切片每缺口日保留成交额 TopN          |
-
-
+- [ ] Redis 在 `6379` 可连
+- [ ] `backend/.env` 已从 `.env.example` 复制
+- [ ] `python -m astock.main` 无报错，`:8000` 可访问
+- [ ] `pnpm dev` 已起，页面能打开
+- [ ] 已用右上角刷新拉过至少一次数据
+- [ ] `/bull-market`、`/turnover-rank` 等页面有表格数据
