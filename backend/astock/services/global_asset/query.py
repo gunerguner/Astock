@@ -165,5 +165,5 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> PriceLevels
         as_of=as_of,
         latest_trading_date=latest_trading_date_value,
         items=items,
-        cache_errors=cache_errors[:5] if cache_errors else None,
+        cache_errors=cache_errors[:5],
     )

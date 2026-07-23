@@ -90,7 +90,7 @@ class ProgressReporter:
                 "imported": result.get("imported", 0),
                 "last_date": result.get("last_date"),
                 "last_synced_at": result.get("last_synced_at"),
-                "source_errors": result.get("source_errors"),
+                "source_errors": result.get("source_errors") or {},
                 "elapsed": elapsed,
             },
         )

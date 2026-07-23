@@ -144,7 +144,6 @@ def import_stock_gen(
             db,
             table_name="stock_turnover",
             model=StockTurnover,
-            source_key="stock",
             start_ts=start_ts,
             last_date=get_last_date(db, StockTurnover),
         )
@@ -157,7 +156,6 @@ def import_stock_gen(
             db,
             table_name="stock_turnover",
             model=StockTurnover,
-            source_key="stock",
             start_ts=start_ts,
             last_date=get_last_date(db, StockTurnover),
         )
@@ -274,7 +272,7 @@ def import_stock_gen(
         total=count_rows(db, StockTurnover),
         last_date=synced_date or get_last_date(db, StockTurnover),
         ok=ok,
-        source_errors={"stock": "; ".join(errors[:5]) if errors else None},
+        source_errors={"stock": "; ".join(errors[:5])} if errors else {},
         last_synced_at=last_synced_at,
     )
     if result["status"] == SyncStatus.FAILED:

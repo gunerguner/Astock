@@ -17,7 +17,7 @@ export interface PhaseState {
   imported: number;
   detail?: string;
   elapsed?: number;
-  source_errors?: Record<string, string | null> | null;
+  source_errors?: Record<string, string>;
 }
 
 export type RefreshOverallStatus = 'idle' | 'running' | 'done' | 'error';

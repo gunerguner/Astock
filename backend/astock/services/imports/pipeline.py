@@ -65,7 +65,6 @@ def run_daily_import(
             db,
             table_name=spec.table_name,
             model=spec.model,
-            source_key=spec.source_key,
             start_ts=start_ts,
             last_date=db_last_date,
         )
@@ -128,7 +127,7 @@ def run_multi_daily_import(
     start_ts = time.perf_counter()
     total_imported = 0
     all_errors: list[str] = []
-    source_errors: dict[str, str | None] = {}
+    source_errors: dict[str, str] = {}
     last_dates: list[str] = []
     last_synced_ats: list[str] = []
     statuses: list[SyncStatus] = []
@@ -144,8 +143,8 @@ def run_multi_daily_import(
         if result.get("last_synced_at"):
             last_synced_ats.append(result["last_synced_at"])
         err = (result.get("source_errors") or {}).get(spec.source_key)
-        source_errors[spec.source_key] = err
         if err:
+            source_errors[spec.source_key] = err
             all_errors.append(f"{error_label}: {err}")
 
     ok = len(all_errors) == 0
@@ -154,7 +153,7 @@ def run_multi_daily_import(
         total=count_rows(db, count_model),
         last_date=max(last_dates) if last_dates else None,
         ok=ok,
-        source_errors=source_errors if source_errors else None,
+        source_errors=source_errors,
         last_synced_at=max(last_synced_ats) if last_synced_ats else None,
     )
     result["status"] = aggregate_status(*statuses)

@@ -185,5 +185,5 @@ def get_market_overview(*, force_refresh: bool = False) -> MarketOverviewRespons
         as_of=as_of,
         latest_trading_date=latest_trading_date_value,
         categories=categories,
-        errors=cache_errors[:10] if cache_errors else None,
+        errors=cache_errors[:10],
     )

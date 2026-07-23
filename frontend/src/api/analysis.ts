@@ -161,7 +161,7 @@ export interface AssetPriceLevels {
   as_of: string;
   latest_trading_date: string;
   items: PriceLevelRow[];
-  cache_errors?: string[];
+  cache_errors: string[];
 }
 
 export function fetchAssetPriceLevels(
@@ -209,7 +209,7 @@ export interface MarketOverview {
   as_of: string;
   latest_trading_date: string;
   categories: MarketOverviewCategory[];
-  errors?: string[];
+  errors: string[];
 }
 
 export function fetchMarketOverview(

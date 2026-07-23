@@ -17,7 +17,7 @@ class ImportResultItem(BaseModel):
     last_date: str | None
     last_synced_at: str | None = None
     status: str
-    source_errors: dict[str, str | None] | None = None
+    source_errors: dict[str, str] = {}
     elapsed: float | None = None
 
 

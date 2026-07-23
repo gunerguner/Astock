@@ -86,7 +86,6 @@ def build_skip_result(
     *,
     table_name: str,
     model: type,
-    source_key: str,
     start_ts: float,
     last_date: str | None = None,
 ) -> dict[str, Any]:
@@ -107,7 +106,7 @@ def build_skip_result(
         total=count_rows(db, model),
         last_date=resolved_last_date,
         ok=True,
-        source_errors={source_key: None},
+        source_errors={},
         last_synced_at=last_synced_at,
         elapsed=round(elapsed, 2),
     )
@@ -120,7 +119,7 @@ def build_result(
     total: int,
     last_date: str | None,
     ok: bool,
-    source_errors: dict[str, str | None] | None = None,
+    source_errors: dict[str, str] | None = None,
     last_synced_at: str | None = None,
     elapsed: float | None = None,
 ) -> dict[str, Any]:
@@ -133,7 +132,7 @@ def build_result(
         last_date=last_date,
         last_synced_at=last_synced_at,
         status=resolve_status(ok, imported),
-        source_errors=source_errors,
+        source_errors=source_errors if source_errors is not None else {},
         elapsed=elapsed,
     )
     return result.to_dict()

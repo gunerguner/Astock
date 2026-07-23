@@ -97,9 +97,7 @@
       const item = progressState.value.phases[key];
       if (!item.source_errors) return;
       Object.entries(item.source_errors).forEach(([source, message]) => {
-        if (message) {
-          lines.push(`${item.label}(${source}): ${message}`);
-        }
+        lines.push(`${item.label}(${source}): ${message}`);
       });
     });
     return lines;

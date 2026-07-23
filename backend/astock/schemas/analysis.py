@@ -89,7 +89,7 @@ class PriceLevelsResponse(BaseModel):
     as_of: str
     latest_trading_date: str
     items: list[PriceLevelRow]
-    cache_errors: list[str] | None = None
+    cache_errors: list[str] = []
 
 
 class MarketOverviewErrorItem(BaseModel):
@@ -123,5 +123,5 @@ class MarketOverviewResponse(BaseModel):
     as_of: str
     latest_trading_date: str
     categories: list[MarketOverviewCategory]
-    errors: list[str] | None = None
+    errors: list[str] = []
 

@@ -9,7 +9,7 @@ export interface ImportResultItem {
   last_date: string | null;
   last_synced_at: string | null;
   status: ImportStatus;
-  source_errors: Record<string, string | null> | null;
+  source_errors: Record<string, string>;
   elapsed?: number;
 }
 
@@ -32,7 +32,7 @@ export interface ImportProgressEvent {
   imported: number;
   detail?: string;
   elapsed?: number;
-  source_errors?: Record<string, string | null> | null;
+  source_errors?: Record<string, string>;
 }
 
 export interface ImportStreamError {

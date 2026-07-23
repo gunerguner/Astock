@@ -55,7 +55,7 @@ def refresh_asset_highs(
             total=total,
             last_date=meta.last_synced_date,
             ok=True,
-            source_errors={"global_assets": None},
+            source_errors={},
             last_synced_at=meta.last_synced_at,
             elapsed=round(time.perf_counter() - start_ts, 2),
         )
@@ -120,7 +120,9 @@ def refresh_asset_highs(
         total=len(records),
         last_date=latest,
         ok=ok,
-        source_errors={"global_assets": "; ".join(errors[:5]) if errors else None},
+        source_errors=(
+            {"global_assets": "; ".join(errors[:5])} if errors else {}
+        ),
         last_synced_at=last_synced_at,
     )
     return finalize_import_result(result, start_ts=start_ts, log_label="全球资产最高点刷新")
