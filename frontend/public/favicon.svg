@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- 同花顺风格红底 -->
+  <rect width="32" height="32" rx="8" fill="#E60012"/>
+  <!-- 坐标轴 -->
+  <path
+    d="M7 7v14a2 2 0 0 0 2 2h14"
+    stroke="#ffffff"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <!-- 空心 K（阴） -->
+  <path d="M12 11v3" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+  <rect
+    x="10"
+    y="14"
+    width="4"
+    height="5"
+    rx="1"
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="1.75"
+  />
+  <path d="M12 19v3" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+  <!-- 实心 K（阳） -->
+  <path d="M20 9v2" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+  <rect x="18" y="11" width="4" height="7" rx="1" fill="#ffffff"/>
+  <path d="M20 18v3" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+</svg>
