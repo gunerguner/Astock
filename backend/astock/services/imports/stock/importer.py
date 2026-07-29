@@ -39,23 +39,21 @@ from astock.sources.baostock.session import login_failure
 logger = logging.getLogger(__name__)
 
 
-def _drain_bridge(bridge: SSEBridge | None) -> Iterator[str]:
-    if bridge is not None:
-        yield from bridge.drain()
+def _drain_bridge(bridge: SSEBridge) -> Iterator[str]:
+    yield from bridge.drain()
 
 
 def _report(
-    on_progress: ProgressReporter | None,
+    on_progress: ProgressReporter,
     detail: str,
     *,
     current: int = 0,
     total: int = 1,
     imported: int = 0,
 ) -> None:
-    if on_progress is not None:
-        on_progress.phase_progress(
-            "stock", current, total, detail, imported=imported
-        )
+    on_progress.phase_progress(
+        "stock", current, total, detail, imported=imported
+    )
 
 
 def _gap_trading_days(
@@ -119,8 +117,8 @@ def _top_n_records(
 def import_stock_gen(
     db: Session,
     *,
-    on_progress: ProgressReporter | None = None,
-    bridge: SSEBridge | None = None,
+    on_progress: ProgressReporter,
+    bridge: SSEBridge,
 ):
     start_ts = time.perf_counter()
     errors: list[str] = []
@@ -238,12 +236,10 @@ def import_stock_gen(
                     StockTurnover,
                     record_buffer,
                     ["date", "code"],
-                    commit_mode="single",
                 )
                 record_buffer = []
 
-            if on_progress is not None:
-                on_progress.ping()
+            on_progress.ping()
             yield from _drain_bridge(bridge)
 
     if record_buffer:
@@ -252,7 +248,6 @@ def import_stock_gen(
             StockTurnover,
             record_buffer,
             ["date", "code"],
-            commit_mode="single",
         )
 
     # 全部成功才推进水位；失败保留旧水位，下次重跑缺口（upsert 幂等）

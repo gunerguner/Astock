@@ -1,6 +1,6 @@
 """增量同步水位与 SQLite 批量 upsert 共用工具。"""
 
-from typing import Any, Literal
+from typing import Any
 
 from sqlalchemy import func
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -11,8 +11,6 @@ from astock.core.datetime_utils import add_calendar_days, is_synced_through_sett
 from astock.core.sync_status import SyncStatus
 from astock.models.sync_meta import SyncMeta
 from astock.core.datetime_utils import iso_now
-
-CommitMode = Literal["per_batch", "single"]
 
 
 def get_last_date(db: Session, model: type) -> str | None:
@@ -73,7 +71,6 @@ def batch_upsert(
     conflict_cols: list[str],
     *,
     batch_size: int = DEFAULT_UPSERT_BATCH_SIZE,
-    commit_mode: CommitMode = "per_batch",
 ) -> int:
     if not records:
         return 0
@@ -94,11 +91,8 @@ def batch_upsert(
                 set_=update_cols,
             )
             db.exec(stmt)
-            if commit_mode == "per_batch":
-                db.commit()
             total += len(batch)
-        if commit_mode == "single":
-            db.commit()
+        db.commit()
     except Exception:
         db.rollback()
         raise

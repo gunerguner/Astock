@@ -27,9 +27,7 @@ export interface RefreshProgressState {
   completedCount: number;
   totalPhases: number;
   overallStatus: RefreshOverallStatus;
-  finalResult: ImportAllResult | null;
   errorMessage: string | null;
-  errorPhase: PhaseKey | null;
 }
 
 export const PHASE_ORDER: PhaseKey[] = [
@@ -87,9 +85,7 @@ export function createInitialProgressState(): RefreshProgressState {
     completedCount: 0,
     totalPhases: PHASE_ORDER.length,
     overallStatus: 'idle',
-    finalResult: null,
     errorMessage: null,
-    errorPhase: null,
   };
 }
 
@@ -153,7 +149,6 @@ export function applyStreamError(
     phases: nextPhases,
     overallStatus: 'error',
     errorMessage: error.message,
-    errorPhase,
   };
 }
 
@@ -180,8 +175,6 @@ export function applyStreamDone(
     phases: nextPhases,
     completedCount: PHASE_ORDER.length,
     overallStatus: 'done',
-    finalResult: result,
     errorMessage: null,
-    errorPhase: null,
   };
 }

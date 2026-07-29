@@ -85,7 +85,6 @@ def run_daily_import(
         spec.model,
         records,
         spec.conflict_cols,
-        commit_mode="single",
     )
 
     last_date = last_date_fn(db)

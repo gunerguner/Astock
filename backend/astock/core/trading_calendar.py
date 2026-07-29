@@ -34,11 +34,6 @@ class TradingCalendar:
         return cls._calendars[market]
 
     @classmethod
-    def is_trading_day(cls, day: date | datetime | str, market: MarketCode = "cn") -> bool:
-        """是否为该市场交易日（非周末、非法定假日、非交易所休市）。"""
-        return bool(cls.get(market).is_session(pd.Timestamp(day)))
-
-    @classmethod
     def previous_session_on_or_before(
         cls,
         day: date | datetime | str,

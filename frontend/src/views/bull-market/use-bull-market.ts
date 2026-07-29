@@ -46,7 +46,6 @@ export interface MergedRow {
   market: string;
   start: string;
   end: string;
-  description?: string | null;
   indices: Record<string, IndexCell>;
   turnoverDays: number | null;
   turnoverMax: number | null;
@@ -120,7 +119,6 @@ export default function useBullMarket() {
         market: item.market,
         start: item.start,
         end: item.end,
-        description: item.description,
         indices,
         turnoverDays: turnoverItem?.days ?? null,
         turnoverMax: turnoverItem?.max_value ?? null,

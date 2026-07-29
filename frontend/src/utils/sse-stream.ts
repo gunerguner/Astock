@@ -3,17 +3,13 @@ export interface SSEHandlers<
   TDone = unknown,
   TError extends { message: string } = { message: string },
 > {
-  onOpen?: () => void;
   onProgress?: (data: TProgress) => void;
   onDone?: (data: TDone) => void;
   /** 服务端 error 事件为 TError；本地断连/超时等仅保证有 message */
   onError?: (data: TError | { message: string }) => void;
-  onPing?: () => void;
 }
 
 export interface StreamPostOptions {
-  params?: Record<string, string>;
-  signal?: AbortSignal;
   idleTimeoutMs?: number;
 }
 
@@ -50,9 +46,6 @@ export function streamPost<
 ): AbortController {
   const controller = new AbortController();
   const idleTimeoutMs = options.idleTimeoutMs ?? 30_000;
-  const search = options.params
-    ? `?${new URLSearchParams(options.params).toString()}`
-    : '';
 
   let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -104,21 +97,19 @@ export function streamPost<
           receivedTerminalEvent = true;
           handlers.onError?.(parsed as TError);
           break;
-        case 'ping':
-          handlers.onPing?.();
-          break;
         default:
+          // ping 等事件仅重置 idle（已在上方 resetIdleTimer）
           break;
       }
     };
 
     try {
-      const response = await fetch(`${url}${search}`, {
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           Accept: 'text/event-stream',
         },
-        signal: options.signal ?? controller.signal,
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -133,8 +124,6 @@ export function streamPost<
         emitLocalError(message);
         return;
       }
-
-      handlers.onOpen?.();
 
       const reader = response.body?.getReader();
       if (!reader) {

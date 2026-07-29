@@ -95,27 +95,15 @@ export function fetchBullMarketTurnoverStats(
   });
 }
 
-export function fetchTurnoverRanking(
-  top: number,
-  bullMarket?: string,
-): Promise<TurnoverRanking> {
+export function fetchTurnoverRanking(top: number): Promise<TurnoverRanking> {
   return request.get('/analysis/turnover/ranking', {
-    params: {
-      top,
-      bull_market: bullMarket && bullMarket !== 'all' ? bullMarket : undefined,
-    },
+    params: { top },
   });
 }
 
-export function fetchStockRanking(
-  top: number,
-  bullMarket?: string,
-): Promise<StockRanking> {
+export function fetchStockRanking(top: number): Promise<StockRanking> {
   return request.get('/analysis/stock/ranking', {
-    params: {
-      top,
-      bull_market: bullMarket && bullMarket !== 'all' ? bullMarket : undefined,
-    },
+    params: { top },
   });
 }
 

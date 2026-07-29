@@ -15,7 +15,6 @@ from astock.services.global_asset._cache import parse_asset_fetch_results, write
 from astock.services.imports._common import build_result, finalize_import_result, resolve_status
 from astock.services.sync_store import batch_upsert, count_rows, get_sync_meta, upsert_sync_meta
 from astock.sources.akshare import fetch_all_assets
-from astock.sources.fetch_result import SourceFetchResult
 
 logger = logging.getLogger(__name__)
 
@@ -32,15 +31,8 @@ def should_skip_asset_highs(db: Session) -> bool:
     return count_rows(db, AssetHigh) > 0
 
 
-def refresh_asset_highs(
-    db: Session,
-    *,
-    prefetched: dict[str, SourceFetchResult] | None = None,
-) -> dict:
-    """刷新全球资产历史最高点入库，并同步价格缓存与最新交易日。
-
-    prefetched: 编排层提前并行拉取的 akshare 结果；传入则不再调用 fetch_all_assets。
-    """
+def refresh_asset_highs(db: Session) -> dict:
+    """刷新全球资产历史最高点入库，并同步价格缓存与最新交易日。"""
     start_ts = time.perf_counter()
     if should_skip_asset_highs(db):
         meta = get_sync_meta(db, "asset_high")
@@ -64,9 +56,7 @@ def refresh_asset_highs(
     records: list[dict] = []
     all_closes_for_latest: dict[str, dict[str, float]] = {}
 
-    fetch_results: dict[str, SourceFetchResult] = (
-        prefetched if prefetched is not None else fetch_all_assets()
-    )
+    fetch_results = fetch_all_assets()
     parsed, errors = parse_asset_fetch_results(
         GLOBAL_ASSETS, fetch_results, skip_pending=True
     )
@@ -95,9 +85,7 @@ def refresh_asset_highs(
         )
 
     imported = (
-        batch_upsert(db, AssetHigh, records, ["ticker"], commit_mode="single")
-        if records
-        else 0
+        batch_upsert(db, AssetHigh, records, ["ticker"]) if records else 0
     )
     latest = anchor_date_excluding_today(
         all_closes_for_latest,

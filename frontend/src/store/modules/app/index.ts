@@ -6,10 +6,6 @@ const useAppStore = defineStore('app', {
   state: (): AppState => ({ ...defaultSettings }),
 
   actions: {
-    updateSettings(partial: Partial<AppState>) {
-      this.$patch(partial);
-    },
-
     toggleTheme(dark: boolean) {
       if (dark) {
         this.theme = 'dark';

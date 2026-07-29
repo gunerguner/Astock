@@ -32,17 +32,17 @@ class SSEBridge:
 
 
 class ProgressReporter:
-    def __init__(self, emit: Callable[[str, dict[str, Any]], None] | None = None) -> None:
-        self._emit = emit or (lambda _event_type, _data: None)
+    def __init__(self, emit: Callable[[str, dict[str, Any]], None]) -> None:
+        self._emit = emit
         self._phase_start_times: dict[str, float] = {}
 
-    def phase_start(self, key: str, label: str | None = None) -> None:
+    def phase_start(self, key: str) -> None:
         self._phase_start_times[key] = time.perf_counter()
         self._emit(
             "progress",
             {
                 "phase": key,
-                "label": label or PHASE_LABELS.get(key, key),
+                "label": PHASE_LABELS.get(key, key),
                 "status": "running",
                 "current": 0,
                 "total": 1,
@@ -95,11 +95,8 @@ class ProgressReporter:
             },
         )
 
-    def error(self, message: str, phase: str | None = None) -> None:
-        payload: dict[str, Any] = {"message": message}
-        if phase:
-            payload["phase"] = phase
-        self._emit("error", payload)
+    def error(self, message: str) -> None:
+        self._emit("error", {"message": message})
 
     def done(self, result: dict[str, Any]) -> None:
         self._emit("done", result)
