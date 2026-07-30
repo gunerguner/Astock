@@ -12,6 +12,7 @@ from astock.models.macro import (
     MacroValue,
 )
 from astock.schemas.analysis import UsMacroPointItem, UsMacroResponse
+from astock.services.queries._macro_common import pivot_macro_rows
 from astock.services.sync_store import get_sync_meta
 
 _US_METRICS = (METRIC_CPI_YOY, METRIC_FED_RATE_UPPER)
@@ -24,25 +25,17 @@ def get_us_macro(
 ) -> UsMacroResponse:
     """按起始月份查询 CPI / 联邦基金利率月度序列。"""
     start_period = (start or US_MACRO_START_PERIOD).strip()[:7]
-    rows = db.exec(
-        select(MacroValue)
-        .where(col(MacroValue.region) == REGION_US)
-        .where(col(MacroValue.period) >= start_period)
-        .where(col(MacroValue.metric).in_(_US_METRICS))
-        .order_by(col(MacroValue.period), col(MacroValue.metric))
-    ).all()
+    rows = list(
+        db.exec(
+            select(MacroValue)
+            .where(col(MacroValue.region) == REGION_US)
+            .where(col(MacroValue.period) >= start_period)
+            .where(col(MacroValue.metric).in_(_US_METRICS))
+            .order_by(col(MacroValue.period), col(MacroValue.metric))
+        ).all()
+    )
 
-    by_period: dict[str, dict[str, float | None]] = {}
-    for row in rows:
-        bucket = by_period.setdefault(
-            row.period,
-            {
-                METRIC_CPI_YOY: None,
-                METRIC_FED_RATE_UPPER: None,
-            },
-        )
-        bucket[row.metric] = row.value
-
+    by_period = pivot_macro_rows(rows, _US_METRICS)
     points = [
         UsMacroPointItem(
             period=period,

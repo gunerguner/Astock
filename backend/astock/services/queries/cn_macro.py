@@ -15,6 +15,7 @@ from astock.models.macro import (
     MacroValue,
 )
 from astock.schemas.analysis import CnMacroPointItem, CnMacroResponse
+from astock.services.queries._macro_common import pivot_macro_rows
 from astock.services.sync_store import get_sync_meta
 
 _CN_METRICS = (
@@ -33,28 +34,17 @@ def get_cn_macro(
 ) -> CnMacroResponse:
     """按起始月份查询中国宏观月度序列。"""
     start_period = (start or CN_MACRO_START_PERIOD).strip()[:7]
-    rows = db.exec(
-        select(MacroValue)
-        .where(col(MacroValue.region) == REGION_CN)
-        .where(col(MacroValue.period) >= start_period)
-        .where(col(MacroValue.metric).in_(_CN_METRICS))
-        .order_by(col(MacroValue.period), col(MacroValue.metric))
-    ).all()
+    rows = list(
+        db.exec(
+            select(MacroValue)
+            .where(col(MacroValue.region) == REGION_CN)
+            .where(col(MacroValue.period) >= start_period)
+            .where(col(MacroValue.metric).in_(_CN_METRICS))
+            .order_by(col(MacroValue.period), col(MacroValue.metric))
+        ).all()
+    )
 
-    by_period: dict[str, dict[str, float | None]] = {}
-    for row in rows:
-        bucket = by_period.setdefault(
-            row.period,
-            {
-                METRIC_CPI_YOY: None,
-                METRIC_PPI_YOY: None,
-                METRIC_PMI_MFG: None,
-                METRIC_PMI_NON_MFG: None,
-                METRIC_CONSUMER_CONFIDENCE: None,
-            },
-        )
-        bucket[row.metric] = row.value
-
+    by_period = pivot_macro_rows(rows, _CN_METRICS)
     points = [
         CnMacroPointItem(
             period=period,

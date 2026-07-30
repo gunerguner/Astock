@@ -1,12 +1,4 @@
-import {
-  computed,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  watch,
-  type Ref,
-} from 'vue';
-import { useDark, useResizeObserver } from '@vueuse/core';
+import { computed, type Ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import * as echarts from 'echarts/core';
 import { LineChart } from 'echarts/charts';
@@ -17,6 +9,7 @@ import {
 } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import type { UsMacroPointItem } from '@/api/analysis';
+import { useMacroLineChart } from '@/hooks/use-macro-line-chart';
 
 echarts.use([
   LineChart,
@@ -42,27 +35,18 @@ export default function useUsMacroChart(
   points: Ref<UsMacroPointItem[]>,
 ) {
   const { t, locale } = useI18n();
-  const isDark = useDark({
-    selector: 'body',
-    attribute: 'arco-theme',
-    valueDark: 'dark',
-    valueLight: 'light',
-    storageKey: 'arco-theme',
-  });
-
-  let chart: echarts.ECharts | null = null;
 
   const hasData = computed(() => points.value.length > 0);
 
-  function buildOption(): echarts.EChartsCoreOption {
+  function buildOption({
+    isDark,
+  }: {
+    isDark: boolean;
+  }): echarts.EChartsCoreOption {
     const cpiName = t('pages.usMacroData.series.cpi');
     const fedName = t('pages.usMacroData.series.fedRate');
-    const textColor = isDark.value
-      ? 'rgba(255,255,255,0.7)'
-      : 'rgba(0,0,0,0.65)';
-    const splitLine = isDark.value
-      ? 'rgba(255,255,255,0.12)'
-      : 'rgba(0,0,0,0.08)';
+    const textColor = isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.65)';
+    const splitLine = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)';
     const cpiColor = readCssVar('--up-color', '#e0463e');
     const fedColor = readCssVar('--brand-6', '#1a4b8c');
 
@@ -147,44 +131,7 @@ export default function useUsMacroChart(
     };
   }
 
-  function ensureChart() {
-    if (!chartEl.value) return;
-    if (!chart) {
-      chart = echarts.init(chartEl.value);
-    }
-    chart.setOption(buildOption(), true);
-  }
-
-  function disposeChart() {
-    chart?.dispose();
-    chart = null;
-  }
-
-  function render() {
-    nextTick(() => {
-      if (!hasData.value) {
-        disposeChart();
-        return;
-      }
-      ensureChart();
-    });
-  }
-
-  useResizeObserver(chartEl, () => {
-    chart?.resize();
-  });
-
-  watch([points, isDark, locale], () => {
-    render();
-  });
-
-  onMounted(() => {
-    render();
-  });
-
-  onBeforeUnmount(() => {
-    disposeChart();
-  });
+  useMacroLineChart(chartEl, hasData, buildOption, [points, locale]);
 
   return { hasData };
 }

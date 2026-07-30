@@ -2,41 +2,18 @@
 
 from __future__ import annotations
 
-import logging
-
+from astock.sources._macro_common import merge_domain_sources
 from astock.sources.fetch_result import SourceFetchResult
 from astock.sources.us_macro.cpi import fetch_cpi
 from astock.sources.us_macro.fed_rate import fetch_fed_rate
 
-logger = logging.getLogger(__name__)
-
 
 def fetch_us_macro() -> SourceFetchResult:
     """串行拉取美国宏观月度指标；仅拼接成功返回的长表记录。"""
-    sources = (
-        ("CPI", fetch_cpi()),
-        ("Fed 利率", fetch_fed_rate()),
+    return merge_domain_sources(
+        "美国宏观",
+        [
+            ("CPI", fetch_cpi()),
+            ("Fed 利率", fetch_fed_rate()),
+        ],
     )
-
-    records = []
-    errors: list[str] = []
-    for label, src in sources:
-        errors.extend(src.errors)
-        if src.ok and src.records:
-            records.extend(src.records)
-        else:
-            errors.append(src.error_summary() or f"{label} 拉取不完整")
-
-    if not records:
-        msg = "; ".join(errors) if errors else "美国宏观：无数据"
-        return SourceFetchResult.failure(msg)
-
-    ok = all(src.ok and bool(src.records) for _, src in sources)
-    result = SourceFetchResult(records=records, ok=ok, errors=errors)
-    logger.info(
-        "美国宏观拉取完成: records=%s ok=%s sources=%s",
-        len(result.records),
-        result.ok,
-        {label: src.ok for label, src in sources},
-    )
-    return result
