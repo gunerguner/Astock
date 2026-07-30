@@ -3,6 +3,7 @@ from astock.models.point import Point
 from astock.models.stock_turnover import StockTurnover
 from astock.models.sync_meta import SyncMeta
 from astock.models.turnover import Turnover
+from astock.models.us_macro import UsMacroPoint
 
 __all__ = [
     "AssetHigh",
@@ -10,4 +11,5 @@ __all__ = [
     "StockTurnover",
     "SyncMeta",
     "Turnover",
+    "UsMacroPoint",
 ]

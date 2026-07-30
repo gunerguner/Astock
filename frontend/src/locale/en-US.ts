@@ -3,6 +3,7 @@ export default {
   'menu.turnoverRank': 'A-Share Turnover Ranking',
   'menu.assetPriceLevels': 'Global Asset Price Levels',
   'menu.marketOverview': 'Global Market Overview',
+  'menu.usMacroData': 'US Macro Data',
   'navbar.action.locale': 'Switch language successfully',
   'navbar.action.switchToEn': 'Switch to English',
   'navbar.action.switchToZh': 'Switch to Chinese',
@@ -33,6 +34,7 @@ export default {
   'adminRefresh.dataset.point': 'Index Points',
   'adminRefresh.dataset.stock': 'Stock Slice',
   'adminRefresh.dataset.globalAssets': 'Global Assets',
+  'adminRefresh.dataset.usMacro': 'US Macro',
   'adminRefresh.progress.title': 'Refresh Progress',
   'adminRefresh.progress.overall': 'Overall',
   'adminRefresh.progress.rows': 'rows',
@@ -110,4 +112,12 @@ export default {
   'pages.marketOverview.columns.dailyChange': 'Daily Change',
   'pages.marketOverview.columns.weeklyChange': 'Weekly Change',
   'pages.marketOverview.periodTo': 'to',
+
+  'pages.usMacroData.title': 'CPI vs Federal Funds Rate',
+  'pages.usMacroData.series.cpi': 'CPI YoY (%)',
+  'pages.usMacroData.series.fedRate': 'Fed Funds Upper Bound (%)',
+  'pages.usMacroData.noData': 'No data yet. Please refresh all data in admin.',
+  'pages.usMacroData.tooltip.period': 'Period',
+  'pages.usMacroData.tooltip.cpi': 'CPI YoY',
+  'pages.usMacroData.tooltip.fedRate': 'Fed Funds Upper Bound',
 };

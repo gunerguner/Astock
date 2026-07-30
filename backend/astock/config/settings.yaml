@@ -10,6 +10,9 @@ business:
     - [20, "moderatePullback"]
     - [50, "significantPullback"]
   price_level_default: "deepPullback"
+  # 美国宏观：北京时间每月该日（含）起才尝试刷新上月 CPI/利率
+  us_macro_refresh_day: 15
+  us_macro_start_period: "2020-06"
 
 # 外部数据源（端点、超时、重试）
 api:

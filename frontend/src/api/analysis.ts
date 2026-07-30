@@ -207,3 +207,22 @@ export function fetchMarketOverview(
     params: { force_refresh: forceRefresh || undefined },
   });
 }
+
+export interface UsMacroPointItem {
+  period: string;
+  cpi_yoy: number | null;
+  fed_rate_upper: number | null;
+}
+
+export interface UsMacroData {
+  start: string;
+  latest_period: string | null;
+  last_synced_at: string | null;
+  points: UsMacroPointItem[];
+}
+
+export function fetchUsMacroData(start = '2020-06'): Promise<UsMacroData> {
+  return request.get('/analysis/us-macro', {
+    params: { start },
+  });
+}

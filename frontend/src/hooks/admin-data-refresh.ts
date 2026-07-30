@@ -31,6 +31,7 @@ function getDatasetLabels(): Record<PhaseKey, string> {
     point: t('adminRefresh.dataset.point'),
     stock: t('adminRefresh.dataset.stock'),
     global_assets: t('adminRefresh.dataset.globalAssets'),
+    us_macro: t('adminRefresh.dataset.usMacro'),
   };
 }
 

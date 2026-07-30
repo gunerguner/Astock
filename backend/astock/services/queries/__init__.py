@@ -5,10 +5,12 @@ from astock.services.queries.bull_market_stats import (
     bull_market_turnover_stats,
 )
 from astock.services.queries.rankings import stock_ranking, turnover_ranking
+from astock.services.queries.us_macro import get_us_macro
 
 __all__ = [
     "bull_market_multi_index_point_stats",
     "bull_market_turnover_stats",
     "stock_ranking",
     "turnover_ranking",
+    "get_us_macro",
 ]

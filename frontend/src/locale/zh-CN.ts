@@ -3,6 +3,7 @@ export default {
   'menu.turnoverRank': 'A股成交额排名',
   'menu.assetPriceLevels': '全球资产价格水位',
   'menu.marketOverview': '全球市场概览',
+  'menu.usMacroData': '美国宏观数据',
   'navbar.action.locale': '切换语言成功',
   'navbar.action.switchToEn': '切换为英文',
   'navbar.action.switchToZh': '切换为中文',
@@ -33,6 +34,7 @@ export default {
   'adminRefresh.dataset.point': '指数点位',
   'adminRefresh.dataset.stock': '个股切片',
   'adminRefresh.dataset.globalAssets': '全球资产',
+  'adminRefresh.dataset.usMacro': '美国宏观',
   'adminRefresh.progress.title': '刷新进度',
   'adminRefresh.progress.overall': '总进度',
   'adminRefresh.progress.rows': '行',
@@ -109,4 +111,12 @@ export default {
   'pages.marketOverview.columns.dailyChange': '日涨跌',
   'pages.marketOverview.columns.weeklyChange': '周涨跌',
   'pages.marketOverview.periodTo': '至',
+
+  'pages.usMacroData.title': 'CPI 与 联邦基金利率走势对比',
+  'pages.usMacroData.series.cpi': 'CPI 通胀率 (同比 %)',
+  'pages.usMacroData.series.fedRate': '联邦基金利率上限 (%)',
+  'pages.usMacroData.noData': '暂无数据，请先在管理端刷新全部数据',
+  'pages.usMacroData.tooltip.period': '月份',
+  'pages.usMacroData.tooltip.cpi': 'CPI 同比',
+  'pages.usMacroData.tooltip.fedRate': '联邦基金利率上限',
 };

@@ -56,6 +56,17 @@ const MAIN: AppRouteRecordRaw = {
         order: 4,
       },
     },
+    {
+      path: 'us-macro-data',
+      name: 'UsMacroData',
+      component: () => import('@/views/us-macro-data/index.vue'),
+      meta: {
+        locale: 'menu.usMacroData',
+        requiresAuth: false,
+        icon: 'icon-public',
+        order: 5,
+      },
+    },
   ],
 };
 

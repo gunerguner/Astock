@@ -125,3 +125,16 @@ class MarketOverviewResponse(BaseModel):
     categories: list[MarketOverviewCategory]
     errors: list[str] = []
 
+
+class UsMacroPointItem(BaseModel):
+    period: str
+    cpi_yoy: float | None = None
+    fed_rate_upper: float | None = None
+
+
+class UsMacroResponse(BaseModel):
+    start: str
+    latest_period: str | None = None
+    last_synced_at: str | None = None
+    points: list[UsMacroPointItem]
+

@@ -93,6 +93,8 @@ PRICE_LEVEL_CONCLUSIONS: list[tuple[int, str]] = [
     )
 ]
 PRICE_LEVEL_DEFAULT = str(_business.get("price_level_default", "deepPullback"))
+US_MACRO_REFRESH_DAY = int(_business.get("us_macro_refresh_day", 15))
+US_MACRO_START_PERIOD = str(_business.get("us_macro_start_period", "2020-06"))
 
 # batch
 DEFAULT_UPSERT_BATCH_SIZE = int(_batch.get("default_upsert_batch_size", 500))

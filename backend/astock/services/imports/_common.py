@@ -16,6 +16,7 @@ _REQUIRED_FIELDS: dict[str, list[str]] = {
     "point": ["index_code", "close", "cached_at"],
     "turnover": ["sse_amount", "szse_amount", "turnover", "cached_at"],
     "stock_turnover": ["name", "amount", "cached_at"],
+    "us_macro_point": ["cached_at"],
 }
 
 

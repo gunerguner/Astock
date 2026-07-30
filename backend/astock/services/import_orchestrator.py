@@ -8,7 +8,7 @@ from sqlmodel import Session
 from astock.core.progress import ProgressReporter, SSEBridge
 from astock.schemas.imports import ImportDataset
 from astock.services.global_asset.refresh import refresh_asset_highs
-from astock.services.imports import import_point, import_turnover
+from astock.services.imports import import_point, import_turnover, import_us_macro
 from astock.services.imports._common import aggregate_status
 from astock.services.imports.stock import import_stock_gen
 from astock.services.market_overview import warmup_market_overview
@@ -55,7 +55,7 @@ def _stream_all_phases(
     reporter: ProgressReporter,
     bridge: SSEBridge,
 ) -> Iterator[str]:
-    """全量刷新：baostock 三段共享登录；全球资产在主线程串行（akshare/mini_racer 不可进线程池）。"""
+    """全量刷新：baostock 三段共享登录；全球资产/美国宏观在主线程串行。"""
     with baostock_session_hold():
         turnover_result = yield from _stream_run_phase(
             db, "turnover", import_turnover, reporter, bridge
@@ -68,6 +68,9 @@ def _stream_all_phases(
     global_assets_result = yield from _stream_run_phase(
         db, "global_assets", refresh_asset_highs, reporter, bridge
     )
+    us_macro_result = yield from _stream_run_phase(
+        db, "us_macro", import_us_macro, reporter, bridge
+    )
     # 点位/贵金属已入库后预热概览 Redis，减少用户首次进入外网串行
     try:
         warmup_market_overview()
@@ -78,11 +81,13 @@ def _stream_all_phases(
         "point": point_result,
         "stock": stock_result,
         "global_assets": global_assets_result,
+        "us_macro": us_macro_result,
         "status": aggregate_status(
             turnover_result["status"],
             point_result["status"],
             stock_result["status"],
             global_assets_result["status"],
+            us_macro_result["status"],
         ),
     }
 
@@ -109,6 +114,10 @@ def import_dataset_stream(
             case ImportDataset.global_assets:
                 result = yield from _stream_run_phase(
                     db, "global_assets", refresh_asset_highs, reporter, bridge
+                )
+            case ImportDataset.us_macro:
+                result = yield from _stream_run_phase(
+                    db, "us_macro", import_us_macro, reporter, bridge
                 )
             case ImportDataset.all:
                 result = yield from _stream_all_phases(db, reporter, bridge)

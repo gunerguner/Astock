@@ -4,7 +4,8 @@ import type {
   ImportStreamError,
 } from '@/api/admin';
 
-export type PhaseKey = 'turnover' | 'point' | 'stock' | 'global_assets';
+export type PhaseKey =
+  'turnover' | 'point' | 'stock' | 'global_assets' | 'us_macro';
 
 export type PhaseStatus = 'pending' | 'running' | 'done' | 'failed';
 
@@ -35,6 +36,7 @@ export const PHASE_ORDER: PhaseKey[] = [
   'point',
   'stock',
   'global_assets',
+  'us_macro',
 ];
 
 export function isPhaseKey(value: string | undefined): value is PhaseKey {
@@ -42,7 +44,8 @@ export function isPhaseKey(value: string | undefined): value is PhaseKey {
     value === 'turnover' ||
     value === 'point' ||
     value === 'stock' ||
-    value === 'global_assets'
+    value === 'global_assets' ||
+    value === 'us_macro'
   );
 }
 
@@ -75,6 +78,14 @@ export function createInitialProgressState(): RefreshProgressState {
       },
       global_assets: {
         phase: 'global_assets',
+        label: '',
+        status: 'pending',
+        current: 0,
+        total: 1,
+        imported: 0,
+      },
+      us_macro: {
+        phase: 'us_macro',
         label: '',
         status: 'pending',
         current: 0,
