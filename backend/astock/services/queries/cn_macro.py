@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from sqlmodel import Session, col, select
+from sqlmodel import Session
 
 from astock.config import CN_MACRO_START_PERIOD
 from astock.core.types import MacroMetric
-from astock.models.macro import MacroValue
 from astock.schemas.analysis import CnMacroPointItem, CnMacroResponse
-from astock.services.queries._macro_common import pivot_macro_rows
+from astock.services.queries._common import (
+    latest_period_with,
+    load_macro_rows,
+    pivot_macro_rows,
+)
 from astock.services.sync.store import get_sync_meta
 
 _CN_METRICS: tuple[MacroMetric, ...] = (
@@ -27,16 +30,9 @@ def get_cn_macro(
 ) -> CnMacroResponse:
     """按起始月份查询中国宏观月度序列。"""
     start_period = (start or CN_MACRO_START_PERIOD).strip()[:7]
-    rows = list(
-        db.exec(
-            select(MacroValue)
-            .where(col(MacroValue.region) == "cn")
-            .where(col(MacroValue.period) >= start_period)
-            .where(col(MacroValue.metric).in_(_CN_METRICS))
-            .order_by(col(MacroValue.period), col(MacroValue.metric))
-        ).all()
+    rows = load_macro_rows(
+        db, region="cn", metrics=_CN_METRICS, start_period=start_period
     )
-
     by_period = pivot_macro_rows(rows, _CN_METRICS)
     points = [
         CnMacroPointItem(
@@ -49,22 +45,18 @@ def get_cn_macro(
         )
         for period, vals in sorted(by_period.items())
     ]
-    latest = next(
-        (
-            p.period
-            for p in reversed(points)
-            if any(
-                v is not None
-                for v in (
-                    p.cpi_yoy,
-                    p.ppi_yoy,
-                    p.pmi_manufacturing,
-                    p.pmi_non_manufacturing,
-                    p.consumer_confidence,
-                )
+    latest = latest_period_with(
+        points,
+        predicate=lambda p: any(
+            v is not None
+            for v in (
+                p.cpi_yoy,
+                p.ppi_yoy,
+                p.pmi_manufacturing,
+                p.pmi_non_manufacturing,
+                p.consumer_confidence,
             )
         ),
-        points[-1].period if points else None,
     )
 
     meta = get_sync_meta(db, "cn_macro")

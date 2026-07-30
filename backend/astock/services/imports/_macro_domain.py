@@ -5,17 +5,18 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from sqlmodel import Session
 
-from astock.core.datetime_utils import iso_now
+from astock.core.datetime_utils import iso_now, today_local
 from astock.core.sync_status import SyncStatus
 from astock.core.types import MacroRegion
+from astock.datasets.result import FetchResult
 from astock.models.macro import MacroValue
 from astock.services.sync.results import (
+    ImportResult,
     build_result,
     finalize_import_result,
     resolve_status,
@@ -26,16 +27,15 @@ from astock.services.sync.store import (
     get_sync_meta,
     upsert_sync_meta,
 )
-from astock.datasets.result import FetchResult
 
 logger = logging.getLogger(__name__)
 
-_SHANGHAI = ZoneInfo("Asia/Shanghai")
 _CONFLICT_COLS = ["region", "period", "metric"]
+WATERMARK_METRIC = "cpi_yoy"
 
 
 def _today_shanghai() -> date:
-    return datetime.now(_SHANGHAI).date()
+    return date.fromisoformat(today_local())
 
 
 def expected_macro_period(
@@ -80,7 +80,7 @@ def _latest_cpi_period(records: list[dict[str, Any]]) -> str | None:
     periods = [
         str(r["period"])
         for r in records
-        if r.get("period") and r.get("metric") == "cpi_yoy" and r.get("value") is not None
+        if r.get("period") and r.get("metric") == WATERMARK_METRIC and r.get("value") is not None
     ]
     return max(periods) if periods else None
 
@@ -93,7 +93,7 @@ def run_macro_import(
     refresh_day: int,
     fetch_fn: Callable[[], FetchResult],
     log_label: str,
-) -> dict[str, Any]:
+) -> ImportResult:
     """拉取宏观月度指标并 upsert；尊重月频跳过窗口。"""
     start_ts = time.perf_counter()
     if should_skip_macro(
@@ -103,7 +103,8 @@ def run_macro_import(
         refresh_day=refresh_day,
     ):
         meta = get_sync_meta(db, sync_table)
-        assert meta is not None
+        if meta is None:
+            raise RuntimeError(f"{sync_table}: should_skip_macro 为真但 sync_meta 缺失")
         total = count_macro_rows(db, region)
         logger.info(
             "%s刷新跳过: 已覆盖期望月份 (last_synced_date=%s expected=%s refresh_day=%s)",
@@ -186,8 +187,8 @@ def run_macro_import(
         ok=status == SyncStatus.SUCCESS,
         source_errors=fr.to_error_map(sync_table) if fr.errors else {},
         last_synced_at=last_synced_at,
+        status=status,
     )
-    result["status"] = status
     return finalize_import_result(
         result, start_ts=start_ts, log_label=f"{log_label}刷新"
     )

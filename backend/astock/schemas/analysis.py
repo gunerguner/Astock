@@ -1,5 +1,3 @@
-from typing import Union
-
 from pydantic import BaseModel
 
 
@@ -81,7 +79,7 @@ class PriceLevelItem(BaseModel):
     conclusion: str
 
 
-PriceLevelRow = Union[PriceLevelItem, PriceLevelPendingItem]
+PriceLevelRow = PriceLevelItem | PriceLevelPendingItem
 
 
 class PriceLevelsResponse(BaseModel):
@@ -110,7 +108,7 @@ class MarketOverviewItem(BaseModel):
     period_end: str | None = None
 
 
-MarketOverviewRow = Union[MarketOverviewItem, MarketOverviewErrorItem]
+MarketOverviewRow = MarketOverviewItem | MarketOverviewErrorItem
 
 
 class MarketOverviewCategory(BaseModel):

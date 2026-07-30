@@ -5,9 +5,10 @@ from sqlmodel import Session
 from astock.models.turnover import Turnover
 from astock.services.imports.pipeline import DailyImportSpec, run_daily_import
 from astock.datasets.turnover import fetch_turnover
+from astock.services.sync.results import ImportResult
 
 
-def import_turnover(db: Session) -> dict:
+def import_turnover(db: Session) -> ImportResult:
     spec = DailyImportSpec(
         table_name="turnover",
         model=Turnover,

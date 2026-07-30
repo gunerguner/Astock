@@ -1,18 +1,22 @@
 """全球市场概览：Redis 缓存 + 日/周涨跌计算。"""
 
+from __future__ import annotations
+
 import logging
+from collections import defaultdict
 
 from astock.config import (
     ASSET_PRICE_CACHE_TTL,
     MARKET_OVERVIEW_CATEGORIES,
     MARKET_OVERVIEW_FAILURE_TTL,
     MARKET_OVERVIEW_ITEMS,
+    MarketOverviewItemConfig,
 )
 from astock.core.datetime_utils import iso_now, last_settled_date
 from astock.core.price_utils import (
-    anchor_date_excluding_today,
     anchor_date_for_closes,
     overview_item_markets,
+    resolve_latest_trading_date,
 )
 from astock.core.redis_client import (
     MARKET_OVERVIEW_LATEST_DATE_KEY,
@@ -22,6 +26,7 @@ from astock.core.redis_client import (
     market_overview_recent_key,
     set_string,
 )
+from astock.datasets.market_overview import fetch_all_items
 from astock.schemas.analysis import (
     MarketOverviewCategory,
     MarketOverviewErrorItem,
@@ -37,12 +42,22 @@ from astock.services.cache.closes import (
     redis_closes_io,
 )
 from astock.services.market_overview.local_closes import fill_closes_from_local
-from astock.datasets.market_overview import fetch_all_items
 
 logger = logging.getLogger(__name__)
 
 _read_closes, _write_closes = redis_closes_io(
     market_overview_recent_key, ttl=ASSET_PRICE_CACHE_TTL
+)
+
+_ITEM_MARKETS = overview_item_markets(MARKET_OVERVIEW_ITEMS)
+_OVERVIEW_CACHE_DEPS = ClosesCacheDeps(
+    key_fn=lambda item: item["key"],
+    market_fn=lambda item: _ITEM_MARKETS[item["key"]],
+    read_closes=_read_closes,
+    write_closes=_write_closes,
+    fetch_missing=lambda missing: _fetch_missing(missing),
+    latest_date_key=MARKET_OVERVIEW_LATEST_DATE_KEY,
+    latest_ttl=ASSET_PRICE_CACHE_TTL,
 )
 
 
@@ -62,7 +77,7 @@ def _clear_failure_marker(item_key: str) -> None:
     delete_key(market_overview_failure_key(item_key))
 
 
-def _fetch_missing(missing: list[dict[str, str]]) -> ClosesFetchResult:
+def _fetch_missing(missing: list[MarketOverviewItemConfig]) -> ClosesFetchResult:
     """先本地（point / 全球资产 Redis），不足项再外网抓取。"""
     local_closes, still_missing = fill_closes_from_local(missing)
     if not still_missing:
@@ -73,16 +88,6 @@ def _fetch_missing(missing: list[dict[str, str]]) -> ClosesFetchResult:
 
 def _ensure_closes(*, force_refresh: bool = False) -> ClosesFetchResult:
     """确保概览项收盘价缓存齐全，不足基准点时触发回填并管理失败标记。"""
-    item_markets = overview_item_markets(MARKET_OVERVIEW_ITEMS)
-    deps = ClosesCacheDeps(
-        key_fn=lambda item: item["key"],
-        market_fn=lambda item: item_markets[item["key"]],
-        read_closes=_read_closes,
-        write_closes=_write_closes,
-        fetch_missing=_fetch_missing,
-        latest_date_key=MARKET_OVERVIEW_LATEST_DATE_KEY,
-        latest_ttl=ASSET_PRICE_CACHE_TTL,
-    )
     options = ClosesEnsureOptions(
         force_refresh=force_refresh,
         require_baseline=True,
@@ -90,11 +95,11 @@ def _ensure_closes(*, force_refresh: bool = False) -> ClosesFetchResult:
         write_failure=_write_failure_marker,
         clear_failure=_clear_failure_marker,
     )
-    return ensure_closes(MARKET_OVERVIEW_ITEMS, deps, options)
+    return ensure_closes(MARKET_OVERVIEW_ITEMS, _OVERVIEW_CACHE_DEPS, options)
 
 
 def _build_item(
-    item: dict[str, str],
+    item: MarketOverviewItemConfig,
     closes: dict[str, float],
     anchor_date: str,
 ) -> MarketOverviewItem | MarketOverviewErrorItem:
@@ -114,7 +119,9 @@ def _build_item(
     )
 
 
-def _error_item(item: dict[str, str], message: str) -> MarketOverviewErrorItem:
+def _error_item(
+    item: MarketOverviewItemConfig, message: str
+) -> MarketOverviewErrorItem:
     return MarketOverviewErrorItem(
         key=item["key"],
         name=item["name"],
@@ -140,23 +147,21 @@ def get_market_overview(*, force_refresh: bool = False) -> MarketOverviewRespons
     all_closes = fetched.closes
     cache_errors = list(fetched.errors)
     as_of = iso_now()
-    item_markets = overview_item_markets(MARKET_OVERVIEW_ITEMS)
 
-    item_map = {item["key"]: item for item in MARKET_OVERVIEW_ITEMS}
+    items_by_category: dict[str, list[MarketOverviewItemConfig]] = defaultdict(list)
+    for item in MARKET_OVERVIEW_ITEMS:
+        items_by_category[item["category_key"]].append(item)
+
     categories: list[MarketOverviewCategory] = []
-
     for cat in MARKET_OVERVIEW_CATEGORIES:
         cat_items: list[MarketOverviewItem | MarketOverviewErrorItem] = []
-        for raw_item in cat["items"]:
-            item_key = f"{cat['key']}:{raw_item['code']}"
-            item = item_map.get(item_key)
-            if item is None:
-                continue
+        for item in items_by_category.get(cat["key"], []):
+            item_key = item["key"]
             closes = all_closes.get(item_key, {})
             if not closes:
                 cat_items.append(_error_item(item, "数据获取失败"))
                 continue
-            anchor_date = anchor_date_for_closes(closes, item_markets[item_key])
+            anchor_date = anchor_date_for_closes(closes, _ITEM_MARKETS[item_key])
             if anchor_date is None:
                 cat_items.append(_error_item(item, "无法确定最新交易日"))
                 continue
@@ -170,11 +175,12 @@ def get_market_overview(*, force_refresh: bool = False) -> MarketOverviewRespons
             )
         )
 
-    latest_trading_date_value = (
-        anchor_date_excluding_today(all_closes, markets=item_markets)
-        or get_string(MARKET_OVERVIEW_LATEST_DATE_KEY)
-        or last_settled_date("cn")
-    )
+    latest_trading_date_value = resolve_latest_trading_date(
+        all_closes,
+        markets=_ITEM_MARKETS,
+        redis_fallback=get_string(MARKET_OVERVIEW_LATEST_DATE_KEY),
+        meta_fallback=last_settled_date("cn"),
+    ) or last_settled_date("cn")
     if not all_closes:
         cache_errors = [
             *cache_errors,

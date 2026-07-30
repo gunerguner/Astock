@@ -2,9 +2,10 @@
 
 from datetime import date
 
+from fastapi import status
 from sqlmodel import Session, select
 
-from astock.config import ASSET_PRICE_CACHE_TTL, GLOBAL_ASSETS
+from astock.config import ASSET_PRICE_CACHE_TTL, GLOBAL_ASSETS, GlobalAssetConfig
 from astock.core.datetime_utils import (
     filter_settled_closes,
     iso_now,
@@ -12,11 +13,12 @@ from astock.core.datetime_utils import (
     market_for_asset_type,
     now_local,
 )
+from astock.core.error_codes import ErrorCode
 from astock.core.exceptions import AppError
 from astock.core.price_utils import (
-    anchor_date_excluding_today,
     anchor_date_for_closes,
     global_asset_markets,
+    resolve_latest_trading_date,
     sorted_dates,
 )
 from astock.core.redis_client import LATEST_TRADING_DATE_KEY, get_string
@@ -54,7 +56,7 @@ _PRICE_CACHE_DEPS = ClosesCacheDeps(
 
 
 def _ensure_price_cache(
-    assets: list[dict[str, str]], *, force_refresh: bool = False
+    assets: list[GlobalAssetConfig], *, force_refresh: bool = False
 ) -> ClosesFetchResult:
     """确保全球资产收盘价缓存齐全，缺失时通过 AkShare 回填。"""
     return ensure_closes(
@@ -70,7 +72,11 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> PriceLevels
     if not rows and not force_refresh:
         meta = get_sync_meta(db, "asset_high")
         if meta is None:
-            raise ValueError("全球资产历史最高点数据为空，请先刷新数据")
+            raise AppError(
+                message="全球资产历史最高点数据为空，请先刷新数据",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
 
     fetched = _ensure_price_cache(GLOBAL_ASSETS, force_refresh=force_refresh)
     all_closes = fetched.closes
@@ -149,16 +155,15 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> PriceLevels
         for ticker, closes in all_closes.items()
         if ticker in asset_markets
     }
-    latest_trading_date_value = (
-        anchor_date_excluding_today(settled_closes, markets=asset_markets)
-        or get_string(LATEST_TRADING_DATE_KEY)
-        or (meta.last_synced_date if meta else None)
+    latest_trading_date_value = resolve_latest_trading_date(
+        settled_closes,
+        markets=asset_markets,
+        redis_fallback=get_string(LATEST_TRADING_DATE_KEY),
+        meta_fallback=meta.last_synced_date if meta else None,
+        display_cap=max(last_settled_date("cn"), last_settled_date("us")),
     )
-    display_cap = max(last_settled_date("cn"), last_settled_date("us"))
-    if latest_trading_date_value and latest_trading_date_value > display_cap:
-        latest_trading_date_value = display_cap
     if latest_trading_date_value is None:
-        raise AppError("无法确定最新交易日，请先刷新全球资产数据")
+        raise AppError(message="无法确定最新交易日，请先刷新全球资产数据")
 
     return PriceLevelsResponse(
         last_synced_at=meta.last_synced_at if meta else None,

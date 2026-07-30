@@ -3,11 +3,11 @@
 import time
 from typing import Any
 
-from sqlmodel import Session
+from sqlmodel import Session, SQLModel
 
 from astock.core.sync_status import SyncStatus
 from astock.datasets.result import FetchResult
-from astock.services.sync.results import build_result
+from astock.services.sync.results import ImportResult, build_result
 from astock.services.sync.store import count_rows, get_sync_meta, upsert_sync_meta
 
 _REQUIRED_FIELDS: dict[str, list[str]] = {
@@ -66,10 +66,10 @@ def build_skip_result(
     db: Session,
     *,
     table_name: str,
-    model: type,
+    model: type[SQLModel],
     start_ts: float,
     last_date: str | None = None,
-) -> dict[str, Any]:
+) -> ImportResult:
     """日频数据集无新交易日时的快速跳过结果。"""
     meta = get_sync_meta(db, table_name)
     last_synced = meta.last_synced_date if meta else None
@@ -82,7 +82,7 @@ def build_skip_result(
         error=None,
     )
     elapsed = time.perf_counter() - start_ts
-    result = build_result(
+    return build_result(
         imported=0,
         total=count_rows(db, model),
         last_date=resolved_last_date,
@@ -91,4 +91,3 @@ def build_skip_result(
         last_synced_at=last_synced_at,
         elapsed=round(elapsed, 2),
     )
-    return result

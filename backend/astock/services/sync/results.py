@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from astock.core.sync_status import SyncStatus
@@ -35,6 +35,26 @@ class ImportResult:
             d["elapsed"] = self.elapsed
         return d
 
+    def with_status(self, status: SyncStatus) -> ImportResult:
+        return replace(self, status=status)
+
+    def with_elapsed(self, elapsed: float) -> ImportResult:
+        return replace(self, elapsed=elapsed)
+
+
+@dataclass
+class ImportBatchResult:
+    """全量导入各阶段结果聚合。"""
+
+    phases: dict[str, ImportResult]
+    status: SyncStatus
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            **{key: result.to_dict() for key, result in self.phases.items()},
+            "status": self.status,
+        }
+
 
 def resolve_status(ok: bool, imported: int) -> SyncStatus:
     """根据抓取成功与否与入库条数判定 SUCCESS/PARTIAL/FAILED。"""
@@ -63,35 +83,34 @@ def build_result(
     source_errors: dict[str, str] | None = None,
     last_synced_at: str | None = None,
     elapsed: float | None = None,
-) -> dict[str, Any]:
-    """组装标准导入结果字典（含 status、source_errors、elapsed）。"""
-    result = ImportResult(
+    status: SyncStatus | None = None,
+) -> ImportResult:
+    """组装标准导入结果（含 status、source_errors、elapsed）。"""
+    return ImportResult(
         imported=imported,
         total=total,
         last_date=last_date,
         last_synced_at=last_synced_at,
-        status=resolve_status(ok, imported),
+        status=status if status is not None else resolve_status(ok, imported),
         source_errors=source_errors if source_errors is not None else {},
         elapsed=elapsed,
     )
-    return result.to_dict()
 
 
 def finalize_import_result(
-    result: dict[str, Any],
+    result: ImportResult,
     *,
     start_ts: float,
     log_label: str,
-) -> dict[str, Any]:
+) -> ImportResult:
     """记录导入耗时日志并写回结果 elapsed 字段。"""
-    elapsed = time.perf_counter() - start_ts
+    elapsed = round(time.perf_counter() - start_ts, 2)
     logger.info(
         "%s完成: imported=%s total=%s status=%s elapsed=%.2fs",
         log_label,
-        result["imported"],
-        result["total"],
-        result["status"],
+        result.imported,
+        result.total,
+        result.status,
         elapsed,
     )
-    result["elapsed"] = round(elapsed, 2)
-    return result
+    return result.with_elapsed(elapsed)

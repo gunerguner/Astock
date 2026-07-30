@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from sqlmodel import Session, col, select
+from sqlmodel import Session
 
 from astock.config import US_MACRO_START_PERIOD
 from astock.core.types import MacroMetric
-from astock.models.macro import MacroValue
 from astock.schemas.analysis import UsMacroPointItem, UsMacroResponse
-from astock.services.queries._macro_common import pivot_macro_rows
+from astock.services.queries._common import (
+    latest_period_with,
+    load_macro_rows,
+    pivot_macro_rows,
+)
 from astock.services.sync.store import get_sync_meta
 
 _US_METRICS: tuple[MacroMetric, ...] = ("cpi_yoy", "fed_rate_upper")
@@ -21,16 +24,9 @@ def get_us_macro(
 ) -> UsMacroResponse:
     """按起始月份查询 CPI / 联邦基金利率月度序列。"""
     start_period = (start or US_MACRO_START_PERIOD).strip()[:7]
-    rows = list(
-        db.exec(
-            select(MacroValue)
-            .where(col(MacroValue.region) == "us")
-            .where(col(MacroValue.period) >= start_period)
-            .where(col(MacroValue.metric).in_(_US_METRICS))
-            .order_by(col(MacroValue.period), col(MacroValue.metric))
-        ).all()
+    rows = load_macro_rows(
+        db, region="us", metrics=_US_METRICS, start_period=start_period
     )
-
     by_period = pivot_macro_rows(rows, _US_METRICS)
     points = [
         UsMacroPointItem(
@@ -47,9 +43,9 @@ def get_us_macro(
         points = [
             p for p in points if p.cpi_yoy is not None or p.period <= max_cpi
         ]
-    latest = next(
-        (p.period for p in reversed(points) if p.cpi_yoy is not None),
-        points[-1].period if points else None,
+    latest = latest_period_with(
+        points,
+        predicate=lambda p: p.cpi_yoy is not None,
     )
 
     meta = get_sync_meta(db, "us_macro")

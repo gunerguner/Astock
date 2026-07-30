@@ -45,7 +45,9 @@ def conclusion(percentage_diff: float) -> str:
     return PRICE_LEVEL_DEFAULT
 
 
-def write_price_cache(ticker: str, closes: dict[str, float], *, market: str) -> None:
+def write_price_cache(
+    ticker: str, closes: dict[str, float], *, market: MarketCode
+) -> None:
     """将已结算收盘价写入按日 Redis 键与近期序列缓存。"""
     settled = filter_settled_closes(closes, market)
     if not settled:
@@ -61,7 +63,7 @@ def write_price_cache(ticker: str, closes: dict[str, float], *, market: str) -> 
     )
 
 
-def read_price_cache(ticker: str, *, market: str) -> dict[str, float]:
+def read_price_cache(ticker: str, *, market: MarketCode) -> dict[str, float]:
     """读取单资产近期收盘价缓存，缺失时回退最新单日价。"""
     closes = read_recent_closes_cache(get_json, recent_closes_key(ticker), market=market)
     if closes:

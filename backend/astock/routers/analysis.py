@@ -7,7 +7,6 @@ from astock.config import (
     US_MACRO_START_PERIOD,
 )
 from astock.core.deps import DbSession
-from astock.core.exceptions import AppError
 from astock.schemas.analysis import (
     BullMarketStatsResponse,
     CnMacroResponse,
@@ -20,6 +19,7 @@ from astock.schemas.analysis import (
 )
 from astock.schemas.response import ApiResponse, success
 from astock.services.global_asset import get_price_levels
+from astock.services.market_overview import get_market_overview
 from astock.services.queries import (
     bull_market_multi_index_point_stats,
     bull_market_turnover_stats,
@@ -28,7 +28,6 @@ from astock.services.queries import (
     stock_ranking,
     turnover_ranking,
 )
-from astock.services.market_overview import get_market_overview
 
 router = APIRouter(prefix="/api/v1/analysis", tags=["analysis"])
 
@@ -40,19 +39,19 @@ router = APIRouter(prefix="/api/v1/analysis", tags=["analysis"])
 def bull_market_point_stats_api(
     db: DbSession,
     threshold_000001: float = Query(
-        default=float(POINT_INDEX_CONFIG["000001"]["default_threshold"]),  # type: ignore[arg-type]
+        default=POINT_INDEX_CONFIG["000001"]["default_threshold"],
         gt=0,
     ),
     threshold_000300: float = Query(
-        default=float(POINT_INDEX_CONFIG["000300"]["default_threshold"]),  # type: ignore[arg-type]
+        default=POINT_INDEX_CONFIG["000300"]["default_threshold"],
         gt=0,
     ),
     threshold_399006: float = Query(
-        default=float(POINT_INDEX_CONFIG["399006"]["default_threshold"]),  # type: ignore[arg-type]
+        default=POINT_INDEX_CONFIG["399006"]["default_threshold"],
         gt=0,
     ),
     threshold_000688: float = Query(
-        default=float(POINT_INDEX_CONFIG["000688"]["default_threshold"]),  # type: ignore[arg-type]
+        default=POINT_INDEX_CONFIG["000688"]["default_threshold"],
         gt=0,
     ),
 ):
@@ -85,10 +84,7 @@ def turnover_ranking_api(
     top: int = Query(default=20, ge=1, le=100),
     bull_market: str | None = Query(default=None),
 ):
-    try:
-        return success(turnover_ranking(db, top=top, bull_market=bull_market))
-    except ValueError as e:
-        raise AppError(message=str(e)) from e
+    return success(turnover_ranking(db, top=top, bull_market=bull_market))
 
 
 @router.get(
@@ -100,10 +96,7 @@ def stock_ranking_api(
     top: int = Query(default=20, ge=1, le=100),
     bull_market: str | None = Query(default=None),
 ):
-    try:
-        return success(stock_ranking(db, top=top, bull_market=bull_market))
-    except ValueError as e:
-        raise AppError(message=str(e)) from e
+    return success(stock_ranking(db, top=top, bull_market=bull_market))
 
 
 @router.get(
@@ -114,10 +107,7 @@ def asset_price_levels_api(
     db: DbSession,
     force_refresh: bool = Query(default=False),
 ):
-    try:
-        return success(get_price_levels(db, force_refresh=force_refresh))
-    except ValueError as e:
-        raise AppError(message=str(e)) from e
+    return success(get_price_levels(db, force_refresh=force_refresh))
 
 
 @router.get(

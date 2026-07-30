@@ -14,7 +14,11 @@ from astock.schemas.analysis import (
     IndexPointStats,
     MultiIndexPointStatsResponse,
 )
-from astock.services.queries._common import empty_index_items, require_rows
+from astock.services.queries._common import (
+    bull_market_item_skeleton,
+    empty_index_items,
+    require_rows,
+)
 
 
 def build_bull_market_stats(
@@ -33,15 +37,7 @@ def build_bull_market_stats(
     for market_name, period in BULL_MARKETS.items():
         if available_from and available_from > period["end"]:
             items.append(
-                BullMarketItem(
-                    market=market_name,
-                    start=period["start"],
-                    end=period["end"],
-                    description=period.get("description"),
-                    days=0,
-                    max_value=None,
-                    not_available=True,
-                )
+                bull_market_item_skeleton(market_name, available_from=available_from)
             )
             continue
 
@@ -60,11 +56,9 @@ def build_bull_market_stats(
         if days > 0 and max_val is None:
             raise AppError(message=f"牛市区间 {market_name} 存在达标天数但缺少极值，请重新导入数据")
         items.append(
-            BullMarketItem(
-                market=market_name,
-                start=period["start"],
-                end=period["end"],
-                description=period.get("description"),
+            bull_market_item_skeleton(
+                market_name,
+                available_from=available_from,
                 days=days,
                 max_value=max_val,
             )
@@ -84,11 +78,9 @@ def bull_market_multi_index_point_stats(
     indices: list[IndexPointStats] = []
 
     for index_code, config in POINT_INDEX_CONFIG.items():
-        threshold = thresholds.get(
-            index_code, float(config["default_threshold"])  # type: ignore[arg-type]
-        )
-        index_name = str(config["name"])
-        available_from = str(config["available_from"])
+        threshold = thresholds.get(index_code, config["default_threshold"])
+        index_name = config["name"]
+        available_from = config["available_from"]
         exists = db.exec(
             select(Point).where(Point.index_code == index_code).limit(1)
         ).first()

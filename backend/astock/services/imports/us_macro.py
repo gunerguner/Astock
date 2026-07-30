@@ -2,18 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from sqlmodel import Session
 
 from astock.config import US_MACRO_REFRESH_DAY
 from astock.datasets.macro import fetch_us_macro
 from astock.services.imports._macro_domain import run_macro_import
+from astock.services.sync.results import ImportResult
 
 _SYNC_TABLE = "us_macro"
 
 
-def import_us_macro(db: Session) -> dict[str, Any]:
+def import_us_macro(db: Session) -> ImportResult:
     """拉取美国宏观月度指标并 upsert；尊重月频跳过窗口。"""
     return run_macro_import(
         db,

@@ -7,6 +7,7 @@ from astock.config import POINT_INDEX_CONFIG, point_sync_meta_key
 from astock.datasets.indices import fetch_point
 from astock.models.point import Point
 from astock.services.imports.pipeline import DailyImportSpec, run_multi_daily_import
+from astock.services.sync.results import ImportResult
 
 
 def _index_last_date(db: Session, index_code: str) -> str | None:
@@ -15,7 +16,7 @@ def _index_last_date(db: Session, index_code: str) -> str | None:
     ).one()
 
 
-def import_point(db: Session) -> dict:
+def import_point(db: Session) -> ImportResult:
     specs: list[DailyImportSpec] = []
     for index_code, config in POINT_INDEX_CONFIG.items():
         index_name = str(config["name"])

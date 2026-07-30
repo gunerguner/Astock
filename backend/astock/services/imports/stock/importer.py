@@ -272,9 +272,9 @@ def import_stock_gen(
         source_errors={"stock": "; ".join(errors[:5])} if errors else {},
         last_synced_at=last_synced_at,
     )
-    if result["status"] == SyncStatus.FAILED:
+    if result.status == SyncStatus.FAILED:
         raise ExternalSourceAppError(
-            f"个股切片导入失败: {result['source_errors'].get('stock')}"
+            f"个股切片导入失败: {result.source_errors.get('stock')}"
         )
     return finalize_import_result(
         result, start_ts=start_ts, log_label="个股切片导入"

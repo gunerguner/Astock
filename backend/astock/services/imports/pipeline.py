@@ -5,15 +5,17 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from sqlmodel import Session
+from sqlmodel import Session, SQLModel
 
 from astock.core.exceptions import ExternalSourceAppError
 from astock.core.sync_status import SyncStatus
+from astock.datasets.result import FetchResult
 from astock.services.imports._common import (
     build_skip_result,
     prepare_records_for_upsert,
 )
 from astock.services.sync.results import (
+    ImportResult,
     aggregate_status,
     build_result,
     finalize_import_result,
@@ -27,7 +29,6 @@ from astock.services.sync.store import (
     should_skip_daily_sync,
     upsert_sync_meta,
 )
-from astock.datasets.result import FetchResult
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ class DailyImportSpec:
     """单表日频导入配置。"""
 
     table_name: str
-    model: type
+    model: type[SQLModel]
     conflict_cols: list[str]
     fetch: Callable[[str], FetchResult]
     source_key: str
@@ -53,7 +54,7 @@ def run_daily_import(
     spec: DailyImportSpec,
     *,
     raise_on_failed: bool = True,
-) -> dict:
+) -> ImportResult:
     """单表日频导入编排：可跳过、拉取、校验、入库并更新同步水位。
 
     raise_on_failed 为 True 时，整体 FAILED 会抛 ExternalSourceAppError。
@@ -108,9 +109,9 @@ def run_daily_import(
         last_synced_at=last_synced_at,
     )
 
-    if raise_on_failed and result["status"] == SyncStatus.FAILED:
+    if raise_on_failed and result.status == SyncStatus.FAILED:
         raise ExternalSourceAppError(
-            f"{spec.failure_message}: {result['source_errors'].get(spec.source_key)}"
+            f"{spec.failure_message}: {result.source_errors.get(spec.source_key)}"
         )
 
     return finalize_import_result(result, start_ts=start_ts, log_label=f"{spec.log_label}导入")
@@ -122,8 +123,8 @@ def run_multi_daily_import(
     *,
     aggregate_failure_message: str,
     log_label: str,
-    count_model: type,
-) -> dict:
+    count_model: type[SQLModel],
+) -> ImportResult:
     """多实体日频导入：逐项 run_daily_import 后聚合 status / errors。"""
     start_ts = time.perf_counter()
     total_imported = 0
@@ -137,13 +138,13 @@ def run_multi_daily_import(
         error_label = spec.error_label or spec.log_label
         result = run_daily_import(db, spec, raise_on_failed=False)
 
-        total_imported += result["imported"]
-        statuses.append(result["status"])
-        if result.get("last_date"):
-            last_dates.append(result["last_date"])
-        if result.get("last_synced_at"):
-            last_synced_ats.append(result["last_synced_at"])
-        err = (result.get("source_errors") or {}).get(spec.source_key)
+        total_imported += result.imported
+        statuses.append(result.status)
+        if result.last_date:
+            last_dates.append(result.last_date)
+        if result.last_synced_at:
+            last_synced_ats.append(result.last_synced_at)
+        err = result.source_errors.get(spec.source_key)
         if err:
             source_errors[spec.source_key] = err
             all_errors.append(f"{error_label}: {err}")
@@ -156,10 +157,10 @@ def run_multi_daily_import(
         ok=ok,
         source_errors=source_errors,
         last_synced_at=max(last_synced_ats) if last_synced_ats else None,
+        status=aggregate_status(*statuses),
     )
-    result["status"] = aggregate_status(*statuses)
 
-    if result["status"] == SyncStatus.FAILED:
+    if result.status == SyncStatus.FAILED:
         raise ExternalSourceAppError(
             f"{aggregate_failure_message}: {'; '.join(all_errors[:5])}"
         )

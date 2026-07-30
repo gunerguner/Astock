@@ -1,13 +1,15 @@
 """数据导入编排：SSE 流式。"""
 
+from __future__ import annotations
+
 import logging
 from collections.abc import Callable, Iterator
 
 from sqlmodel import Session
 
 from astock.core.progress import ProgressReporter, SSEBridge
-from astock.schemas.imports import ImportDataset
 from astock.datasets.stocks import baostock_session_hold
+from astock.schemas.imports import ImportDataset
 from astock.services.imports import (
     import_cn_macro,
     import_point,
@@ -17,7 +19,11 @@ from astock.services.imports import (
 )
 from astock.services.imports.stock import import_stock_gen
 from astock.services.market_overview import warmup_market_overview
-from astock.services.sync.results import aggregate_status
+from astock.services.sync.results import (
+    ImportBatchResult,
+    ImportResult,
+    aggregate_status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +31,7 @@ logger = logging.getLogger(__name__)
 def _stream_run_phase(
     db: Session,
     key: str,
-    fn: Callable[[Session], dict],
+    fn: Callable[[Session], ImportResult],
     reporter: ProgressReporter,
     bridge: SSEBridge,
 ) -> Iterator[str]:
@@ -84,22 +90,19 @@ def _stream_all_phases(
         warmup_market_overview()
     except Exception:
         logger.exception("市场概览预热失败（不影响导入结果）")
-    return {
+
+    phases = {
         "turnover": turnover_result,
         "point": point_result,
         "stock": stock_result,
         "global_assets": global_assets_result,
         "us_macro": us_macro_result,
         "cn_macro": cn_macro_result,
-        "status": aggregate_status(
-            turnover_result["status"],
-            point_result["status"],
-            stock_result["status"],
-            global_assets_result["status"],
-            us_macro_result["status"],
-            cn_macro_result["status"],
-        ),
     }
+    return ImportBatchResult(
+        phases=phases,
+        status=aggregate_status(*(r.status for r in phases.values())),
+    )
 
 
 def import_dataset_stream(
@@ -110,6 +113,7 @@ def import_dataset_stream(
     reporter = ProgressReporter(bridge.emit)
 
     try:
+        result: ImportResult | ImportBatchResult
         match dataset:
             case ImportDataset.turnover:
                 result = yield from _stream_run_phase(

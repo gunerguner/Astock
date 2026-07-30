@@ -3,7 +3,11 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from astock.config import WEEKLY_BASELINE_OFFSET
+from astock.config import (
+    WEEKLY_BASELINE_OFFSET,
+    GlobalAssetConfig,
+    MarketOverviewItemConfig,
+)
 from astock.core.datetime_utils import (
     MarketCode,
     last_settled_date,
@@ -18,6 +22,7 @@ __all__ = [
     "baseline_prices_at_anchor",
     "anchor_date_for_closes",
     "anchor_date_excluding_today",
+    "resolve_latest_trading_date",
     "closes_cover_settled",
     "has_sufficient_baseline_points",
     "overview_item_markets",
@@ -111,6 +116,25 @@ def anchor_date_excluding_today(
     return max(anchors) if anchors else None
 
 
+def resolve_latest_trading_date(
+    all_closes: dict[str, dict[str, float]],
+    *,
+    markets: dict[str, MarketCode] | None = None,
+    redis_fallback: str | None = None,
+    meta_fallback: str | None = None,
+    display_cap: str | None = None,
+) -> str | None:
+    """锚点日 → Redis → meta/兜底；可选按 display_cap 截断。"""
+    latest = (
+        anchor_date_excluding_today(all_closes, markets=markets)
+        or redis_fallback
+        or meta_fallback
+    )
+    if latest and display_cap and latest > display_cap:
+        return display_cap
+    return latest
+
+
 def has_sufficient_baseline_points(
     closes: dict[str, float],
     anchor_date: str | None = None,
@@ -129,11 +153,13 @@ def has_sufficient_baseline_points(
     return len(dates) >= WEEKLY_BASELINE_OFFSET
 
 
-def overview_item_markets(items: list[dict[str, str]]) -> dict[str, MarketCode]:
+def overview_item_markets(
+    items: list[MarketOverviewItemConfig],
+) -> dict[str, MarketCode]:
     """为市场概览条目建立 key → 结算市场映射。"""
     return {item["key"]: market_for_source(item["source"]) for item in items}
 
 
-def global_asset_markets(assets: list[dict[str, str]]) -> dict[str, MarketCode]:
+def global_asset_markets(assets: list[GlobalAssetConfig]) -> dict[str, MarketCode]:
     """为全球资产建立 ticker → 结算市场映射。"""
     return {asset["ticker"]: market_for_asset_type(asset["asset_type"]) for asset in assets}

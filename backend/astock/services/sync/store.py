@@ -7,10 +7,13 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlmodel import Session, select
 
 from astock.config import DEFAULT_UPSERT_BATCH_SIZE, START_DATE
-from astock.core.datetime_utils import add_calendar_days, is_synced_through_settled
+from astock.core.datetime_utils import (
+    add_calendar_days,
+    is_synced_through_settled,
+    iso_now,
+)
 from astock.core.sync_status import SyncStatus
 from astock.models.sync_meta import SyncMeta
-from astock.core.datetime_utils import iso_now
 
 
 def get_last_date(db: Session, model: type) -> str | None:

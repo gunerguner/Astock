@@ -1,14 +1,58 @@
 """配置：环境变量（pydantic-settings）+ settings.yaml 常量 + 领域 YAML 懒加载。"""
 
+from __future__ import annotations
+
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 
 import yaml
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _CONFIG_DIR = Path(__file__).resolve().parent / "config"
+
+
+class PointIndexConfig(TypedDict):
+    name: str
+    default_threshold: float
+    available_from: str
+    baostock_code: NotRequired[str]
+    source: NotRequired[str]
+
+
+class BullMarketPeriod(TypedDict):
+    start: str
+    end: str
+    description: NotRequired[str]
+
+
+class GlobalAssetConfig(TypedDict):
+    ticker: str
+    name: str
+    asset_type: str
+    data_pending: NotRequired[bool]
+
+
+class MarketOverviewCategoryItem(TypedDict):
+    name: str
+    code: str
+    source: str
+
+
+class MarketOverviewCategoryConfig(TypedDict):
+    key: str
+    display_name: str
+    items: list[MarketOverviewCategoryItem]
+
+
+class MarketOverviewItemConfig(TypedDict):
+    key: str
+    category_key: str
+    category_name: str
+    name: str
+    code: str
+    source: str
 
 
 @lru_cache
@@ -175,21 +219,42 @@ def point_sync_meta_key(index_code: str) -> str:
 
 
 @lru_cache
-def _load_point_index_config() -> dict[str, dict[str, str | float | int]]:
+def _load_point_index_config() -> dict[str, PointIndexConfig]:
     raw = yaml.safe_load(
         (_CONFIG_DIR / "point_indices.yaml").read_text(encoding="utf-8")
     )
-    return raw["point_indices"]
+    result: dict[str, PointIndexConfig] = {}
+    for code, cfg in raw["point_indices"].items():
+        entry: PointIndexConfig = {
+            "name": str(cfg["name"]),
+            "default_threshold": float(cfg["default_threshold"]),
+            "available_from": str(cfg["available_from"]),
+        }
+        if "baostock_code" in cfg:
+            entry["baostock_code"] = str(cfg["baostock_code"])
+        if "source" in cfg:
+            entry["source"] = str(cfg["source"])
+        result[str(code)] = entry
+    return result
 
 
 @lru_cache
-def _load_bull_markets() -> dict[str, dict[str, str]]:
+def _load_bull_markets() -> dict[str, BullMarketPeriod]:
     raw = yaml.safe_load((_CONFIG_DIR / "bull_markets.yaml").read_text(encoding="utf-8"))
-    return raw["bull_markets"]
+    result: dict[str, BullMarketPeriod] = {}
+    for name, period in raw["bull_markets"].items():
+        entry: BullMarketPeriod = {
+            "start": str(period["start"]),
+            "end": str(period["end"]),
+        }
+        if period.get("description"):
+            entry["description"] = str(period["description"])
+        result[str(name)] = entry
+    return result
 
 
 @lru_cache
-def _load_global_assets() -> list[dict[str, str]]:
+def _load_global_assets() -> list[GlobalAssetConfig]:
     raw: dict[str, dict[str, str]] = yaml.safe_load(
         (_CONFIG_DIR / "global_assets.yaml").read_text(encoding="utf-8")
     )
@@ -201,13 +266,13 @@ def _load_global_assets() -> list[dict[str, str]]:
 
 
 @lru_cache
-def _load_market_overview_categories() -> list[dict]:
+def _load_market_overview_categories() -> list[MarketOverviewCategoryConfig]:
     raw = yaml.safe_load((_CONFIG_DIR / "market_overview.yaml").read_text(encoding="utf-8"))
     return raw["categories"]
 
 
 @lru_cache
-def _load_market_overview_items() -> list[dict[str, str]]:
+def _load_market_overview_items() -> list[MarketOverviewItemConfig]:
     return [
         {
             "key": f"{cat['key']}:{item['code']}",

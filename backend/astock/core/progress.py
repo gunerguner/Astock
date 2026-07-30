@@ -1,9 +1,14 @@
 """流式导入进度上报。"""
 
+from __future__ import annotations
+
 import json
 import time
 from collections.abc import Callable, Iterator
-from typing import Any
+from typing import Any, Protocol
+
+from astock.core.sync_status import SyncStatus
+from astock.services.sync.results import ImportResult
 
 PHASE_LABELS: dict[str, str] = {
     "turnover": "成交额",
@@ -13,6 +18,10 @@ PHASE_LABELS: dict[str, str] = {
     "us_macro": "美国宏观",
     "cn_macro": "中国宏观",
 }
+
+
+class SupportsToDict(Protocol):
+    def to_dict(self) -> dict[str, Any]: ...
 
 
 def format_sse(event: str, data: dict[str, Any]) -> str:
@@ -77,22 +86,23 @@ class ProgressReporter:
             },
         )
 
-    def phase_done(self, key: str, result: dict[str, Any]) -> None:
+    def phase_done(self, key: str, result: ImportResult) -> None:
         start = self._phase_start_times.get(key, time.perf_counter())
-        elapsed = result.get("elapsed", round(time.perf_counter() - start, 2))
-        status = result.get("status", "success")
+        elapsed = result.elapsed if result.elapsed is not None else round(
+            time.perf_counter() - start, 2
+        )
         self._emit(
             "progress",
             {
                 "phase": key,
                 "label": PHASE_LABELS.get(key, key),
-                "status": "failed" if status == "failed" else "done",
-                "current": result.get("total", 1),
-                "total": max(result.get("total", 1), 1),
-                "imported": result.get("imported", 0),
-                "last_date": result.get("last_date"),
-                "last_synced_at": result.get("last_synced_at"),
-                "source_errors": result.get("source_errors") or {},
+                "status": "failed" if result.status == SyncStatus.FAILED else "done",
+                "current": result.total,
+                "total": max(result.total, 1),
+                "imported": result.imported,
+                "last_date": result.last_date,
+                "last_synced_at": result.last_synced_at,
+                "source_errors": result.source_errors or {},
                 "elapsed": elapsed,
             },
         )
@@ -100,8 +110,8 @@ class ProgressReporter:
     def error(self, message: str) -> None:
         self._emit("error", {"message": message})
 
-    def done(self, result: dict[str, Any]) -> None:
-        self._emit("done", result)
+    def done(self, result: SupportsToDict) -> None:
+        self._emit("done", result.to_dict())
 
     def ping(self) -> None:
         self._emit("ping", {})
