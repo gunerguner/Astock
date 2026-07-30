@@ -95,6 +95,24 @@ PRICE_LEVEL_CONCLUSIONS: list[tuple[int, str]] = [
 PRICE_LEVEL_DEFAULT = str(_business.get("price_level_default", "deepPullback"))
 US_MACRO_REFRESH_DAY = int(_business.get("us_macro_refresh_day", 15))
 US_MACRO_START_PERIOD = str(_business.get("us_macro_start_period", "2020-06"))
+CN_MACRO_REFRESH_DAY = int(_business.get("cn_macro_refresh_day", 15))
+
+
+def _default_cn_macro_start_period() -> str:
+    """当前北京时间月份往前 60 个月。"""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    today = datetime.now(ZoneInfo("Asia/Shanghai")).date()
+    year, month = today.year, today.month - 60
+    while month <= 0:
+        month += 12
+        year -= 1
+    return f"{year:04d}-{month:02d}"
+
+
+_cn_start = str(_business.get("cn_macro_start_period") or "").strip()
+CN_MACRO_START_PERIOD = _cn_start[:7] if len(_cn_start) >= 7 else _default_cn_macro_start_period()
 
 # batch
 DEFAULT_UPSERT_BATCH_SIZE = int(_batch.get("default_upsert_batch_size", 500))

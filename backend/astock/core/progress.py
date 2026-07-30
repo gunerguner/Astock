@@ -11,6 +11,7 @@ PHASE_LABELS: dict[str, str] = {
     "stock": "个股切片",
     "global_assets": "全球资产",
     "us_macro": "美国宏观",
+    "cn_macro": "中国宏观",
 }
 
 

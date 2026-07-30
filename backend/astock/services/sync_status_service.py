@@ -14,6 +14,7 @@ _SYNC_STATUS_TABLES: dict[str, str] = {
     "stock_turnover": "stock",
     "asset_high": "global_assets",
     "us_macro": "us_macro",
+    "cn_macro": "cn_macro",
 }
 
 

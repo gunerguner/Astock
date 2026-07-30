@@ -138,3 +138,19 @@ class UsMacroResponse(BaseModel):
     last_synced_at: str | None = None
     points: list[UsMacroPointItem]
 
+
+class CnMacroPointItem(BaseModel):
+    period: str
+    cpi_yoy: float | None = None
+    ppi_yoy: float | None = None
+    pmi_manufacturing: float | None = None
+    pmi_non_manufacturing: float | None = None
+    consumer_confidence: float | None = None
+
+
+class CnMacroResponse(BaseModel):
+    start: str
+    latest_period: str | None = None
+    last_synced_at: str | None = None
+    points: list[CnMacroPointItem]
+

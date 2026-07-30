@@ -226,3 +226,25 @@ export function fetchUsMacroData(start = '2020-06'): Promise<UsMacroData> {
     params: { start },
   });
 }
+
+export interface CnMacroPointItem {
+  period: string;
+  cpi_yoy: number | null;
+  ppi_yoy: number | null;
+  pmi_manufacturing: number | null;
+  pmi_non_manufacturing: number | null;
+  consumer_confidence: number | null;
+}
+
+export interface CnMacroData {
+  start: string;
+  latest_period: string | null;
+  last_synced_at: string | null;
+  points: CnMacroPointItem[];
+}
+
+export function fetchCnMacroData(start?: string): Promise<CnMacroData> {
+  return request.get('/analysis/cn-macro', {
+    params: start ? { start } : undefined,
+  });
+}

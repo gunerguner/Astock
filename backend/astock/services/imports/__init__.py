@@ -2,10 +2,12 @@
 
 from astock.services.imports.point import import_point
 from astock.services.imports.turnover import import_turnover
+from astock.services.imports.cn_macro import import_cn_macro
 from astock.services.imports.us_macro import import_us_macro
 
 __all__ = [
     "import_turnover",
     "import_point",
     "import_us_macro",
+    "import_cn_macro",
 ]

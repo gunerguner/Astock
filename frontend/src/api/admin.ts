@@ -19,11 +19,12 @@ export interface ImportAllResult {
   stock: ImportResultItem;
   global_assets?: ImportResultItem;
   us_macro?: ImportResultItem;
+  cn_macro?: ImportResultItem;
   status: ImportStatus;
 }
 
 export type ImportPhaseKey =
-  'turnover' | 'point' | 'stock' | 'global_assets' | 'us_macro';
+  'turnover' | 'point' | 'stock' | 'global_assets' | 'us_macro' | 'cn_macro';
 
 export interface ImportProgressEvent {
   phase: ImportPhaseKey;
@@ -75,6 +76,7 @@ export interface SyncStatus {
   stock: SyncStatusItem;
   global_assets: SyncStatusItem;
   us_macro: SyncStatusItem;
+  cn_macro: SyncStatusItem;
 }
 
 export function fetchSyncStatusApi(): Promise<SyncStatus> {

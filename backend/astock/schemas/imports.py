@@ -7,4 +7,5 @@ class ImportDataset(str, Enum):
     stock = "stock"
     global_assets = "global_assets"
     us_macro = "us_macro"
+    cn_macro = "cn_macro"
     all = "all"

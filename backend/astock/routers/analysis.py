@@ -1,10 +1,16 @@
 from fastapi import APIRouter, Query
 
-from astock.config import POINT_INDEX_CONFIG, TURNOVER_THRESHOLD, US_MACRO_START_PERIOD
+from astock.config import (
+    CN_MACRO_START_PERIOD,
+    POINT_INDEX_CONFIG,
+    TURNOVER_THRESHOLD,
+    US_MACRO_START_PERIOD,
+)
 from astock.core.deps import DbSession
 from astock.core.exceptions import AppError
 from astock.schemas.analysis import (
     BullMarketStatsResponse,
+    CnMacroResponse,
     MarketOverviewResponse,
     MultiIndexPointStatsResponse,
     PriceLevelsResponse,
@@ -17,6 +23,7 @@ from astock.services.global_asset import get_price_levels
 from astock.services.queries import (
     bull_market_multi_index_point_stats,
     bull_market_turnover_stats,
+    get_cn_macro,
     get_us_macro,
     stock_ranking,
     turnover_ranking,
@@ -132,3 +139,14 @@ def us_macro_api(
     start: str = Query(default=US_MACRO_START_PERIOD, min_length=7, max_length=7),
 ):
     return success(get_us_macro(db, start=start))
+
+
+@router.get(
+    "/cn-macro",
+    response_model=ApiResponse[CnMacroResponse],
+)
+def cn_macro_api(
+    db: DbSession,
+    start: str = Query(default=CN_MACRO_START_PERIOD, min_length=7, max_length=7),
+):
+    return success(get_cn_macro(db, start=start))

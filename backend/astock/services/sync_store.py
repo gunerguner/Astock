@@ -64,6 +64,17 @@ def count_rows(db: Session, model: type) -> int:
     return db.exec(select(func.count()).select_from(model)).one()
 
 
+def count_macro_rows(db: Session, region: str) -> int:
+    """统计 macro_value 表中某 region 的行数。"""
+    from astock.models.macro import MacroValue
+
+    return db.exec(
+        select(func.count())
+        .select_from(MacroValue)
+        .where(MacroValue.region == region)
+    ).one()
+
+
 def batch_upsert(
     db: Session,
     model: type,

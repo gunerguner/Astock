@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from astock.models.macro import METRIC_FED_RATE_UPPER, REGION_US
 from astock.sources.fetch_result import SourceFetchResult
 from astock.sources.us_macro._common import (
     FRED_HTTP_TIMEOUT,
@@ -66,8 +67,10 @@ def _events_to_monthly(
             continue
         records.append(
             {
+                "region": REGION_US,
                 "period": period,
-                "fed_rate_upper": round(current_rate, 4),
+                "metric": METRIC_FED_RATE_UPPER,
+                "value": round(current_rate, 4),
             }
         )
     return records

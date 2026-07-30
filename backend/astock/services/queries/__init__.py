@@ -4,6 +4,7 @@ from astock.services.queries.bull_market_stats import (
     bull_market_multi_index_point_stats,
     bull_market_turnover_stats,
 )
+from astock.services.queries.cn_macro import get_cn_macro
 from astock.services.queries.rankings import stock_ranking, turnover_ranking
 from astock.services.queries.us_macro import get_us_macro
 
@@ -13,4 +14,5 @@ __all__ = [
     "stock_ranking",
     "turnover_ranking",
     "get_us_macro",
+    "get_cn_macro",
 ]

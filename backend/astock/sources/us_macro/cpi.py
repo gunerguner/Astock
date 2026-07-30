@@ -8,8 +8,8 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import akshare as ak
-import pandas as pd
 
+from astock.models.macro import METRIC_CPI_YOY, REGION_US
 from astock.sources.fetch_result import SourceFetchResult
 from astock.sources.market_overview._common import safe_retry_df
 from astock.sources.us_macro._common import (
@@ -41,15 +41,20 @@ def _fill_known_cpi_gaps(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     by_period = {str(r["period"]): r for r in records if r.get("period")}
     for period, yoy in _CPI_GAP_YOY.items():
         existing = by_period.get(period)
-        if existing is None or existing.get("cpi_yoy") is None:
-            by_period[period] = {"period": period, "cpi_yoy": yoy}
+        if existing is None or existing.get("value") is None:
+            by_period[period] = {
+                "region": REGION_US,
+                "period": period,
+                "metric": METRIC_CPI_YOY,
+                "value": yoy,
+            }
     return [by_period[k] for k in sorted(by_period)]
 
 
 def _normalize_cpi_rows(
     rows: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """统一为 {period, cpi_yoy}，过滤未来占位。"""
+    """统一为 {region, period, metric, value}，过滤未来占位。"""
     today = _today_shanghai().isoformat()
     out: list[dict[str, Any]] = []
     for row in rows:
@@ -63,8 +68,10 @@ def _normalize_cpi_rows(
             continue
         out.append(
             {
+                "region": REGION_US,
                 "period": period,
-                "cpi_yoy": round(float(value), 4),
+                "metric": METRIC_CPI_YOY,
+                "value": round(float(value), 4),
             }
         )
     out.sort(key=lambda r: r["period"])

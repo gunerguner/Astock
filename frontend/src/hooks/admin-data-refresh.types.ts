@@ -5,7 +5,7 @@ import type {
 } from '@/api/admin';
 
 export type PhaseKey =
-  'turnover' | 'point' | 'stock' | 'global_assets' | 'us_macro';
+  'turnover' | 'point' | 'stock' | 'global_assets' | 'us_macro' | 'cn_macro';
 
 export type PhaseStatus = 'pending' | 'running' | 'done' | 'failed';
 
@@ -37,6 +37,7 @@ export const PHASE_ORDER: PhaseKey[] = [
   'stock',
   'global_assets',
   'us_macro',
+  'cn_macro',
 ];
 
 export function isPhaseKey(value: string | undefined): value is PhaseKey {
@@ -45,7 +46,8 @@ export function isPhaseKey(value: string | undefined): value is PhaseKey {
     value === 'point' ||
     value === 'stock' ||
     value === 'global_assets' ||
-    value === 'us_macro'
+    value === 'us_macro' ||
+    value === 'cn_macro'
   );
 }
 
@@ -86,6 +88,14 @@ export function createInitialProgressState(): RefreshProgressState {
       },
       us_macro: {
         phase: 'us_macro',
+        label: '',
+        status: 'pending',
+        current: 0,
+        total: 1,
+        imported: 0,
+      },
+      cn_macro: {
+        phase: 'cn_macro',
         label: '',
         status: 'pending',
         current: 0,
