@@ -84,18 +84,14 @@ flowchart LR
 
 - **providers/**：隔离外部 SDK/HTTP，返回原始或中性数据；不依赖 `datasets/`、`models/`、`services/`，不构造业务记录形状。
 - **datasets/**：按稳定数据契约做多源选择与标准化；import 路径统一返回 `FetchResult{records, ok, errors}`（`datasets/result.py`），不写库、不依赖 services。
-- **services/**：编排 datasets → upsert 模型 / 写 Redis；日频导入走 `imports/pipeline.run_daily_import`；抛 `AppError` / `ExternalSourceAppError`。
-- **routers/**：薄层转发，不直接访问 providers/datasets。
+- **services/**：编排 datasets → upsert 模型 / 写 Redis；日频导入走 `imports/pipeline.run_daily_import`（返回 `ImportResult`）；抛 `AppError` / `ExternalSourceAppError`。
+- **routers/**：薄层转发，不直接访问 providers/datasets；不在路由层 `try/except ValueError`。
 
 ### 文件粒度规则
 
 - 默认扁平文件；普通文件目标约 80～250 行；超过约 300 行且有两个独立职责时拆分。
 - 独立外部 API 契约（如 BLS/FRED）允许保持小文件。
 - 至少 3 个相关模块或存在共享入口时再建子包（当前：`macro/`、`market_overview/`、`providers/baostock/`、`providers/akshare/`）。
-
-### 遗留 `sources/` 目录
-
-`backend/astock/sources/` 是迁移前实现，目录内部仍有自引用，但当前 routers/services 的运行链路已切到 `providers/` + `datasets/`。新增或修改数据源不要继续扩展 `sources/`；判断真实调用关系时以 service 的 import 链为准。
 
 ### 统一返回封装
 
@@ -126,6 +122,7 @@ class FetchResult:
 | `is_multi_market_synced(date)` | 全球资产导入跳过：中、美两侧 `last_settled_date` **均**已覆盖 |
 | `anchor_date_for_closes(closes, market)` | **单项**锚点：该资产在对应市场结算日内的最新 `date` |
 | `anchor_date_excluding_today(all_closes, markets=...)` | 多资产「数据截至」：各 key 按自身 `market` 取锚点后 `max` |
+| `resolve_latest_trading_date(...)` | 展示用「最新交易日」统一解析：锚点 → Redis → meta/兜底，可选 `display_cap` 截断；全球资产与市场概览共用 |
 
 **拉取终点**：baostock / akshare 科创50 等 A 股日线 `end_date = last_settled_date("cn")`；概览 `tail_closes(..., market=...)`、全球资产近期收盘价按 `market_for_asset_type` 截断至 `last_settled_date`。
 
@@ -364,7 +361,7 @@ flowchart TD
 | 导入跳过 | `refresh_asset_highs`：`last_status=success` 且 `is_multi_market_synced(last_synced_date)` 且表非空 |
 | 结算市场 | 美股 `stock`、贵金属 `metal` → `us`；写/读 Redis 前 `filter_settled_closes(..., market)` |
 | 展示锚点 | 每股 `anchor_date_for_closes(closes, market)` + `baseline_prices_at_anchor` |
-| `latest_trading_date` | 响应字段：`anchor_date_excluding_today(..., markets=global_asset_markets)`，不超过 `max(cn, us)` 结算日 |
+| `latest_trading_date` | 响应字段：`resolve_latest_trading_date(..., display_cap=max(cn, us))` |
 | Redis Key | `global_asset:recent:{ticker}`（最近 N 日收盘价 JSON）；`global_asset:price:{ticker}:{date}`（逐日兜底）；`global_asset:meta:latest_trading_date` |
 | TTL | `ASSET_PRICE_CACHE_TTL = 86400s`（环境变量 `asset_price_cache_ttl`） |
 | `force_refresh` | 读 API 参数：对**全部资产**重拉 akshare（与概览同一 `ensure_closes` 语义）；默认模式仅回填未覆盖结算日 / 缺失项 |
@@ -405,7 +402,7 @@ flowchart TD
 | 新鲜度 | 缓存须 `closes_cover_settled`；落后则回填。节假日空窗回填后仍落后则写失败冷却 |
 | 结算过滤 | 抓取层 `_tail_closes(..., market=...)`；缓存读写带 `market_for_source(source)` |
 | 锚点日 / 当前价 | **按项独立** `anchor_date_for_closes` → 该日收盘价即「当前价」 |
-| `latest_trading_date` | 响应优先 `anchor_date_excluding_today(..., markets=overview_item_markets)`，兜底 `last_settled_date("cn")` |
+| `latest_trading_date` | 响应优先 `resolve_latest_trading_date(...)`，兜底 `last_settled_date("cn")` |
 | 并发 | 美债单独批量；其余 **darwin 串行 / Linux 线程池 max 4**；日志含 `key/source/elapsed` 便于线上核对 |
 | 预热 | `dataset=all` 六阶段结束后调用 `warmup_market_overview` |
 

@@ -29,14 +29,14 @@ description: Astock A股、全球资产与中美宏观数据平台的开发约�
 ├── backend/
 │   ├── astock/
 │   │   ├── main.py            # FastAPI app + 本地开发入口（uvicorn reload）
-│   │   ├── config.py          # 环境变量 + 业务常量（阈值）
+│   │   ├── config.py          # 环境变量 + 业务常量；YAML 懒加载 + TypedDict
 │   │   ├── config/            # YAML 配置（业务参数/牛市区间/全球资产/市场概览类目）
 │   │   ├── core/              # database、exceptions、logging、redis、deps、progress（SSE）
-│   │   ├── models/            # SQLModel 表定义
+│   │   ├── models/            # SQLModel 表定义（包根 re-export 供 create_all 注册）
 │   │   ├── schemas/           # Pydantic 请求/响应
 │   │   ├── providers/         # 外部供应商适配（baostock/akshare/BLS/FRED/东财/新浪）
 │   │   ├── datasets/          # 稳定数据契约与多源编排（indices/turnover/stocks/macro/…）
-│   │   ├── services/          # 业务逻辑（imports/、queries/、sync/、cache/、global_asset/、market_overview/、编排层）
+│   │   ├── services/          # imports/、queries/、sync/、cache/、global_asset/、market_overview/、编排层
 │   │   └── routers/           # admin / analysis 两组路由
 │   ├── requirements.txt
 │   └── .env.example
@@ -97,10 +97,12 @@ description: Astock A股、全球资产与中美宏观数据平台的开发约�
 |----|------|------|
 | `providers/` | 外部供应商 SDK/HTTP 适配，返回原始或中性数据 | 不依赖 `datasets/`、`models/`、`services/`；不构造业务记录形状 |
 | `datasets/` | 稳定数据契约、多源选择与标准化，返回 `FetchResult` | 不写库、不依赖 `services/`；扁平文件优先，复杂域再建子包 |
-| `services/` | 业务逻辑（导入编排、分析统计） | `imports/` 写路径、`queries/` 读路径；`sync/` 水位与导入结果、`cache/` Redis closes；通过 `datasets/` 取数，不感知具体供应商 |
-| `routers/` | HTTP 入口，薄层转发到 service | 查询参数校验在路由层；不直接访问 providers/datasets |
-| `models/` | SQLModel 表定义 | 主键显式声明，时间戳字段用 `str` 存 `cached_at` |
+| `services/` | 业务逻辑（导入编排、分析统计） | `imports/` 写路径、`queries/` 读路径；`sync/` 水位与 `ImportResult`、`cache/` Redis closes；通过 `datasets/` 取数，不感知具体供应商 |
+| `routers/` | HTTP 入口，薄层转发到 service | 查询参数校验在路由层；业务异常由 service 抛 `AppError`，路由不包 `ValueError` |
+| `models/` | SQLModel 表定义 | 主键显式声明，时间戳字段用 `str` 存 `cached_at`；`import astock.models` 注册 metadata |
 | `schemas/` | Pydantic 请求/响应 DTO | 响应统一走 `ApiResponse[T]` 信封 |
+
+**包 `__init__` 约定**：有真实消费者的 barrel 才 re-export（如 `models`、`imports`、`queries`、`global_asset`、`market_overview`、`datasets/macro`）；`sync`/`cache`/`providers/baostock` 等保持 docstring-only，调用方直引子模块。
 
 ## 业务域（已实现）
 
@@ -112,7 +114,7 @@ description: Astock A股、全球资产与中美宏观数据平台的开发约�
 | 全球市场概览 | `services/market_overview/` + `market_overview.yaml` | 6 类 18 项最近已结算日线概览（非实时） |
 | 中国宏观 | `datasets/macro/china.py` + `imports/cn_macro.py` + `queries/cn_macro.py` | CPI/PPI 同比、制造业/非制造业 PMI、消费者信心（月频） |
 | 美国宏观 | `datasets/macro/us_cpi.py` + `us_rates.py` + `imports/us_macro.py` | CPI 同比、联邦基金目标利率上限（月频，主备源） |
-| 数据导入 | `services/imports/`（`pipeline` + `stock/` + `global_assets`）+ `import_orchestrator` + `sync/` | 增量 upsert + sync_meta 水位 |
+| 数据导入 | `services/imports/`（`pipeline` + `stock/` + `global_assets`）+ `import_orchestrator` + `sync/` | 增量 upsert + sync_meta；结果类型 `ImportResult` / 全量 `ImportBatchResult` |
 | 管理刷新 | 前端 `admin-refresh-button` + SSE | 6 阶段刷新；密码门（`VITE_ADMIN_REFRESH_PASSWORD`），后端无鉴权 |
 
 ## 配置驱动
@@ -126,6 +128,8 @@ description: Astock A股、全球资产与中美宏观数据平台的开发约�
 - `backend/astock/config/settings.yaml` — 通用阈值、批量参数及中美宏观刷新日/默认起始月份
 
 业务常量由 `backend/astock/config.py` 读取：`TURNOVER_THRESHOLD=2e12`（2 万亿）、`STOCK_SLICE_TOP_N=20`、`START_DATE="2005-01-01"`。宏观默认 `refresh_day=15`；美国查询从 `2020-06` 开始，中国查询起点为空时动态取当前月往前 60 个月。各指数默认阈值见 `point_indices.yaml`。
+
+YAML 懒加载结果用 TypedDict 约束（`PointIndexConfig`、`BullMarketPeriod`、`GlobalAssetConfig`、`MarketOverviewItemConfig` 等），避免路由默认阈值处 `# type: ignore`。
 
 ## 修改导航（最常改哪里）
 

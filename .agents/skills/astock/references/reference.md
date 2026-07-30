@@ -11,7 +11,7 @@ SKILL.md 的扩展材料；改 API、前端、部署、同步缓存时按需阅�
 | 用途 | 路径 |
 |------|------|
 | FastAPI 入口 | `backend/astock/main.py` |
-| 环境变量 + 阈值 | `backend/astock/config.py` |
+| 环境变量 + 阈值 + TypedDict | `backend/astock/config.py`（`PointIndexConfig` / `GlobalAssetConfig` / …） |
 | YAML 配置 | `backend/astock/config/settings.yaml` + `{bull_markets,point_indices,global_assets,market_overview}.yaml` |
 | 异常与错误码 | `backend/astock/core/exceptions.py`、`core/error_codes.py`、`core/exception_handlers.py` |
 | 数据库 / Redis | `backend/astock/core/database.py`、`core/redis_client.py` |
@@ -20,8 +20,9 @@ SKILL.md 的扩展材料；改 API、前端、部署、同步缓存时按需阅�
 | Pydantic DTO | `backend/astock/schemas/` |
 | 数据源 | `backend/astock/providers/` + `backend/astock/datasets/` |
 | 导入编排 | `backend/astock/services/import_orchestrator.py`、`services/imports/`、`services/sync/status.py` |
-| 同步 / 缓存 | `backend/astock/services/sync/`、`services/cache/` |
-| 分析查询 | `backend/astock/services/queries/` |
+| 导入结果类型 | `backend/astock/services/sync/results.py`（`ImportResult`、`ImportBatchResult`） |
+| 同步 / 缓存 | `backend/astock/services/sync/{store,status,results}.py`、`services/cache/{closes,asset_prices}.py` |
+| 分析查询 | `backend/astock/services/queries/`（共享 `_common.py`：牛市骨架 / 宏观 load+pivot） |
 | 全球资产 | `backend/astock/services/imports/global_assets.py`（写）、`services/global_asset/`（读） |
 | 市场概览 | `backend/astock/services/market_overview/` |
 | 宏观长表 / 导入 / 查询 | `backend/astock/models/macro.py`、`datasets/macro/`、`services/imports/{_macro_domain,cn_macro,us_macro}.py`、`services/queries/{cn_macro,us_macro}.py` |
@@ -234,9 +235,11 @@ class ApiResponse(BaseModel, Generic[T]):
 | event | 说明 |
 |-------|------|
 | `progress` | 阶段进度（`phase`/`current`/`total`/`imported`/`elapsed`） |
-| `done` | 导入完成；单 dataset 为 `ImportResultItem` 形字段，`all` 为 `{turnover, point, stock, global_assets, us_macro, cn_macro, status}` |
+| `done` | 导入完成；载荷为 `ImportResult.to_dict()`（单 dataset）或 `ImportBatchResult.to_dict()`（`all`：各阶段 dict + 顶层 `status`） |
 | `error` | 致命错误 |
 | `ping` | 保活（个股阶段每 100 只） |
+
+后端内部全程使用 `ImportResult` dataclass；仅 SSE 序列化边界调用 `.to_dict()`。`ProgressReporter.phase_done` 只收 `ImportResult`，`done` 收实现 `to_dict()` 的对象（`ImportResult` / `ImportBatchResult`）。
 
 前端通过 `refreshAllDataStream()`（`admin.ts`）消费，`useAdminDataRefresh` 按 `turnover → point → stock → global_assets → us_macro → cn_macro` 驱动六阶段进度弹窗。全部阶段在后端主流程串行执行；前三段共享 baostock session。
 
@@ -257,7 +260,9 @@ class ApiResponse(BaseModel, Generic[T]):
 
 - 牛市 `name`（如 `2024`）：只统计该区间
 - `all` 或缺省：全区间
-- 未知值 → `AppError`（`services/queries/_common.get_bull_market_period`）
+- 未知值 → `AppError`（`code=1001`，`services/queries/_common.get_bull_market_period`）；路由层不再 `try/except ValueError`
+
+服务层业务失败统一抛 `AppError` / `ExternalSourceAppError`（如全球资产空表、导入 FAILED），由 `core/exception_handlers` 转成信封响应。
 
 ---
 
@@ -304,15 +309,16 @@ class ApiResponse(BaseModel, Generic[T]):
 | 项 | 说明 |
 |----|------|
 | 主键 | `(region, period, metric)`；`region=cn/us`，`period=YYYY-MM` |
-| 水位 | `sync_meta.cn_macro` / `sync_meta.us_macro`，`last_synced_date` 存最新有效 CPI 月份 |
+| 水位 | `sync_meta.cn_macro` / `sync_meta.us_macro`，`last_synced_date` 存最新有效 CPI 月份（`WATERMARK_METRIC="cpi_yoy"`） |
 | 发布时间窗 | `expected_macro_period` 按北京时间计算：每月 `refresh_day` 之前期望上上月，含当日之后期望上月 |
 | 默认刷新日 | `settings.yaml` 的 `cn_macro_refresh_day` / `us_macro_refresh_day`，均默认 15 |
 | 跳过 | 上次状态为 `success`、对应 region 已有数据且水位覆盖期望月份 |
 | 写入 | 全量抓取后 SQLite upsert；不是按水位裁剪的增量请求，主键保证幂等 |
 | 水位不足 | 抓取有数据但最新 CPI 早于期望月份时，状态强制为 `partial_failure` 并保留源端滞后错误 |
 | 无有效记录 | 不清空旧表、不推进旧水位；写 `failed` 与错误摘要 |
+| 返回类型 | `run_macro_import` → `ImportResult`（与日频 `run_daily_import` 一致） |
 
-宏观域允许子源部分成功：成功记录仍写库，整体状态由 `FetchResult.ok` 和写入条数判为 `success` / `partial_failure` / `failed`。
+宏观域允许子源部分成功：成功记录仍写库，整体状态由 `FetchResult.ok` 和写入条数判为 `success` / `partial_failure` / `failed`。读路径用 `queries/_common.load_macro_rows` + `pivot_macro_rows`；US 查询额外截断晚于最新 CPI 的纯利率月。
 
 ### Redis 缓存
 
@@ -329,7 +335,7 @@ class ApiResponse(BaseModel, Generic[T]):
 3. `services/sync/status.py` 加返回项
 4. 前端 `api/admin.ts`、`hooks/admin-data-refresh.types.ts` 的阶段联合类型、顺序、初始状态及 locale 同步
 5. 需要缓存时在 Redis 层定义 Key/TTL，遵循「成功复用 + 失败冷却」
-6. 同步状态写回 `sync_meta`；导入结果内部用 `ImportResult` dataclass，对外 `to_dict()`
+6. 同步状态写回 `sync_meta`；importer 返回 `ImportResult`，全量聚合用 `ImportBatchResult`；仅 SSE/`done` 边界 `.to_dict()`
 
 外部源细节见 [external-data.md](.agents/skills/astock/references/external-data.md)。
 
@@ -429,7 +435,7 @@ backend 挂载 `${SQLITE_HOST_DIR:-./sqlite-data}:/app/data` + `log_data:/var/lo
 | `US_MACRO_REFRESH_DAY` / `CN_MACRO_REFRESH_DAY` | 15 | 每月含该日后，宏观期望水位从上上月切到上月 |
 | `US_MACRO_START_PERIOD` | `2020-06` | 美国宏观 API/页面默认起始月份 |
 | `CN_MACRO_START_PERIOD` | 动态前推 60 个月 | 中国宏观 API 默认起始月份；可由 YAML 固定 |
-| `GUNICORN_WORKERS/TIMEOUT` | — | 生产 worker |
+| `GUNICORN_WORKERS/TIMEOUT` | — | 生产 worker；后端为 **sync** 路由 + 阻塞 IO，依赖多 worker，不走全量 async |
 
 ### 部署约定
 

@@ -1,6 +1,6 @@
 # Astock
 
-Astock 是一个 **A 股历史行情 + 全球资产水位** 分析平台：从外部数据源增量拉取行情，缓存到本地 SQLite / Redis，再通过 Web 页面做牛市统计、成交额排名、全球资产价格水位与市场概览。
+Astock 是一个 **A 股历史行情 + 全球资产水位 + 中美宏观** 分析平台：从外部数据源增量拉取行情与宏观指标，缓存到本地 SQLite / Redis，再通过 Web 页面做牛市统计、成交额排名、全球资产价格水位、市场概览与中美宏观图表。
 
 ## 功能一览
 
@@ -11,6 +11,8 @@ Astock 是一个 **A 股历史行情 + 全球资产水位** 分析平台：从�
 | 成交额排名    | `/turnover-rank`      | 大盘合计成交额 TopN、个股高水位成交额切片 TopN |
 | 全球资产价格水位 | `/asset-price-levels` | 美股 / 贵金属相对历史最高点（ATH）的水位与结论标签 |
 | 全球市场概览   | `/market-overview`    | 股指、汇率、国债、贵金属、原油等约 18 项概览     |
+| 中国宏观     | `/cn-macro-data`      | CPI/PPI 同比、制造业/非制造业 PMI、消费者信心 |
+| 美国宏观     | `/us-macro-data`      | CPI 同比与联邦基金目标利率上限            |
 
 
 数据首次为空；本地跑起来后需在页面上触发一次「刷新全部数据」（见下文）。
@@ -20,11 +22,11 @@ Astock 是一个 **A 股历史行情 + 全球资产水位** 分析平台：从�
 
 | 层   | 技术                                                     |
 | --- | ------------------------------------------------------ |
-| 后端  | FastAPI + SQLModel（SQLite）+ Redis + Pandas；开发用 Uvicorn |
-| 前端  | Vue 3 + Vite + TypeScript + Arco Design Vue            |
+| 后端  | FastAPI + SQLModel（SQLite）+ Redis + Pandas；开发用 Uvicorn，生产 gunicorn sync worker |
+| 前端  | Vue 3 + Vite + TypeScript + Arco Design Vue + ECharts 6 |
 
 
-业务范围（牛市区间、指数清单、全球资产、概览类目）主要由 `backend/astock/config/*.yaml` 驱动，改范围优先改 YAML，而不是硬编码。
+业务范围（牛市区间、指数清单、全球资产、概览类目）主要由 `backend/astock/config/*.yaml` 驱动，改范围优先改 YAML，而不是硬编码；`config.py` 对 YAML 结果使用 TypedDict。
 
 数据流：
 
@@ -33,7 +35,7 @@ flowchart TB
   subgraph sources["外部数据源"]
     bao["BaoStock"]
     ak["akshare"]
-    web["新浪 / 东财"]
+    web["新浪 / 东财 / BLS / FRED"]
   end
 
   subgraph backend["后端 FastAPI"]
@@ -44,12 +46,12 @@ flowchart TB
   end
 
   subgraph store["本地存储"]
-    sqlite[("SQLite<br/>日频行情")]
+    sqlite[("SQLite<br/>日频行情 + 宏观长表")]
     redis[("Redis<br/>近期价缓存")]
   end
 
   subgraph frontend["前端 Vue3 + Arco"]
-    pages["业务页面<br/>牛市 / 排名 / 水位 / 概览"]
+    pages["业务页面<br/>牛市 / 排名 / 水位 / 概览 / 中美宏观"]
   end
 
   bao --> providers
@@ -68,7 +70,6 @@ flowchart TB
 
 
 
-
 ## 数据来源
 
 
@@ -79,6 +80,8 @@ flowchart TB
 | 个股高成交额切片（缺口日全市场 TopN）      | BaoStock 日更接口               | SQLite         |
 | 全球资产 ATH / 近期价             | akshare                     | SQLite + Redis |
 | 市场概览（美股指数、汇率、国债、美元指数等）     | akshare / 新浪 / 东财等，部分可复用本地库 | 主要 Redis       |
+| 中国宏观月度                     | akshare（东财宏观）               | SQLite `macro_value` |
+| 美国 CPI / 联邦基金利率上限          | 东财→BLS / FRED→Fed 官网        | SQLite `macro_value` |
 
 
 需能访问上述外网数据服务。Redis 不可用时后端会降级直连外源，但全球资产 / 市场概览体验会变差，**本地开发建议起一个 Redis**。
@@ -191,12 +194,12 @@ pnpm dev
 
 1. 打开前端页面，点导航栏右上角的 **刷新** 按钮（「刷新全部数据」）。
 2. 输入 `frontend/.env.development` 里配置的 `VITE_ADMIN_REFRESH_PASSWORD`。
-3. 确认后会出现 SSE 进度弹窗，依次导入成交额、指数点位、个股切片、全球资产等；**首次全量可能较久**（个股阶段最慢），请保持网络畅通。
+3. 确认后会出现 SSE 进度弹窗，依次导入成交额、指数点位、个股切片、全球资产、美/中宏观等；**首次全量可能较久**（个股阶段最慢），请保持网络畅通。
 4. 完成后各业务页会自动 reload；之后可按需再刷新做增量。
 
 导入依赖外网数据源，失败时可看后端 `backend/logs/` 或进度弹窗中的错误提示；确认 Redis 与后端已启动后再重试。
 
-日常浏览四个菜单页即可验证功能，无需先记 API。需要调试接口时再打开 `http://127.0.0.1:8000/docs`。
+日常浏览六个菜单页即可验证功能，无需先记 API。需要调试接口时再打开 `http://127.0.0.1:8000/docs`。
 
 ### 6. 本地开发检查清单
 
@@ -205,4 +208,4 @@ pnpm dev
 - [ ] `python -m astock.main` 无报错，`:8000` 可访问
 - [ ] `pnpm dev` 已起，页面能打开
 - [ ] 已用右上角刷新拉过至少一次数据
-- [ ] `/bull-market`、`/turnover-rank` 等页面有表格数据
+- [ ] `/bull-market`、`/turnover-rank`、`/cn-macro-data`、`/us-macro-data` 等页面有数据
