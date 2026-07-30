@@ -28,7 +28,7 @@ from astock.schemas.analysis import (
     MarketOverviewItem,
     MarketOverviewResponse,
 )
-from astock.services.closes_cache import (
+from astock.services.cache.closes import (
     ClosesCacheDeps,
     ClosesEnsureOptions,
     ClosesFetchResult,

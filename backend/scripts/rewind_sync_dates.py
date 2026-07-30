@@ -40,7 +40,7 @@ from astock.models.stock_turnover import StockTurnover
 from astock.models.sync_meta import SyncMeta
 from astock.models.turnover import Turnover
 from astock.core.datetime_utils import iso_now
-from astock.services.sync_store import get_last_date
+from astock.services.sync.store import get_last_date
 
 # dataset 名 → (sync_meta keys, 可选业务表 model)
 _DATASET_SPEC: dict[str, tuple[list[str], type | None]] = {

@@ -19,9 +19,10 @@ SKILL.md 的扩展材料；改 API、前端、部署、同步缓存时按需阅�
 | SQLModel 表 | `backend/astock/models/` |
 | Pydantic DTO | `backend/astock/schemas/` |
 | 数据源 | `backend/astock/providers/` + `backend/astock/datasets/` |
-| 导入编排 | `backend/astock/services/import_orchestrator.py`、`services/imports/`、`sync_status_service.py` |
+| 导入编排 | `backend/astock/services/import_orchestrator.py`、`services/imports/`、`services/sync/status.py` |
+| 同步 / 缓存 | `backend/astock/services/sync/`、`services/cache/` |
 | 分析查询 | `backend/astock/services/queries/` |
-| 全球资产 | `backend/astock/services/global_asset/` |
+| 全球资产 | `backend/astock/services/imports/global_assets.py`（写）、`services/global_asset/`（读） |
 | 市场概览 | `backend/astock/services/market_overview/` |
 | 宏观长表 / 导入 / 查询 | `backend/astock/models/macro.py`、`datasets/macro/`、`services/imports/{_macro_domain,cn_macro,us_macro}.py`、`services/queries/{cn_macro,us_macro}.py` |
 | 路由 | `backend/astock/routers/{admin,analysis}.py` |
@@ -279,7 +280,7 @@ class ApiResponse(BaseModel, Generic[T]):
 
 ### 批量 upsert
 
-`sync_store.batch_upsert`：SQLite `ON CONFLICT DO UPDATE`，默认按 `DEFAULT_UPSERT_BATCH_SIZE=500` 分批执行，全部批次完成后统一 commit，异常时 rollback。
+`services/sync/store.batch_upsert`：SQLite `ON CONFLICT DO UPDATE`，默认按 `DEFAULT_UPSERT_BATCH_SIZE=500` 分批执行，全部批次完成后统一 commit，异常时 rollback。
 
 `turnover` / 单指数 `point` 走 `imports/pipeline.run_daily_import`；`point` 外层按 `point_indices.yaml` 循环多指数（baostock + akshare 科创50）。
 
@@ -294,7 +295,7 @@ class ApiResponse(BaseModel, Generic[T]):
 
 ### global_assets 数据集
 
-`services/global_asset/refresh.py`：`refresh_asset_highs` 在上次状态成功、`asset_high` 非空且水位同时覆盖中美最近结算日时跳过；否则 akshare 串行拉 ATH → upsert `asset_high` → 写 Redis。
+`services/imports/global_assets.py`：`refresh_asset_highs` 在上次状态成功、`asset_high` 非空且水位同时覆盖中美最近结算日时跳过；否则 akshare 串行拉 ATH → upsert `asset_high` → 写 Redis（`services/cache/asset_prices`）。
 
 ### macro 月频数据集
 
@@ -325,7 +326,7 @@ class ApiResponse(BaseModel, Generic[T]):
 
 1. `ImportDataset` 枚举（`schemas/imports.py`）加值
 2. `services/imports/` 新增 importer + `import_orchestrator` 加分支
-3. `sync_status_service` 加返回项
+3. `services/sync/status.py` 加返回项
 4. 前端 `api/admin.ts`、`hooks/admin-data-refresh.types.ts` 的阶段联合类型、顺序、初始状态及 locale 同步
 5. 需要缓存时在 Redis 层定义 Key/TTL，遵循「成功复用 + 失败冷却」
 6. 同步状态写回 `sync_meta`；导入结果内部用 `ImportResult` dataclass，对外 `to_dict()`
@@ -452,7 +453,7 @@ backend 挂载 `${SQLITE_HOST_DIR:-./sqlite-data}:/app/data` + `log_data:/var/lo
 | 你改了什么 | 还要联动检查 |
 |-----------|----------------|
 | `providers/*` / `datasets/*` | 对应 `services/imports/` / `global_asset/` / `market_overview/`；[external-data.md](.agents/skills/astock/references/external-data.md) |
-| `models/` | `sync_store.batch_upsert`、`sync_status_service` |
+| `models/` | `sync/store.batch_upsert`、`sync/status` |
 | `schemas/` | 前端 `src/api/*.ts` interface、Swagger |
 | `config/*.yaml` | 重启 backend；前端下拉/展示项可能变化 |
 | `services/queries/` | 前端对应页面阈值/列 |

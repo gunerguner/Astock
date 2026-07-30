@@ -4,14 +4,6 @@ from __future__ import annotations
 
 from astock.datasets.macro.common import records_from_month_df
 from astock.datasets.result import FetchResult
-from astock.models.macro import (
-    METRIC_CONSUMER_CONFIDENCE,
-    METRIC_CPI_YOY,
-    METRIC_PMI_MFG,
-    METRIC_PMI_NON_MFG,
-    METRIC_PPI_YOY,
-    REGION_CN,
-)
 from astock.providers.akshare import economics as ak_econ
 
 
@@ -21,9 +13,9 @@ def fetch_cpi() -> FetchResult:
         return FetchResult.failure("东财 CPI：空结果")
     records = records_from_month_df(
         df,
-        region=REGION_CN,
+        region="cn",
         month_col="月份",
-        value_specs=[("全国-同比增长", METRIC_CPI_YOY)],
+        value_specs=[("全国-同比增长", "cpi_yoy")],
     )
     if not records:
         return FetchResult.failure("东财 CPI：无有效同比数据")
@@ -36,9 +28,9 @@ def fetch_ppi() -> FetchResult:
         return FetchResult.failure("东财 PPI：空结果")
     records = records_from_month_df(
         df,
-        region=REGION_CN,
+        region="cn",
         month_col="月份",
-        value_specs=[("当月同比增长", METRIC_PPI_YOY)],
+        value_specs=[("当月同比增长", "ppi_yoy")],
     )
     if not records:
         return FetchResult.failure("东财 PPI：无有效同比数据")
@@ -51,11 +43,11 @@ def fetch_pmi() -> FetchResult:
         return FetchResult.failure("东财 PMI：空结果")
     records = records_from_month_df(
         df,
-        region=REGION_CN,
+        region="cn",
         month_col="月份",
         value_specs=[
-            ("制造业-指数", METRIC_PMI_MFG),
-            ("非制造业-指数", METRIC_PMI_NON_MFG),
+            ("制造业-指数", "pmi_manufacturing"),
+            ("非制造业-指数", "pmi_non_manufacturing"),
         ],
     )
     if not records:
@@ -69,9 +61,9 @@ def fetch_consumer_confidence() -> FetchResult:
         return FetchResult.failure("东财消费者信心：空结果")
     records = records_from_month_df(
         df,
-        region=REGION_CN,
+        region="cn",
         month_col="月份",
-        value_specs=[("消费者信心指数-指数值", METRIC_CONSUMER_CONFIDENCE)],
+        value_specs=[("消费者信心指数-指数值", "consumer_confidence")],
     )
     if not records:
         return FetchResult.failure("东财消费者信心：无有效数据")

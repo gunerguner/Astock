@@ -5,25 +5,18 @@ from __future__ import annotations
 from sqlmodel import Session, col, select
 
 from astock.config import CN_MACRO_START_PERIOD
-from astock.models.macro import (
-    METRIC_CONSUMER_CONFIDENCE,
-    METRIC_CPI_YOY,
-    METRIC_PMI_MFG,
-    METRIC_PMI_NON_MFG,
-    METRIC_PPI_YOY,
-    REGION_CN,
-    MacroValue,
-)
+from astock.core.types import MacroMetric
+from astock.models.macro import MacroValue
 from astock.schemas.analysis import CnMacroPointItem, CnMacroResponse
 from astock.services.queries._macro_common import pivot_macro_rows
-from astock.services.sync_store import get_sync_meta
+from astock.services.sync.store import get_sync_meta
 
-_CN_METRICS = (
-    METRIC_CPI_YOY,
-    METRIC_PPI_YOY,
-    METRIC_PMI_MFG,
-    METRIC_PMI_NON_MFG,
-    METRIC_CONSUMER_CONFIDENCE,
+_CN_METRICS: tuple[MacroMetric, ...] = (
+    "cpi_yoy",
+    "ppi_yoy",
+    "pmi_manufacturing",
+    "pmi_non_manufacturing",
+    "consumer_confidence",
 )
 
 
@@ -37,7 +30,7 @@ def get_cn_macro(
     rows = list(
         db.exec(
             select(MacroValue)
-            .where(col(MacroValue.region) == REGION_CN)
+            .where(col(MacroValue.region) == "cn")
             .where(col(MacroValue.period) >= start_period)
             .where(col(MacroValue.metric).in_(_CN_METRICS))
             .order_by(col(MacroValue.period), col(MacroValue.metric))
@@ -48,11 +41,11 @@ def get_cn_macro(
     points = [
         CnMacroPointItem(
             period=period,
-            cpi_yoy=vals[METRIC_CPI_YOY],
-            ppi_yoy=vals[METRIC_PPI_YOY],
-            pmi_manufacturing=vals[METRIC_PMI_MFG],
-            pmi_non_manufacturing=vals[METRIC_PMI_NON_MFG],
-            consumer_confidence=vals[METRIC_CONSUMER_CONFIDENCE],
+            cpi_yoy=vals["cpi_yoy"],
+            ppi_yoy=vals["ppi_yoy"],
+            pmi_manufacturing=vals["pmi_manufacturing"],
+            pmi_non_manufacturing=vals["pmi_non_manufacturing"],
+            consumer_confidence=vals["consumer_confidence"],
         )
         for period, vals in sorted(by_period.items())
     ]

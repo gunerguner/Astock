@@ -5,17 +5,13 @@ from __future__ import annotations
 from sqlmodel import Session, col, select
 
 from astock.config import US_MACRO_START_PERIOD
-from astock.models.macro import (
-    METRIC_CPI_YOY,
-    METRIC_FED_RATE_UPPER,
-    REGION_US,
-    MacroValue,
-)
+from astock.core.types import MacroMetric
+from astock.models.macro import MacroValue
 from astock.schemas.analysis import UsMacroPointItem, UsMacroResponse
 from astock.services.queries._macro_common import pivot_macro_rows
-from astock.services.sync_store import get_sync_meta
+from astock.services.sync.store import get_sync_meta
 
-_US_METRICS = (METRIC_CPI_YOY, METRIC_FED_RATE_UPPER)
+_US_METRICS: tuple[MacroMetric, ...] = ("cpi_yoy", "fed_rate_upper")
 
 
 def get_us_macro(
@@ -28,7 +24,7 @@ def get_us_macro(
     rows = list(
         db.exec(
             select(MacroValue)
-            .where(col(MacroValue.region) == REGION_US)
+            .where(col(MacroValue.region) == "us")
             .where(col(MacroValue.period) >= start_period)
             .where(col(MacroValue.metric).in_(_US_METRICS))
             .order_by(col(MacroValue.period), col(MacroValue.metric))
@@ -39,8 +35,8 @@ def get_us_macro(
     points = [
         UsMacroPointItem(
             period=period,
-            cpi_yoy=vals[METRIC_CPI_YOY],
-            fed_rate_upper=vals[METRIC_FED_RATE_UPPER],
+            cpi_yoy=vals["cpi_yoy"],
+            fed_rate_upper=vals["fed_rate_upper"],
         )
         for period, vals in sorted(by_period.items())
     ]

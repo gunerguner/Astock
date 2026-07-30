@@ -5,7 +5,7 @@ from astock.core.deps import DbSession
 from astock.schemas.imports import ImportDataset
 from astock.schemas.response import success
 from astock.services.import_orchestrator import import_dataset_stream
-from astock.services.sync_status_service import get_sync_status
+from astock.services.sync.status import get_sync_status
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 

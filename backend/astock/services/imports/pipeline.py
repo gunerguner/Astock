@@ -10,14 +10,16 @@ from sqlmodel import Session
 from astock.core.exceptions import ExternalSourceAppError
 from astock.core.sync_status import SyncStatus
 from astock.services.imports._common import (
+    build_skip_result,
+    prepare_records_for_upsert,
+)
+from astock.services.sync.results import (
     aggregate_status,
     build_result,
-    build_skip_result,
     finalize_import_result,
-    prepare_records_for_upsert,
     resolve_status,
 )
-from astock.services.sync_store import (
+from astock.services.sync.store import (
     batch_upsert,
     count_rows,
     get_last_date,

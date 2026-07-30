@@ -13,13 +13,14 @@ from sqlmodel import Session
 
 from astock.core.datetime_utils import iso_now
 from astock.core.sync_status import SyncStatus
-from astock.models.macro import METRIC_CPI_YOY, MacroValue
-from astock.services.imports._common import (
+from astock.core.types import MacroRegion
+from astock.models.macro import MacroValue
+from astock.services.sync.results import (
     build_result,
     finalize_import_result,
     resolve_status,
 )
-from astock.services.sync_store import (
+from astock.services.sync.store import (
     batch_upsert,
     count_macro_rows,
     get_sync_meta,
@@ -59,7 +60,7 @@ def expected_macro_period(
 def should_skip_macro(
     db: Session,
     *,
-    region: str,
+    region: MacroRegion,
     sync_table: str,
     refresh_day: int,
 ) -> bool:
@@ -79,7 +80,7 @@ def _latest_cpi_period(records: list[dict[str, Any]]) -> str | None:
     periods = [
         str(r["period"])
         for r in records
-        if r.get("period") and r.get("metric") == METRIC_CPI_YOY and r.get("value") is not None
+        if r.get("period") and r.get("metric") == "cpi_yoy" and r.get("value") is not None
     ]
     return max(periods) if periods else None
 
@@ -87,7 +88,7 @@ def _latest_cpi_period(records: list[dict[str, Any]]) -> str | None:
 def run_macro_import(
     db: Session,
     *,
-    region: str,
+    region: MacroRegion,
     sync_table: str,
     refresh_day: int,
     fetch_fn: Callable[[], FetchResult],

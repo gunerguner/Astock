@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from astock.core.types import MacroMetric
 from astock.models.macro import MacroValue
 
 
 def pivot_macro_rows(
     rows: list[MacroValue],
-    metrics: tuple[str, ...],
+    metrics: tuple[MacroMetric, ...],
 ) -> dict[str, dict[str, float | None]]:
     """将长表 MacroValue 行按 period 聚合为 metric → value 字典。"""
     by_period: dict[str, dict[str, float | None]] = {}

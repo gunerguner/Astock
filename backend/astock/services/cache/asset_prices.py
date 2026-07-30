@@ -16,10 +16,14 @@ from astock.core.redis_client import (
     set_json,
     set_string,
 )
-from astock.schemas.analysis import PriceLevelPendingItem
-from astock.services.closes_cache import ClosesFetchResult, read_recent_closes_cache, write_recent_closes_cache
 from astock.datasets.global_assets import fetch_all_assets
 from astock.datasets.result import FetchResult
+from astock.schemas.analysis import PriceLevelPendingItem
+from astock.services.cache.closes import (
+    ClosesFetchResult,
+    read_recent_closes_cache,
+    write_recent_closes_cache,
+)
 
 
 @dataclass(frozen=True)

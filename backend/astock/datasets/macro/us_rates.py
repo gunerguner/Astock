@@ -8,7 +8,6 @@ from typing import Any
 
 from astock.datasets.macro.common import macro_record
 from astock.datasets.result import FetchResult
-from astock.models.macro import METRIC_FED_RATE_UPPER, REGION_US
 from astock.providers._shared.parsing import month_end
 from astock.providers import federal_reserve, fred
 
@@ -48,9 +47,9 @@ def _events_to_monthly(events: list[tuple[str, float]]) -> list[dict[str, Any]]:
             continue
         records.append(
             macro_record(
-                region=REGION_US,
+                region="us",
                 period=period,
-                metric=METRIC_FED_RATE_UPPER,
+                metric="fed_rate_upper",
                 value=current_rate,
             )
         )

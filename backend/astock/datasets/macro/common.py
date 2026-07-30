@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from astock.core.types import MacroMetric, MacroRegion
 from astock.datasets.result import FetchResult
 from astock.providers._shared.parsing import parse_cn_month, to_float
 
@@ -21,9 +22,9 @@ __all__ = [
 
 def macro_record(
     *,
-    region: str,
+    region: MacroRegion,
     period: str,
-    metric: str,
+    metric: MacroMetric,
     value: float,
 ) -> dict[str, Any]:
     return {
@@ -37,9 +38,9 @@ def macro_record(
 def records_from_month_df(
     df: Any,
     *,
-    region: str,
+    region: MacroRegion,
     month_col: str,
-    value_specs: list[tuple[str, str]],
+    value_specs: list[tuple[str, MacroMetric]],
     parse_month=parse_cn_month,
 ) -> list[dict[str, Any]]:
     """从月度宽表提取长表记录。

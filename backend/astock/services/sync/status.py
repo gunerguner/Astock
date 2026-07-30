@@ -5,8 +5,8 @@ from typing import Any
 from sqlmodel import Session
 
 from astock.config import POINT_INDEX_CONFIG, point_sync_meta_key
-from astock.services.imports._common import aggregate_status
-from astock.services.sync_store import get_sync_meta
+from astock.services.sync.results import aggregate_status
+from astock.services.sync.store import get_sync_meta
 
 _SYNC_STATUS_TABLES: dict[str, str] = {
     "turnover": "turnover",

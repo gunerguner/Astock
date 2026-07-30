@@ -64,8 +64,9 @@ flowchart LR
   subgraph services [services 编排]
     imp[imports + import_orchestrator]
     qry[queries 只读 pivot]
-    gas[global_asset]
+    gas[global_asset 读]
     mos[market_overview]
+    sync[sync / cache]
   end
   providers --> datasets
   datasets --> imp
@@ -76,6 +77,9 @@ flowchart LR
   gas --> SQLite
   gas --> Redis[(Redis)]
   mos --> Redis
+  sync -.-> imp
+  sync -.-> gas
+  sync -.-> mos
 ```
 
 - **providers/**：隔离外部 SDK/HTTP，返回原始或中性数据；不依赖 `datasets/`、`models/`、`services/`，不构造业务记录形状。
@@ -109,7 +113,7 @@ class FetchResult:
 
 全站**不提供实时行情**：未完成日线的 K 线/现货价不入库、不参与涨跌计算；盘中刷新管理员导入时，已覆盖最近可结算日则跳过外部请求。
 
-实现位于 `core/datetime_utils.py` + `core/price_utils.py`（纯函数）+ `services/closes_cache.py`（Redis closes 读写 / ensure）：
+实现位于 `core/datetime_utils.py` + `core/price_utils.py`（纯函数）+ `services/cache/closes.py`（Redis closes 读写 / ensure）：
 
 | 函数 / 概念 | 说明 |
 |-------------|------|
@@ -188,7 +192,7 @@ class FetchResult:
 | `POST /admin/data/import/stream?dataset=turnover` | `imports/turnover`（`pipeline.run_daily_import`） | baostock 两市成交额 | SQLite + `sync_meta`；`cn` 水位已结算则跳过 |
 | `POST /admin/data/import/stream?dataset=point` | `imports/point` | baostock 三指数 + akshare 科创50 | 按指数独立水位；`cn` 结算日跳过 |
 | `POST /admin/data/import/stream?dataset=stock` | `imports/stock/` | baostock 日更全市场 TopN + `query_all_stock` 名称 | 依赖 turnover 最新日；无新交易日跳过 |
-| `POST /admin/data/import/stream?dataset=global_assets` | `global_asset/refresh.py` | akshare ATH + recent closes | SQLite + Redis；`is_multi_market_synced` 跳过 |
+| `POST /admin/data/import/stream?dataset=global_assets` | `imports/global_assets.py` | akshare ATH + recent closes | SQLite + Redis；`is_multi_market_synced` 跳过 |
 | `POST /admin/data/import/stream?dataset=us_macro` | `imports/us_macro` → `_macro_domain` | CPI：东财→BLS；利率：FRED→Fed 官网 | SQLite `macro_value` + `sync_meta.us_macro`；月频期望水位 |
 | `POST /admin/data/import/stream?dataset=cn_macro` | `imports/cn_macro` → `_macro_domain` | akshare 东财 CPI/PPI/PMI/消费者信心 | SQLite `macro_value` + `sync_meta.cn_macro`；月频期望水位 |
 | `POST /admin/data/import/stream?dataset=all` | `import_orchestrator` | baostock 三段共享 login；之后全球资产、美国宏观、中国宏观在主线程串行；结束后 `warmup_market_overview` | 六阶段各自跳过；概览预热仅补落后项 |
@@ -211,7 +215,7 @@ class FetchResult:
 | 市场概览单项 | 记入 item `error` 字段 + Redis 失败标记（`MARKET_OVERVIEW_FAILURE_TTL=300s`） |
 | 全球资产单项 | 记入 `cache_errors`；配置了 `data_pending` 的资产返回占位项 |
 
-`force_refresh` 语义（资产价 / 市场概览，均走 `closes_cache.ensure_closes`）：为 `true` 时对**全部项**重拉外部源；默认模式下复用已 `closes_cover_settled`（且概览项基准点够）的缓存，失败冷却期内落后缓存可暂复用以免打爆源。
+`force_refresh` 语义（资产价 / 市场概览，均走 `cache/closes.ensure_closes`）：为 `true` 时对**全部项**重拉外部源；默认模式下复用已 `closes_cover_settled`（且概览项基准点够）的缓存，失败冷却期内落后缓存可暂复用以免打爆源。
 
 ## 5. 新增数据源约定
 

@@ -9,7 +9,7 @@ from astock.core.database import engine
 from astock.core.datetime_utils import MarketCode, filter_settled_closes, market_for_source
 from astock.core.price_utils import closes_cover_settled, has_sufficient_baseline_points
 from astock.models.point import Point
-from astock.services.global_asset._cache import read_price_cache
+from astock.services.cache.asset_prices import read_price_cache
 
 logger = logging.getLogger(__name__)
 

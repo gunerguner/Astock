@@ -7,17 +7,17 @@ from sqlmodel import Session
 
 from astock.core.progress import ProgressReporter, SSEBridge
 from astock.schemas.imports import ImportDataset
-from astock.services.global_asset.refresh import refresh_asset_highs
+from astock.datasets.stocks import baostock_session_hold
 from astock.services.imports import (
     import_cn_macro,
     import_point,
     import_turnover,
     import_us_macro,
+    refresh_asset_highs,
 )
-from astock.services.imports._common import aggregate_status
 from astock.services.imports.stock import import_stock_gen
 from astock.services.market_overview import warmup_market_overview
-from astock.datasets.stocks import baostock_session_hold
+from astock.services.sync.results import aggregate_status
 
 logger = logging.getLogger(__name__)
 

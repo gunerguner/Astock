@@ -9,7 +9,6 @@ from zoneinfo import ZoneInfo
 
 from astock.datasets.macro.common import macro_record
 from astock.datasets.result import FetchResult
-from astock.models.macro import METRIC_CPI_YOY, REGION_US
 from astock.providers._shared.parsing import parse_iso_date, parse_period, to_float
 from astock.providers.akshare import economics as ak_econ
 from astock.providers import bls
@@ -35,7 +34,7 @@ def _fill_known_cpi_gaps(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
         existing = by_period.get(period)
         if existing is None or existing.get("value") is None:
             by_period[period] = macro_record(
-                region=REGION_US, period=period, metric=METRIC_CPI_YOY, value=yoy
+                region="us", period=period, metric="cpi_yoy", value=yoy
             )
     return [by_period[k] for k in sorted(by_period)]
 
@@ -53,9 +52,9 @@ def _normalize_cpi_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
         out.append(
             macro_record(
-                region=REGION_US,
+                region="us",
                 period=str(period),
-                metric=METRIC_CPI_YOY,
+                metric="cpi_yoy",
                 value=float(value),
             )
         )

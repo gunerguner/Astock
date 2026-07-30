@@ -15,14 +15,16 @@ from astock.core.sync_status import SyncStatus
 from astock.models.stock_turnover import StockTurnover
 from astock.models.turnover import Turnover
 from astock.services.imports._common import (
-    build_result,
     build_skip_result,
-    finalize_import_result,
     is_missing_value,
-    resolve_status,
 )
 from astock.services.imports.turnover import import_turnover
-from astock.services.sync_store import (
+from astock.services.sync.results import (
+    build_result,
+    finalize_import_result,
+    resolve_status,
+)
+from astock.services.sync.store import (
     batch_upsert,
     count_rows,
     get_last_date,

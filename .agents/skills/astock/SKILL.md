@@ -11,7 +11,7 @@ description: Astock A股、全球资产与中美宏观数据平台的开发约�
 
 * 响应信封：所有 API 统一返回 `{ code, message, data }`，`code === 0` 为成功；见下文「API 契约」，字段级详见 [reference.md — API 契约（字段级）](.agents/skills/astock/references/reference.md)。
 * 外部数据：`providers/`（供应商适配）→ `datasets/`（稳定数据契约），统一返回 `FetchResult`；见 [external-data.md](.agents/skills/astock/references/external-data.md)。
-* 增量同步：`sync_meta` 表记录水位，`sync_store.batch_upsert` 用 `ON CONFLICT DO UPDATE`；见 [reference.md — 增量同步与缓存](.agents/skills/astock/references/reference.md)。
+* 增量同步：`sync_meta` 表记录水位，`services/sync/store.batch_upsert` 用 `ON CONFLICT DO UPDATE`；见 [reference.md — 增量同步与缓存](.agents/skills/astock/references/reference.md)。
 * 宏观数据：中美月度指标统一写入 `macro_value(region, period, metric)` 长表；水位按最新 CPI 月份推进，发布日期窗口由 `settings.yaml` 控制。
 * 前端：`baseURL=/api/v1` 硬编码，`request.ts` 拦截器把信封直接解包为业务 `data`；API 函数返回值不再带 AxiosResponse。
 * 部署：`docker/` 下三服务（redis/backend/frontend）+ nginx 反代；见 [reference.md — 部署与 Docker](.agents/skills/astock/references/reference.md)。
@@ -36,7 +36,7 @@ description: Astock A股、全球资产与中美宏观数据平台的开发约�
 │   │   ├── schemas/           # Pydantic 请求/响应
 │   │   ├── providers/         # 外部供应商适配（baostock/akshare/BLS/FRED/东财/新浪）
 │   │   ├── datasets/          # 稳定数据契约与多源编排（indices/turnover/stocks/macro/…）
-│   │   ├── services/          # 业务逻辑（imports/、queries/、global_asset/、market_overview/、编排层）
+│   │   ├── services/          # 业务逻辑（imports/、queries/、sync/、cache/、global_asset/、market_overview/、编排层）
 │   │   └── routers/           # admin / analysis 两组路由
 │   ├── requirements.txt
 │   └── .env.example
@@ -97,7 +97,7 @@ description: Astock A股、全球资产与中美宏观数据平台的开发约�
 |----|------|------|
 | `providers/` | 外部供应商 SDK/HTTP 适配，返回原始或中性数据 | 不依赖 `datasets/`、`models/`、`services/`；不构造业务记录形状 |
 | `datasets/` | 稳定数据契约、多源选择与标准化，返回 `FetchResult` | 不写库、不依赖 `services/`；扁平文件优先，复杂域再建子包 |
-| `services/` | 业务逻辑（导入编排、分析统计） | `imports/` 写路径、`queries/` 读路径；通过 `datasets/` 取数，不感知具体供应商 |
+| `services/` | 业务逻辑（导入编排、分析统计） | `imports/` 写路径、`queries/` 读路径；`sync/` 水位与导入结果、`cache/` Redis closes；通过 `datasets/` 取数，不感知具体供应商 |
 | `routers/` | HTTP 入口，薄层转发到 service | 查询参数校验在路由层；不直接访问 providers/datasets |
 | `models/` | SQLModel 表定义 | 主键显式声明，时间戳字段用 `str` 存 `cached_at` |
 | `schemas/` | Pydantic 请求/响应 DTO | 响应统一走 `ApiResponse[T]` 信封 |
@@ -108,11 +108,11 @@ description: Astock A股、全球资产与中美宏观数据平台的开发约�
 |----|----------|------|
 | 牛市统计 | `services/queries/` + `bull_markets.yaml` | 多指数点位 + 成交额达标天数与极值 |
 | 成交额排名 | `services/queries/rankings.py` | 大盘 TopN + 个股高水位切片 TopN |
-| 全球资产价格水位 | `services/global_asset/` + `global_assets.yaml` | ATH 与当前价对比、结论标签 |
+| 全球资产价格水位 | `imports/global_assets.py`（写）+ `global_asset/query.py`（读）+ `global_assets.yaml` | ATH 与当前价对比、结论标签 |
 | 全球市场概览 | `services/market_overview/` + `market_overview.yaml` | 6 类 18 项最近已结算日线概览（非实时） |
 | 中国宏观 | `datasets/macro/china.py` + `imports/cn_macro.py` + `queries/cn_macro.py` | CPI/PPI 同比、制造业/非制造业 PMI、消费者信心（月频） |
 | 美国宏观 | `datasets/macro/us_cpi.py` + `us_rates.py` + `imports/us_macro.py` | CPI 同比、联邦基金目标利率上限（月频，主备源） |
-| 数据导入 | `services/imports/`（`pipeline` + `stock/`）+ `import_orchestrator` | 增量 upsert + sync_meta 水位 |
+| 数据导入 | `services/imports/`（`pipeline` + `stock/` + `global_assets`）+ `import_orchestrator` + `sync/` | 增量 upsert + sync_meta 水位 |
 | 管理刷新 | 前端 `admin-refresh-button` + SSE | 6 阶段刷新；密码门（`VITE_ADMIN_REFRESH_PASSWORD`），后端无鉴权 |
 
 ## 配置驱动
@@ -133,15 +133,15 @@ description: Astock A股、全球资产与中美宏观数据平台的开发约�
 |------|----------|
 | 新 API | `routers/` → `schemas/` → `services/` → `frontend/src/api/` → `views/` |
 | 新外部数据源 | `providers/<vendor>/` + `datasets/<contract>.py` → 对应 service；先读 [external-data.md](.agents/skills/astock/references/external-data.md) |
-| 新数据集导入 | `schemas/imports.py` `ImportDataset` → `services/imports/` → `import_orchestrator` → `sync_status_service` → 前端 `admin.ts` / `admin-data-refresh.types.ts` |
+| 新数据集导入 | `schemas/imports.py` `ImportDataset` → `services/imports/` → `import_orchestrator` → `sync/status` → 前端 `admin.ts` / `admin-data-refresh.types.ts` |
 | 新宏观指标 | `models/macro.py` 指标常量 → `providers/` → `datasets/macro/` → importer/query schema → 前端 API/图表 |
 | 宏观刷新窗口/默认区间 | `config/settings.yaml` → `config.py`；不要把起始月份或发布日期写死在 service |
 | 分析逻辑/阈值 | `services/queries/` + `config.py` / YAML → 前端页面筛选默认值 |
-| 全球资产/概览项 | `config/global_assets.yaml` 或 `market_overview.yaml` → `global_asset/` 或 `market_overview/` |
-| 数据库表 | `models/` → `sync_store.batch_upsert` → `sync_status_service` |
+| 全球资产/概览项 | `config/global_assets.yaml` 或 `market_overview.yaml` → `imports/global_assets` / `global_asset/` 或 `market_overview/` |
+| 数据库表 | `models/` → `sync/store.batch_upsert` → `sync/status` |
 | 新前端页 | `router/routes/modules/main.ts` + `views/` + locale |
 | 新宏观图表 | 页面专用 `use-*-macro-chart.ts` + 共享 `hooks/use-macro-line-chart.ts`；ECharts 组件按需注册 |
-| 缓存/TTL | `config.py` 环境变量 + `core/redis_client.py` + 对应 service |
+| 缓存/TTL | `config.py` 环境变量 + `core/redis_client.py` + `services/cache/` |
 | 部署/静态 404 | 改前端后须 **重建 frontend 镜像**；见 `docker/nginx.conf` |
 
 ## 快速决策树（先定位再改）
@@ -219,7 +219,7 @@ curl -N -X POST "http://localhost:8000/api/v1/admin/data/import/stream?dataset=u
 ## 提交前自检清单
 
 - 是否新增/修改 API：`routers/`、`schemas/`、`frontend/src/api/` 是否同步
-- 是否修改模型：`sync_store.batch_upsert` 与 `sync_status_service` 是否覆盖
+- 是否修改模型：`sync/store.batch_upsert` 与 `sync/status` 是否覆盖
 - 是否修改外部源：providers 是否只做外部访问；datasets 是否仍只标准化不写库；失败行为是否符合 `FetchResult` 约定
 - 是否修改宏观指标：`models/macro.py`、长表写入、查询 pivot、Pydantic/TS 类型、图表 series 是否全部联动
 - 是否修改导入阶段：后端枚举/编排/同步状态与前端 6 阶段进度类型、文案是否同步

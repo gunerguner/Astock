@@ -26,21 +26,21 @@ from astock.schemas.analysis import (
     PriceLevelPendingItem,
     PriceLevelsResponse,
 )
-from astock.services.closes_cache import (
-    ClosesCacheDeps,
-    ClosesEnsureOptions,
-    ClosesFetchResult,
-    build_change_fields,
-    ensure_closes,
-)
-from astock.services.global_asset._cache import (
+from astock.services.cache.asset_prices import (
     backfill_from_akshare,
     conclusion,
     pending_item,
     read_price_cache,
     write_price_cache,
 )
-from astock.services.sync_store import get_sync_meta
+from astock.services.cache.closes import (
+    ClosesCacheDeps,
+    ClosesEnsureOptions,
+    ClosesFetchResult,
+    build_change_fields,
+    ensure_closes,
+)
+from astock.services.sync.store import get_sync_meta
 
 _PRICE_CACHE_DEPS = ClosesCacheDeps(
     key_fn=lambda a: a["ticker"],
