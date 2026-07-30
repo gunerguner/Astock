@@ -2,44 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import date
 from typing import Any
 
 from sqlmodel import Session
 
 from astock.config import CN_MACRO_REFRESH_DAY
+from astock.datasets.macro import fetch_cn_macro
 from astock.models.macro import REGION_CN
-from astock.services.imports._macro_domain import (
-    expected_macro_period,
-    run_macro_import,
-    should_skip_macro,
-)
-from astock.sources.cn_macro import fetch_cn_macro
+from astock.services.imports._macro_domain import run_macro_import
 
 _SYNC_TABLE = "cn_macro"
-
-
-def expected_cn_macro_period(
-    today: date | None = None,
-    *,
-    refresh_day: int = CN_MACRO_REFRESH_DAY,
-) -> str:
-    """北京时间下当前应覆盖的最新宏观月份。"""
-    return expected_macro_period(today, refresh_day=refresh_day)
-
-
-def should_skip_cn_macro(
-    db: Session,
-    *,
-    refresh_day: int = CN_MACRO_REFRESH_DAY,
-) -> bool:
-    """水位已覆盖期望月份且上次成功、该 region 有数据时跳过外网。"""
-    return should_skip_macro(
-        db,
-        region=REGION_CN,
-        sync_table=_SYNC_TABLE,
-        refresh_day=refresh_day,
-    )
 
 
 def import_cn_macro(db: Session) -> dict[str, Any]:

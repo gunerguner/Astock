@@ -29,12 +29,12 @@ from astock.services.sync_store import (
     get_sync_meta,
     upsert_sync_meta,
 )
-from astock.sources.baostock import (
+from astock.datasets.stocks import (
     baostock_session,
     fetch_all_stock_codes_logged_in,
     fetch_daily_astock_amounts_logged_in,
+    login_error,
 )
-from astock.sources.baostock.session import login_failure
 
 logger = logging.getLogger(__name__)
 
@@ -182,8 +182,8 @@ def import_stock_gen(
     yield from _drain_bridge(bridge)
 
     with baostock_session() as lg:
-        if failed := login_failure(lg):
-            raise ExternalSourceAppError(failed.errors[0])
+        if err := login_error(lg):
+            raise ExternalSourceAppError(err)
 
         # 名称按锚点日拉一次，缺口期内复用
         _report(

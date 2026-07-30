@@ -37,7 +37,7 @@ from astock.services.closes_cache import (
     redis_closes_io,
 )
 from astock.services.market_overview.local_closes import fill_closes_from_local
-from astock.sources.market_overview import fetch_all_items
+from astock.datasets.market_overview import fetch_all_items
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +67,8 @@ def _fetch_missing(missing: list[dict[str, str]]) -> ClosesFetchResult:
     local_closes, still_missing = fill_closes_from_local(missing)
     if not still_missing:
         return ClosesFetchResult(local_closes, [])
-    remote = fetch_all_items(still_missing)
-    return ClosesFetchResult({**local_closes, **remote.closes}, list(remote.errors))
+    remote_closes, remote_errors = fetch_all_items(still_missing)
+    return ClosesFetchResult({**local_closes, **remote_closes}, remote_errors)
 
 
 def _ensure_closes(*, force_refresh: bool = False) -> ClosesFetchResult:

@@ -4,19 +4,9 @@ from sqlalchemy import func
 from sqlmodel import Session, select
 
 from astock.config import POINT_INDEX_CONFIG, point_sync_meta_key
+from astock.datasets.indices import fetch_point
 from astock.models.point import Point
 from astock.services.imports.pipeline import DailyImportSpec, run_multi_daily_import
-from astock.sources.akshare import fetch_cn_index_point
-from astock.sources.baostock import fetch_point
-from astock.sources.fetch_result import SourceFetchResult
-
-
-def _fetch_point_index(index_code: str, start_date: str) -> SourceFetchResult:
-    config = POINT_INDEX_CONFIG[index_code]
-    source = str(config.get("source", "baostock"))
-    if source == "akshare":
-        return fetch_cn_index_point(index_code, start_date=start_date)
-    return fetch_point(index_code=index_code, start_date=start_date)
 
 
 def _index_last_date(db: Session, index_code: str) -> str | None:
@@ -34,7 +24,9 @@ def import_point(db: Session) -> dict:
                 table_name=point_sync_meta_key(index_code),
                 model=Point,
                 conflict_cols=["date", "index_code"],
-                fetch=lambda start, code=index_code: _fetch_point_index(code, start),
+                fetch=lambda start, code=index_code: fetch_point(
+                    code, start_date=start
+                ),
                 source_key=index_code,
                 failure_message=f"{index_name}点位导入失败",
                 log_label=f"{index_name}点位",

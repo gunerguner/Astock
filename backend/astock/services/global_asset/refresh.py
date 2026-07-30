@@ -14,7 +14,7 @@ from astock.models.asset_high import AssetHigh
 from astock.services.global_asset._cache import parse_asset_fetch_results, write_price_cache
 from astock.services.imports._common import build_result, finalize_import_result, resolve_status
 from astock.services.sync_store import batch_upsert, count_rows, get_sync_meta, upsert_sync_meta
-from astock.sources.akshare import fetch_all_assets
+from astock.datasets.global_assets import fetch_all_assets
 
 logger = logging.getLogger(__name__)
 

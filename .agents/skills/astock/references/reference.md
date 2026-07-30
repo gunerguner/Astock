@@ -4,7 +4,7 @@ SKILL.md 的扩展材料；改 API、前端、部署、同步缓存时按需阅�
 
 ## 深度文档
 
-- 外部数据源 / sources 层 / 失败行为：[external-data.md](.agents/skills/astock/references/external-data.md)
+- 外部数据源 / providers + datasets 层 / 失败行为：[external-data.md](.agents/skills/astock/references/external-data.md)
 
 ## 关键文件索引
 
@@ -12,20 +12,22 @@ SKILL.md 的扩展材料；改 API、前端、部署、同步缓存时按需阅�
 |------|------|
 | FastAPI 入口 | `backend/astock/main.py` |
 | 环境变量 + 阈值 | `backend/astock/config.py` |
-| YAML 配置 | `backend/astock/config/{bull_markets,point_indices,global_assets,market_overview}.yaml` |
+| YAML 配置 | `backend/astock/config/settings.yaml` + `{bull_markets,point_indices,global_assets,market_overview}.yaml` |
 | 异常与错误码 | `backend/astock/core/exceptions.py`、`core/error_codes.py`、`core/exception_handlers.py` |
 | 数据库 / Redis | `backend/astock/core/database.py`、`core/redis_client.py` |
 | SSE 进度 | `backend/astock/core/progress.py` |
 | SQLModel 表 | `backend/astock/models/` |
 | Pydantic DTO | `backend/astock/schemas/` |
-| 数据源 | `backend/astock/sources/{baostock,akshare,market_overview}/` |
+| 数据源 | `backend/astock/providers/` + `backend/astock/datasets/` |
 | 导入编排 | `backend/astock/services/import_orchestrator.py`、`services/imports/`、`sync_status_service.py` |
 | 分析查询 | `backend/astock/services/queries/` |
 | 全球资产 | `backend/astock/services/global_asset/` |
 | 市场概览 | `backend/astock/services/market_overview/` |
-| 路由 | `backend/astock/routers/{admin,analysis,meta}.py` |
-| 前端 API | `frontend/src/api/{interceptor,analysis,admin,meta}.ts` |
-| 前端页面 | `frontend/src/views/{bull-market,turnover-rank,asset-price-levels,market-overview}/` |
+| 宏观长表 / 导入 / 查询 | `backend/astock/models/macro.py`、`datasets/macro/`、`services/imports/{_macro_domain,cn_macro,us_macro}.py`、`services/queries/{cn_macro,us_macro}.py` |
+| 路由 | `backend/astock/routers/{admin,analysis}.py` |
+| 前端 API | `frontend/src/api/{request,analysis,admin}.ts` |
+| 前端页面 | `frontend/src/views/{bull-market,turnover-rank,asset-price-levels,market-overview,cn-macro-data,us-macro-data}/` |
+| 宏观图表共享 Hook | `frontend/src/hooks/use-macro-line-chart.ts` |
 | 管理刷新 | `admin-refresh-button/`、`refresh-progress-modal/`、`hooks/admin-data-refresh.ts` |
 | SSE / 页面联动 | `frontend/src/utils/{sse-stream,data-refresh}.ts` |
 | 同步状态格式化 | `frontend/src/utils/sync-meta.ts` |
@@ -47,7 +49,7 @@ class ApiResponse(BaseModel, Generic[T]):
     data: T | None
 ```
 
-前端拦截器（`src/api/interceptor.ts`）：`code !== 0` 弹 `Message.error(message)` 并 reject；成功 `return res`，视图中 `res.data` 即业务载荷。
+前端请求封装（`src/api/request.ts`）：`code !== 0` 弹 `Message.error(message)` 并 reject；成功直接返回业务 `data`，因此各 API 函数的 Promise 类型就是业务载荷。
 
 **错误码**（`core/error_codes.py`）：`1001` 校验 / `1002` 权限 / `1003` 未找到 / `2001` 外部源 / `3001` 数据库 / `9000` 内部。HTTP 状态码通常仍为 200，靠 `code` 区分。
 
@@ -73,7 +75,7 @@ class ApiResponse(BaseModel, Generic[T]):
       "index_name": "上证指数",
       "threshold": 4000,
       "items": [
-        { "market": "2007", "start": "2005-06-06", "end": "2007-10-16",
+        { "market": "2007-2009", "start": "2005-06-06", "end": "2010-06-30",
           "description": "...", "days": 120, "max_value": 6124.04, "not_available": false }
       ],
       "total_days": 300
@@ -103,7 +105,7 @@ class ApiResponse(BaseModel, Generic[T]):
   "top": 20, "bull_market": null,
   "items": [
     { "rank": 1, "date": "2015-06-08",
-      "sh_amount": 1.3e12, "sz_amount": 1.1e12, "turnover": 2.4e12 }
+      "sse_amount": 1.3e12, "szse_amount": 1.1e12, "turnover": 2.4e12 }
   ]
 }
 ```
@@ -137,12 +139,12 @@ class ApiResponse(BaseModel, Generic[T]):
       "current_price": 230.5, "all_time_high": 260.1, "ath_date": "2025-12-25",
       "percentage_diff": -11.4, "ath_days": 190,
       "daily_change": 1.2, "weekly_change": -0.8,
-      "conclusion": "适度回调", "data_pending": false }
+      "conclusion": "moderatePullback" }
   ],
   "cache_errors": ["NVDA: 拉取失败"]
 }
 ```
-`conclusion`：`接近历史高点`(|<5|) / `适度回调`(<20) / `显著回调`(<50) / `深度回调`(≥50) / `待接入`。
+`conclusion` 返回枚举 key：`nearAth`（距 ATH <5%）/ `moderatePullback`（<20%）/ `significantPullback`（<50%）/ `deepPullback`（≥50%）/ `pending`；中文标签由前端 locale 映射。仅待接入行带 `data_pending: true`。
 
 #### GET `/market-overview`
 
@@ -158,12 +160,65 @@ class ApiResponse(BaseModel, Generic[T]):
       "items": [
         { "key": "dow", "name": "道琼斯", "code": ".DJI",
           "current_price": 43000, "daily_change": 0.3, "weekly_change": 1.1,
-          "period_start": "...", "period_end": "...", "error": null }
+          "period_start": "...", "period_end": "..." }
       ] }
   ],
   "errors": []
 }
 ```
+
+#### GET `/us-macro`
+
+| Query | 类型 | 默认 | 约束 |
+|-------|------|------|------|
+| `start` | str | `US_MACRO_START_PERIOD`（默认 `2020-06`） | 长度恰为 7；应传 `YYYY-MM` |
+
+```jsonc
+{
+  "start": "2020-06",
+  "latest_period": "2026-06",
+  "last_synced_at": "2026-07-15T10:00:00+08:00",
+  "points": [
+    {
+      "period": "2020-06",
+      "cpi_yoy": 0.6,
+      "fed_rate_upper": 0.25
+    }
+  ]
+}
+```
+
+- `points` 按月份升序；缺失指标为 `null`。
+- 只读 `macro_value`，页面查询不访问外部源。
+- 为避免图表尾部出现只有利率、尚无 CPI 的月份，返回值会丢弃晚于最新 CPI 月份的纯利率点；`latest_period` 优先取最新 CPI 月份。
+
+#### GET `/cn-macro`
+
+| Query | 类型 | 默认 | 约束 |
+|-------|------|------|------|
+| `start` | str | `CN_MACRO_START_PERIOD` | 长度恰为 7；应传 `YYYY-MM` |
+
+`CN_MACRO_START_PERIOD` 在 `settings.yaml` 留空时，进程启动时动态计算为北京时间当前月份往前 60 个月。
+
+```jsonc
+{
+  "start": "2021-07",
+  "latest_period": "2026-06",
+  "last_synced_at": "2026-07-15T10:00:00+08:00",
+  "points": [
+    {
+      "period": "2021-07",
+      "cpi_yoy": 1.0,
+      "ppi_yoy": 9.0,
+      "pmi_manufacturing": 50.4,
+      "pmi_non_manufacturing": 53.3,
+      "consumer_confidence": 117.8
+    }
+  ]
+}
+```
+
+`points` 按月份升序，任一子指标缺失时保留该月份并将对应字段置为 `null`；`latest_period` 取最后一个至少含一项有效指标的月份。
 
 ### Admin 路由（prefix `/api/v1/admin`）
 
@@ -171,18 +226,18 @@ class ApiResponse(BaseModel, Generic[T]):
 
 | Query | 类型 | 默认 | 取值 |
 |-------|------|------|------|
-| `dataset` | str | `all` | `turnover`/`point`/`stock`/`global_assets`/`all` |
+| `dataset` | str | `all` | `turnover`/`point`/`stock`/`global_assets`/`us_macro`/`cn_macro`/`all` |
 
 返回 `text/event-stream`。事件类型：
 
 | event | 说明 |
 |-------|------|
 | `progress` | 阶段进度（`phase`/`current`/`total`/`imported`/`elapsed`） |
-| `done` | 导入完成；单 dataset 为 `ImportResultItem` 形字段，`all` 为 `{turnover, point, stock, global_assets, status}` |
+| `done` | 导入完成；单 dataset 为 `ImportResultItem` 形字段，`all` 为 `{turnover, point, stock, global_assets, us_macro, cn_macro, status}` |
 | `error` | 致命错误 |
 | `ping` | 保活（个股阶段每 100 只） |
 
-前端通过 `refreshAllDataStream()`（`admin.ts`）消费，`useAdminDataRefresh` 驱动四阶段进度弹窗。
+前端通过 `refreshAllDataStream()`（`admin.ts`）消费，`useAdminDataRefresh` 按 `turnover → point → stock → global_assets → us_macro → cn_macro` 驱动六阶段进度弹窗。全部阶段在后端主流程串行执行；前三段共享 baostock session。
 
 #### GET `/data/sync-status`
 
@@ -191,7 +246,9 @@ class ApiResponse(BaseModel, Generic[T]):
   "turnover":  { "last_synced_date": "...", "last_synced_at": "...", "status": "success" },
   "point":     { ... },
   "stock":     { ... },
-  "global_assets": { ... }
+  "global_assets": { ... },
+  "us_macro":  { ... },
+  "cn_macro":  { ... }
 }
 ```
 
@@ -213,19 +270,16 @@ class ApiResponse(BaseModel, Generic[T]):
 
 | 字段 | 说明 |
 |------|------|
-| `last_synced_date` | 增量起点（下次从此日期之后拉取） |
+| `last_synced_date` | 数据集水位；日频为最后交易日，宏观为最新 CPI 月份 |
 | `last_synced_at` | 最近同步时间戳 |
 | `last_status` | `success` / `partial_failure` / `failed` |
 | `last_error` | 最近错误信息 |
 
-增量起点 `get_sync_start_date`：读 `sync_meta.last_synced_date` 的**次日**（`+1` 日历日，避免重复 upsert 已同步日）；缺省 `START_DATE="2005-01-01"`。`should_skip_daily_sync`：当次日已超过 `today_local()` 时整段跳过。
+日频增量起点 `get_sync_start_date`：读 `sync_meta.last_synced_date` 的**次日**（`+1` 日历日，避免重复 upsert 已同步日）；缺省 `START_DATE="2005-01-01"`。`should_skip_daily_sync` 仅在上次状态为 `success` 且水位已覆盖 `last_settled_date("cn")` 时跳过。
 
 ### 批量 upsert
 
-`sync_store.batch_upsert`：SQLite `ON CONFLICT DO UPDATE`，批量 500（`BATCH_SIZE`）。
-
-- `per_batch`：每批提交（默认）
-- `single`：单条提交（调试）
+`sync_store.batch_upsert`：SQLite `ON CONFLICT DO UPDATE`，默认按 `DEFAULT_UPSERT_BATCH_SIZE=500` 分批执行，全部批次完成后统一 commit，异常时 rollback。
 
 `turnover` / 单指数 `point` 走 `imports/pipeline.run_daily_import`；`point` 外层按 `point_indices.yaml` 循环多指数（baostock + akshare 科创50）。
 
@@ -240,7 +294,24 @@ class ApiResponse(BaseModel, Generic[T]):
 
 ### global_assets 数据集
 
-`services/global_asset/refresh.py`：`refresh_asset_highs` 今日已成功则跳过；akshare 串行拉 ATH → upsert `asset_high` → 写 Redis。
+`services/global_asset/refresh.py`：`refresh_asset_highs` 在上次状态成功、`asset_high` 非空且水位同时覆盖中美最近结算日时跳过；否则 akshare 串行拉 ATH → upsert `asset_high` → 写 Redis。
+
+### macro 月频数据集
+
+中美宏观共用 `services/imports/_macro_domain.run_macro_import`，统一写入 `macro_value` 长表：
+
+| 项 | 说明 |
+|----|------|
+| 主键 | `(region, period, metric)`；`region=cn/us`，`period=YYYY-MM` |
+| 水位 | `sync_meta.cn_macro` / `sync_meta.us_macro`，`last_synced_date` 存最新有效 CPI 月份 |
+| 发布时间窗 | `expected_macro_period` 按北京时间计算：每月 `refresh_day` 之前期望上上月，含当日之后期望上月 |
+| 默认刷新日 | `settings.yaml` 的 `cn_macro_refresh_day` / `us_macro_refresh_day`，均默认 15 |
+| 跳过 | 上次状态为 `success`、对应 region 已有数据且水位覆盖期望月份 |
+| 写入 | 全量抓取后 SQLite upsert；不是按水位裁剪的增量请求，主键保证幂等 |
+| 水位不足 | 抓取有数据但最新 CPI 早于期望月份时，状态强制为 `partial_failure` 并保留源端滞后错误 |
+| 无有效记录 | 不清空旧表、不推进旧水位；写 `failed` 与错误摘要 |
+
+宏观域允许子源部分成功：成功记录仍写库，整体状态由 `FetchResult.ok` 和写入条数判为 `success` / `partial_failure` / `failed`。
 
 ### Redis 缓存
 
@@ -255,8 +326,9 @@ class ApiResponse(BaseModel, Generic[T]):
 1. `ImportDataset` 枚举（`schemas/imports.py`）加值
 2. `services/imports/` 新增 importer + `import_orchestrator` 加分支
 3. `sync_status_service` 加返回项
-4. 需要缓存时在 Redis 层定义 Key/TTL，遵循「成功复用 + 失败冷却」
-5. 同步状态写回 `sync_meta`；导入结果内部用 `ImportResult` dataclass，对外 `to_dict()`
+4. 前端 `api/admin.ts`、`hooks/admin-data-refresh.types.ts` 的阶段联合类型、顺序、初始状态及 locale 同步
+5. 需要缓存时在 Redis 层定义 Key/TTL，遵循「成功复用 + 失败冷却」
+6. 同步状态写回 `sync_meta`；导入结果内部用 `ImportResult` dataclass，对外 `to_dict()`
 
 外部源细节见 [external-data.md](.agents/skills/astock/references/external-data.md)。
 
@@ -273,13 +345,13 @@ class ApiResponse(BaseModel, Generic[T]):
 
 ### API 层
 
-- `axios.defaults.baseURL = '/api/v1'`（**硬编码**，未读 `VITE_API_BASE_URL`）
-- `src/api/analysis.ts`：分析接口 + TS interface
+- `axios.create({ baseURL: '/api/v1' })`（**硬编码**，未读 `VITE_API_BASE_URL`）
+- `src/api/analysis.ts`：分析接口 + TS interface（含中美宏观）
 - `src/api/admin.ts`：`refreshAllDataStream()`（SSE）、`fetchSyncStatusApi()`
 
 ### 路由（`router/routes/modules/main.ts`）
 
-`/` → `/bull-market`，4 子页面，`requiresAuth: false`：
+`/` → `/bull-market`，6 子页面，`requiresAuth: false`：
 
 | 路径 | 视图 | 菜单 icon |
 |------|------|-----------|
@@ -287,21 +359,33 @@ class ApiResponse(BaseModel, Generic[T]):
 | `/turnover-rank` | `views/turnover-rank/` | sort |
 | `/asset-price-levels` | `views/asset-price-levels/` | fire |
 | `/market-overview` | `views/market-overview/` | apps |
+| `/cn-macro-data` | `views/cn-macro-data/` | bar-chart |
+| `/us-macro-data` | `views/us-macro-data/` | public |
 
 ### 页面写法
 
-**全部 Arco `a-table`**，无图表库。通用：顶部筛选 + 卡片 extra 显示 sync 状态（`formatSyncMeta`）；涨跌色正 `#00b42a` / 负 `#f53f3f`；工具 `@/utils/format`。
+行情页主要使用 Arco `a-table`；宏观页使用 ECharts 6 折线图。通用：卡片 extra 通过 `formatSyncMeta` 或 `formatLatestDateMeta` 显示最新数据月份；管理员刷新完成并关闭进度弹窗后，经 `data-refresh` 事件触发当前页面 reload。
 
 - **bull-market**：四指数独立阈值，合并单表展示；`data-refresh` 事件触发 reload
 - **turnover-rank**：两列并排大盘/个股排名，`DEFAULT_TOP=20`
 - **asset-price-levels**：贵金属分隔行；`FOCUSED_TICKERS` 打 Tag；按 `percentage_diff` 排序
 - **market-overview**：类目分隔行 + 聚合 periodText；失败项「数据获取失败」
+- **cn-macro-data**：一张 CPI/PPI 同比主图 + PMI、消费者信心两张并排子图；PMI 含 50 荣枯线，720px 以下改为纵向
+- **us-macro-data**：CPI 同比 + 联邦基金目标利率上限单图；利率为 `step: end` 阶梯线
+
+### 宏观 ECharts 约定
+
+- `echarts/core` 按需注册 `LineChart`、Grid/Legend/Tooltip；中国 PMI 额外注册 `MarkLineComponent`；渲染器为 `CanvasRenderer`。
+- 共享 `useMacroLineChart` 只负责初始化、重绘、暗色主题、`ResizeObserver` 和卸载销毁；series、tooltip、配色放在页面专用 `use-*-macro-chart.ts`。
+- 数据序列保留 `null`，一般 `connectNulls=false`，不伪造缺失宏观数据；美国利率因政策利率离散调整允许 `connectNulls=true`。
+- 图表必须跟随 `locale` 和 `body[arco-theme]` 重建 option；无有效指标时销毁实例并展示空态。
+- 页面请求统一使用 `useAsyncRequest` + `usePageRefresh`，既负责首次加载，也响应管理员全量刷新后的事件。
 
 ### 管理刷新
 
 - 导航栏 `admin-refresh-button`：前端密码门（`VITE_ADMIN_REFRESH_PASSWORD`），**后端无鉴权**
 - 开发默认密码见 `.env.development`；生产经 Docker 构建期注入
-- `useAdminDataRefresh` + `refresh-progress-modal`：SSE 四阶段进度弹窗；完成后 `emitDataRefresh` 通知各页 reload
+- `useAdminDataRefresh` + `refresh-progress-modal`：SSE 六阶段进度弹窗；完成并关闭后 `emitDataRefresh` 通知各页 reload
 
 ### 环境变量
 
@@ -341,6 +425,9 @@ backend 挂载 `${SQLITE_HOST_DIR:-./sqlite-data}:/app/data` + `log_data:/var/lo
 | `DB_PATH` | `db/astock.db`(dev) / `/app/data/astock.db`(prod) | SQLite |
 | `REDIS_URL` | `redis://redis:6379/0`(prod) | Redis |
 | `START_DATE` | 2005-01-01 | 历史起始 |
+| `US_MACRO_REFRESH_DAY` / `CN_MACRO_REFRESH_DAY` | 15 | 每月含该日后，宏观期望水位从上上月切到上月 |
+| `US_MACRO_START_PERIOD` | `2020-06` | 美国宏观 API/页面默认起始月份 |
+| `CN_MACRO_START_PERIOD` | 动态前推 60 个月 | 中国宏观 API 默认起始月份；可由 YAML 固定 |
 | `GUNICORN_WORKERS/TIMEOUT` | — | 生产 worker |
 
 ### 部署约定
@@ -364,13 +451,16 @@ backend 挂载 `${SQLITE_HOST_DIR:-./sqlite-data}:/app/data` + `log_data:/var/lo
 
 | 你改了什么 | 还要联动检查 |
 |-----------|----------------|
-| `sources/*` | 对应 `services/imports/` / `global_asset/` / `market_overview/`；[external-data.md](.agents/skills/astock/references/external-data.md) |
+| `providers/*` / `datasets/*` | 对应 `services/imports/` / `global_asset/` / `market_overview/`；[external-data.md](.agents/skills/astock/references/external-data.md) |
 | `models/` | `sync_store.batch_upsert`、`sync_status_service` |
 | `schemas/` | 前端 `src/api/*.ts` interface、Swagger |
 | `config/*.yaml` | 重启 backend；前端下拉/展示项可能变化 |
 | `services/queries/` | 前端对应页面阈值/列 |
+| `models/macro.py` 指标常量 | `datasets/macro/` 标准化、查询 pivot、Pydantic/TS 字段、ECharts series |
+| 宏观 `refresh_day` / 起始月 | `settings.yaml` → `config.py` → importer/API/前端默认参数 |
 | 新增 API | `routers/` → `schemas/` → `frontend/src/api/` → `views/` |
 | 新增前端页 | `router/routes/modules/main.ts` + locale |
+| 新增导入阶段 | `ImportDataset`、orchestrator、sync status、前端阶段类型/顺序/文案 |
 | `docker/nginx.conf` | frontend 重建、proxy 超时（SSE 长连接） |
 
 ## 常用排障命令
@@ -381,6 +471,14 @@ cd backend && python -m astock.main
 
 # SSE 流式导入
 curl -N -X POST "http://localhost:8000/api/v1/admin/data/import/stream?dataset=all"
+
+# 单独刷新宏观
+curl -N -X POST "http://localhost:8000/api/v1/admin/data/import/stream?dataset=us_macro"
+curl -N -X POST "http://localhost:8000/api/v1/admin/data/import/stream?dataset=cn_macro"
+
+# 查询宏观月度序列
+curl "http://localhost:8000/api/v1/analysis/us-macro?start=2020-06"
+curl "http://localhost:8000/api/v1/analysis/cn-macro?start=2021-07"
 
 # 同步状态
 curl "http://localhost:8000/api/v1/admin/data/sync-status"

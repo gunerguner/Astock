@@ -37,7 +37,8 @@ flowchart TB
   end
 
   subgraph backend["后端 FastAPI"]
-    src["sources/<br/>纯拉取、标准化"]
+    providers["providers/<br/>供应商适配"]
+    datasets["datasets/<br/>数据契约 + 标准化"]
     svc["services/<br/>导入编排 + 分析聚合"]
     api["REST API<br/>{ code, message, data }"]
   end
@@ -51,10 +52,11 @@ flowchart TB
     pages["业务页面<br/>牛市 / 排名 / 水位 / 概览"]
   end
 
-  bao --> src
-  ak --> src
-  web --> src
-  src --> svc
+  bao --> providers
+  ak --> providers
+  web --> providers
+  providers --> datasets
+  datasets --> svc
   svc --> sqlite
   svc --> redis
   svc --> api

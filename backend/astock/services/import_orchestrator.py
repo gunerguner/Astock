@@ -17,7 +17,7 @@ from astock.services.imports import (
 from astock.services.imports._common import aggregate_status
 from astock.services.imports.stock import import_stock_gen
 from astock.services.market_overview import warmup_market_overview
-from astock.sources.baostock import baostock_session_hold
+from astock.datasets.stocks import baostock_session_hold
 
 logger = logging.getLogger(__name__)
 

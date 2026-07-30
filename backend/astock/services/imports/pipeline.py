@@ -25,7 +25,7 @@ from astock.services.sync_store import (
     should_skip_daily_sync,
     upsert_sync_meta,
 )
-from astock.sources.fetch_result import SourceFetchResult
+from astock.datasets.result import FetchResult
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ class DailyImportSpec:
     table_name: str
     model: type
     conflict_cols: list[str]
-    fetch: Callable[[str], SourceFetchResult]
+    fetch: Callable[[str], FetchResult]
     source_key: str
     failure_message: str
     log_label: str

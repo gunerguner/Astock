@@ -4,7 +4,7 @@ from sqlmodel import Session
 
 from astock.models.turnover import Turnover
 from astock.services.imports.pipeline import DailyImportSpec, run_daily_import
-from astock.sources.baostock import fetch_turnover
+from astock.datasets.turnover import fetch_turnover
 
 
 def import_turnover(db: Session) -> dict:

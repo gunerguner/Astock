@@ -8,7 +8,7 @@ from sqlmodel import Session
 
 from astock.core.sync_status import SyncStatus
 from astock.services.sync_store import count_rows, get_sync_meta, upsert_sync_meta
-from astock.sources.fetch_result import SourceFetchResult
+from astock.datasets.result import FetchResult
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ def prepare_records_for_upsert(
     table_name: str,
     records: list[dict[str, Any]],
     *,
-    fr: SourceFetchResult,
+    fr: FetchResult,
 ) -> list[dict[str, Any]]:
     """按表名校验必填字段，不合格记录记入抓取错误并剔除。"""
     required_fields = _REQUIRED_FIELDS.get(table_name)

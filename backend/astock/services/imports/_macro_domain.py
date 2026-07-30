@@ -25,7 +25,7 @@ from astock.services.sync_store import (
     get_sync_meta,
     upsert_sync_meta,
 )
-from astock.sources.fetch_result import SourceFetchResult
+from astock.datasets.result import FetchResult
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ def run_macro_import(
     region: str,
     sync_table: str,
     refresh_day: int,
-    fetch_fn: Callable[[], SourceFetchResult],
+    fetch_fn: Callable[[], FetchResult],
     log_label: str,
 ) -> dict[str, Any]:
     """拉取宏观月度指标并 upsert；尊重月频跳过窗口。"""

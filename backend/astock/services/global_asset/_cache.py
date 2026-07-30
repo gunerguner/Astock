@@ -18,8 +18,8 @@ from astock.core.redis_client import (
 )
 from astock.schemas.analysis import PriceLevelPendingItem
 from astock.services.closes_cache import ClosesFetchResult, read_recent_closes_cache, write_recent_closes_cache
-from astock.sources.akshare import fetch_all_assets
-from astock.sources.fetch_result import SourceFetchResult
+from astock.datasets.global_assets import fetch_all_assets
+from astock.datasets.result import FetchResult
 
 
 @dataclass(frozen=True)
@@ -73,7 +73,7 @@ def read_price_cache(ticker: str, *, market: str) -> dict[str, float]:
 
 def parse_asset_fetch_results(
     assets: list[dict[str, str]],
-    fetch_results: Mapping[str, SourceFetchResult],
+    fetch_results: Mapping[str, FetchResult],
     *,
     skip_pending: bool = False,
 ) -> tuple[list[AssetFetchRecord], list[str]]:
