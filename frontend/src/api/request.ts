@@ -4,12 +4,6 @@ import i18n from '@/locale';
 
 const { t } = i18n.global;
 
-export interface ApiResponse<T = unknown> {
-  code: number;
-  message: string;
-  data: T;
-}
-
 export interface RequestInstance {
   get<T = unknown, D = unknown>(
     url: string,
@@ -32,7 +26,7 @@ instance.interceptors.request.use(
 );
 
 instance.interceptors.response.use(
-  (response: AxiosResponse<ApiResponse>) => {
+  (response: AxiosResponse<API.ApiResponse>) => {
     const res = response.data;
     if (res.code !== 0) {
       Message.error({

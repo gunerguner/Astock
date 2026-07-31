@@ -23,13 +23,7 @@
   import { useI18n } from 'vue-i18n';
   import { Tag } from '@arco-design/web-vue';
   import type { TableColumnData, TableData } from '@arco-design/web-vue';
-  import {
-    fetchAssetPriceLevels,
-    isPriceLevelPending,
-    type PriceLevelConclusion,
-    type PriceLevelDataItem,
-    type PriceLevelRow,
-  } from '@/api/analysis';
+  import { fetchAssetPriceLevels, isPriceLevelPending } from '@/api/analysis';
   import useAsyncRequest from '@/hooks/async-request';
   import usePageRefresh from '@/hooks/use-page-refresh';
   import {
@@ -70,7 +64,7 @@
   ]);
 
   type DividerRow = BaseDividerRow;
-  type TableRow = (PriceLevelRow & { key: string }) | DividerRow;
+  type TableRow = (API.PriceLevelRow & { key: string }) | DividerRow;
 
   const {
     loading,
@@ -84,7 +78,7 @@
     formatLatestDateMeta(levels.value?.latest_trading_date),
   );
 
-  const conclusionColor = (conclusion: PriceLevelConclusion) => {
+  const conclusionColor = (conclusion: API.PriceLevelConclusion) => {
     if (conclusion === 'pending') return 'gray';
     if (conclusion === 'nearAth') return 'arcoblue';
     if (conclusion === 'moderatePullback') return 'gold';
@@ -94,15 +88,17 @@
 
   const isFocusedTicker = (ticker: string) => FOCUSED_TICKERS.has(ticker);
 
-  const sortByPercentageDiff = (a: PriceLevelDataItem, b: PriceLevelDataItem) =>
-    a.percentage_diff - b.percentage_diff;
+  const sortByPercentageDiff = (
+    a: API.PriceLevelDataItem,
+    b: API.PriceLevelDataItem,
+  ) => a.percentage_diff - b.percentage_diff;
 
   const tableRows = computed<TableRow[]>(() => {
     const items = levels.value?.items ?? [];
     const groups = {
       pendingStocks: [] as TableRow[],
-      normalStocks: [] as PriceLevelDataItem[],
-      metals: [] as PriceLevelDataItem[],
+      normalStocks: [] as API.PriceLevelDataItem[],
+      metals: [] as API.PriceLevelDataItem[],
     };
 
     items.forEach((item) => {
@@ -144,7 +140,7 @@
     ];
   });
 
-  const renderAssetCell = (record: PriceLevelRow) => {
+  const renderAssetCell = (record: API.PriceLevelRow) => {
     return renderAssetNameWithTooltip(record.name, record.ticker, () =>
       isFocusedTicker(record.ticker)
         ? h(

@@ -111,11 +111,11 @@ def _build_item(
         key=item["key"],
         name=item["name"],
         code=item["code"],
-        current_price=fields.current_price,
+        current_price=round(fields.current, 4),
         daily_change=fields.daily_change,
         weekly_change=fields.weekly_change,
-        period_start=fields.period_start,
-        period_end=fields.period_end,
+        period_start=fields.period_start or anchor_date,
+        period_end=fields.period_end or anchor_date,
     )
 
 

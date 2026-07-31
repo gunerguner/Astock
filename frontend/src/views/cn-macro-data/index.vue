@@ -56,7 +56,7 @@
 
 <script lang="ts" setup>
   import { computed, ref } from 'vue';
-  import { fetchCnMacroData, type CnMacroPointItem } from '@/api/analysis';
+  import { fetchCnMacroData } from '@/api/analysis';
   import useAsyncRequest from '@/hooks/async-request';
   import usePageRefresh from '@/hooks/use-page-refresh';
   import { formatLatestDateMeta } from '@/utils/sync-meta';
@@ -76,7 +76,9 @@
     run: loadMacro,
   } = useAsyncRequest(() => fetchCnMacroData());
 
-  const points = computed<CnMacroPointItem[]>(() => macro.value?.points ?? []);
+  const points = computed<API.CnMacroPointItem[]>(
+    () => macro.value?.points ?? [],
+  );
 
   const metaText = computed(() =>
     formatLatestDateMeta(macro.value?.latest_period),

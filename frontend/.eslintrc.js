@@ -18,6 +18,10 @@ module.exports = {
     'node': true,
     'vue/setup-compiler-macros': true,
   },
+  // 与 src/api/typings.d.ts 的 declare namespace API 对齐，供 Vue SFC 中 API.Xxx 通过 no-undef
+  globals: {
+    API: 'readonly',
+  },
   plugins: ['@typescript-eslint'],
   extends: [
     // Airbnb JavaScript Style Guide https://github.com/airbnb/javascript

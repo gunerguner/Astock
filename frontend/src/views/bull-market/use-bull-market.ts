@@ -5,8 +5,6 @@ import {
   fetchBullMarketPointStats,
   fetchBullMarketTurnoverStats,
   POINT_INDEX_CODES,
-  type BullMarketStats,
-  type MultiIndexPointStats,
 } from '@/api/analysis';
 import useAsyncRequest from '@/hooks/async-request';
 import buildMergedColumns from './columns';
@@ -52,8 +50,8 @@ export interface MergedRow {
 }
 
 interface BullStatsPair {
-  point: MultiIndexPointStats;
-  turnover: BullMarketStats;
+  point: API.MultiIndexPointStats;
+  turnover: API.BullMarketStats;
 }
 
 export default function useBullMarket() {

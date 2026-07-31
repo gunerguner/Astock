@@ -88,7 +88,7 @@ class ProgressReporter:
 
     def phase_done(self, key: str, result: ImportResult) -> None:
         start = self._phase_start_times.get(key, time.perf_counter())
-        elapsed = result.elapsed if result.elapsed is not None else round(
+        elapsed = result.elapsed if result.elapsed > 0 else round(
             time.perf_counter() - start, 2
         )
         self._emit(

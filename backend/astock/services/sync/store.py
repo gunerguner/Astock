@@ -56,7 +56,7 @@ def upsert_sync_meta(
     synced_at = iso_now()
     meta.last_synced_date = last_synced_date
     meta.last_synced_at = synced_at
-    meta.last_status = status
+    meta.last_status = SyncStatus(status)
     meta.last_error = error
     db.merge(meta)
     db.commit()

@@ -26,14 +26,7 @@
   import { computed, type Ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { TableColumnData, TableData } from '@arco-design/web-vue';
-  import {
-    fetchStockRanking,
-    fetchTurnoverRanking,
-    type StockRanking,
-    type StockRankingItem,
-    type TurnoverRanking,
-    type TurnoverRankingItem,
-  } from '@/api/analysis';
+  import { fetchStockRanking, fetchTurnoverRanking } from '@/api/analysis';
   import useAsyncRequest from '@/hooks/async-request';
   import usePageRefresh from '@/hooks/use-page-refresh';
   import useSyncStatus from '@/hooks/use-sync-status';
@@ -52,7 +45,7 @@
   const DEFAULT_TOP = 20;
 
   type PanelSyncKey = 'turnover' | 'stock';
-  type RankingResult = TurnoverRanking | StockRanking;
+  type RankingResult = API.TurnoverRanking | API.StockRanking;
 
   interface RankingPanel {
     key: string;
@@ -76,7 +69,7 @@
       title: t('pages.turnoverRank.columns.sh'),
       align: 'right',
       render: ({ record }: { record: TableData }) => {
-        const row = toTableRow<TurnoverRankingItem>(record);
+        const row = toTableRow<API.TurnoverRankingItem>(record);
         return renderNumCell(formatAmount(row.sse_amount));
       },
     },
@@ -84,7 +77,7 @@
       title: t('pages.turnoverRank.columns.sz'),
       align: 'right',
       render: ({ record }: { record: TableData }) => {
-        const row = toTableRow<TurnoverRankingItem>(record);
+        const row = toTableRow<API.TurnoverRankingItem>(record);
         return renderNumCell(formatAmount(row.szse_amount));
       },
     },
@@ -92,7 +85,7 @@
       title: t('pages.turnoverRank.columns.total'),
       align: 'right',
       render: ({ record }: { record: TableData }) => {
-        const row = toTableRow<TurnoverRankingItem>(record);
+        const row = toTableRow<API.TurnoverRankingItem>(record);
         return renderNumCell(formatAmount(row.turnover));
       },
     },
@@ -119,7 +112,7 @@
       title: t('pages.turnoverRank.columns.turnover'),
       align: 'right',
       render: ({ record }: { record: TableData }) => {
-        const row = toTableRow<StockRankingItem>(record);
+        const row = toTableRow<API.StockRankingItem>(record);
         return renderNumCell(formatAmount(row.amount));
       },
     },

@@ -8,7 +8,6 @@ import {
   TooltipComponent,
 } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
-import type { UsMacroPointItem } from '@/api/analysis';
 import { useMacroLineChart } from '@/hooks/use-macro-line-chart';
 
 echarts.use([
@@ -32,7 +31,7 @@ function formatNumber(value: number | null | undefined): string {
 
 export default function useUsMacroChart(
   chartEl: Ref<HTMLElement | null>,
-  points: Ref<UsMacroPointItem[]>,
+  points: Ref<API.UsMacroPointItem[]>,
 ) {
   const { t, locale } = useI18n();
 

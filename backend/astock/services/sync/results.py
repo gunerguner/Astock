@@ -20,20 +20,18 @@ class ImportResult:
     last_synced_at: str | None
     status: SyncStatus
     source_errors: dict[str, str] = field(default_factory=dict)
-    elapsed: float | None = None
+    elapsed: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
-        d: dict[str, Any] = {
+        return {
             "imported": self.imported,
             "total": self.total,
             "last_date": self.last_date,
             "last_synced_at": self.last_synced_at,
             "status": self.status,
             "source_errors": self.source_errors,
+            "elapsed": self.elapsed,
         }
-        if self.elapsed is not None:
-            d["elapsed"] = self.elapsed
-        return d
 
     def with_status(self, status: SyncStatus) -> ImportResult:
         return replace(self, status=status)
@@ -82,7 +80,7 @@ def build_result(
     ok: bool,
     source_errors: dict[str, str] | None = None,
     last_synced_at: str | None = None,
-    elapsed: float | None = None,
+    elapsed: float = 0.0,
     status: SyncStatus | None = None,
 ) -> ImportResult:
     """组装标准导入结果（含 status、source_errors、elapsed）。"""

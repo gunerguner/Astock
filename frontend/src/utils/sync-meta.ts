@@ -1,4 +1,3 @@
-import type { SyncStatusItem } from '@/api/admin';
 import i18n from '@/locale';
 
 export function formatLatestDateMeta(date: string | null | undefined): string {
@@ -11,9 +10,9 @@ export function formatLatestDateMeta(date: string | null | undefined): string {
  * 生成统一的"最新数据日期"展示文案。
  */
 export default function formatSyncMeta(
-  ...items: Array<SyncStatusItem | undefined | null>
+  ...items: Array<API.SyncStatusItem | undefined | null>
 ): string {
-  const validItems = items.filter((item): item is SyncStatusItem => !!item);
+  const validItems = items.filter((item): item is API.SyncStatusItem => !!item);
   if (validItems.length === 0) return '';
 
   const latestDate = validItems

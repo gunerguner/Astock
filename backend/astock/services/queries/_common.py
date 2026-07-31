@@ -49,7 +49,7 @@ def bull_market_item_skeleton(
         market=market_name,
         start=period["start"],
         end=period["end"],
-        description=period.get("description"),
+        description=period.get("description") or "",
         days=days,
         max_value=max_value,
         not_available=not_available,

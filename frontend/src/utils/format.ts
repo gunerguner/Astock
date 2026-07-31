@@ -1,4 +1,3 @@
-import type { PriceLevelConclusion } from '@/api/analysis';
 import i18n from '@/locale';
 
 const { t, locale } = i18n.global;
@@ -69,7 +68,7 @@ export function numClass(value: number | null): string {
 }
 
 /** 后端返回结论 code，前端做 i18n 映射 */
-export const CONCLUSION_I18N_KEYS: Record<PriceLevelConclusion, string> = {
+export const CONCLUSION_I18N_KEYS: Record<API.PriceLevelConclusion, string> = {
   pending: 'pages.assetPriceLevels.conclusion.pending',
   nearAth: 'pages.assetPriceLevels.conclusion.nearAth',
   moderatePullback: 'pages.assetPriceLevels.conclusion.moderatePullback',

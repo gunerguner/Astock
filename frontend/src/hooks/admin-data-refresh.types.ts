@@ -1,11 +1,4 @@
-import type {
-  ImportAllResult,
-  ImportProgressEvent,
-  ImportStreamError,
-} from '@/api/admin';
-
-export type PhaseKey =
-  'turnover' | 'point' | 'stock' | 'global_assets' | 'us_macro' | 'cn_macro';
+export type PhaseKey = API.ImportPhaseKey;
 
 export type PhaseStatus = 'pending' | 'running' | 'done' | 'failed';
 
@@ -110,7 +103,9 @@ export function createInitialProgressState(): RefreshProgressState {
   };
 }
 
-function mapProgressStatus(status: ImportProgressEvent['status']): PhaseStatus {
+function mapProgressStatus(
+  status: API.ImportProgressEvent['status'],
+): PhaseStatus {
   if (status === 'running') return 'running';
   if (status === 'done') return 'done';
   if (status === 'failed') return 'failed';
@@ -119,7 +114,7 @@ function mapProgressStatus(status: ImportProgressEvent['status']): PhaseStatus {
 
 export function applyProgressEvent(
   state: RefreshProgressState,
-  event: ImportProgressEvent,
+  event: API.ImportProgressEvent,
 ): RefreshProgressState {
   const { phase } = event;
   const nextPhases = { ...state.phases };
@@ -154,7 +149,7 @@ export function applyProgressEvent(
 
 export function applyStreamError(
   state: RefreshProgressState,
-  error: ImportStreamError,
+  error: API.ImportStreamError,
 ): RefreshProgressState {
   const errorPhase = isPhaseKey(error.phase) ? error.phase : null;
   const nextPhases = { ...state.phases };
@@ -175,7 +170,7 @@ export function applyStreamError(
 
 export function applyStreamDone(
   state: RefreshProgressState,
-  result: ImportAllResult,
+  result: API.ImportAllResult,
 ): RefreshProgressState {
   const nextPhases = { ...state.phases };
   PHASE_ORDER.forEach((key) => {

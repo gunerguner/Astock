@@ -1,15 +1,11 @@
 import { computed, ref } from 'vue';
-import {
-  fetchSyncStatusApi,
-  type SyncStatus,
-  type SyncStatusItem,
-} from '@/api/admin';
+import { fetchSyncStatusApi } from '@/api/admin';
 import formatSyncMeta from '@/utils/sync-meta';
 
 export default function useSyncStatus(
-  ...metaKeys: Array<keyof SyncStatus | undefined>
+  ...metaKeys: Array<keyof API.SyncStatus | undefined>
 ) {
-  const syncStatus = ref<SyncStatus | null>(null);
+  const syncStatus = ref<API.SyncStatus | null>(null);
 
   const loadSyncStatus = async () => {
     try {
@@ -23,13 +19,13 @@ export default function useSyncStatus(
     if (metaKeys.length === 0) {
       return '';
     }
-    const items: Array<SyncStatusItem | undefined> = metaKeys.map((key) =>
+    const items: Array<API.SyncStatusItem | undefined> = metaKeys.map((key) =>
       key ? syncStatus.value?.[key] : undefined,
     );
     return formatSyncMeta(...items);
   });
 
-  const panelMetaText = (key: keyof SyncStatus) =>
+  const panelMetaText = (key: keyof API.SyncStatus) =>
     formatSyncMeta(syncStatus.value?.[key]);
 
   return {

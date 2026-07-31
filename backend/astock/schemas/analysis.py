@@ -5,7 +5,7 @@ class BullMarketItem(BaseModel):
     market: str
     start: str
     end: str
-    description: str | None = None
+    description: str = ""
     days: int
     max_value: float | None = None
     not_available: bool = False
@@ -104,8 +104,8 @@ class MarketOverviewItem(BaseModel):
     current_price: float
     daily_change: float | None = None
     weekly_change: float | None = None
-    period_start: str | None = None
-    period_end: str | None = None
+    period_start: str
+    period_end: str
 
 
 MarketOverviewRow = MarketOverviewItem | MarketOverviewErrorItem

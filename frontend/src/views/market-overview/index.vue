@@ -22,12 +22,7 @@
   import { computed, h } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { TableColumnData, TableData } from '@arco-design/web-vue';
-  import {
-    fetchMarketOverview,
-    isMarketOverviewError,
-    type MarketOverviewDataItem,
-    type MarketOverviewRow,
-  } from '@/api/analysis';
+  import { fetchMarketOverview, isMarketOverviewError } from '@/api/analysis';
   import useAsyncRequest from '@/hooks/async-request';
   import usePageRefresh from '@/hooks/use-page-refresh';
   import {
@@ -52,7 +47,7 @@
     periodText: string;
   }
 
-  type TableRow = (MarketOverviewRow & { rowKind?: 'data' }) | DividerRow;
+  type TableRow = (API.MarketOverviewRow & { rowKind?: 'data' }) | DividerRow;
 
   const {
     loading,
@@ -82,7 +77,8 @@
 
     categories.forEach((cat) => {
       const validItems = cat.items.filter(
-        (item): item is MarketOverviewDataItem => !isMarketOverviewError(item),
+        (item): item is API.MarketOverviewDataItem =>
+          !isMarketOverviewError(item),
       );
       const periodStarts = validItems
         .map((item) => item.period_start)
@@ -132,7 +128,9 @@
       render: ({ record }: { record: TableData }) => {
         const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) {
-          const suffix = row.periodText ? `（${row.periodText}）` : '';
+          const suffix = (row as DividerRow).periodText
+            ? `（${(row as DividerRow).periodText}）`
+            : '';
           return h(
             'span',
             { class: 'section-divider-label' },

@@ -1,33 +1,5 @@
 import request from './request';
 
-export interface BullMarketItem {
-  market: string;
-  start: string;
-  end: string;
-  description?: string | null;
-  days: number;
-  max_value: number | null;
-  not_available?: boolean;
-}
-
-export interface BullMarketStats {
-  threshold: number;
-  items: BullMarketItem[];
-  total_days: number;
-}
-
-export interface IndexPointStats {
-  index_code: string;
-  index_name: string;
-  threshold: number;
-  items: BullMarketItem[];
-  total_days: number;
-}
-
-export interface MultiIndexPointStats {
-  indices: IndexPointStats[];
-}
-
 export const POINT_INDEX_CODES = [
   '000001',
   '000300',
@@ -35,48 +7,29 @@ export const POINT_INDEX_CODES = [
   '000688',
 ] as const;
 
-export type PointIndexCode = (typeof POINT_INDEX_CODES)[number];
-
-export type PointThresholds = Record<PointIndexCode, number>;
-
-export const DEFAULT_POINT_THRESHOLDS: PointThresholds = {
+export const DEFAULT_POINT_THRESHOLDS: API.PointThresholds = {
   '000001': 4000,
   '000300': 4500,
   '399006': 2500,
   '000688': 1200,
 };
 
-export interface TurnoverRankingItem {
-  rank: number;
-  date: string;
-  sse_amount: number;
-  szse_amount: number;
-  turnover: number;
+export function isPriceLevelPending(
+  item: API.PriceLevelRow,
+): item is API.PriceLevelPendingItem {
+  return 'data_pending' in item && item.data_pending === true;
 }
 
-export interface TurnoverRanking {
-  top: number;
-  bull_market: string | null;
-  items: TurnoverRankingItem[];
+export function isMarketOverviewError(
+  item: API.MarketOverviewRow,
+): item is API.MarketOverviewErrorItem {
+  return 'error' in item;
 }
 
-export interface StockRankingItem {
-  rank: number;
-  date: string;
-  code: string;
-  name: string;
-  amount: number;
-}
-
-export interface StockRanking {
-  top: number;
-  bull_market: string | null;
-  items: StockRankingItem[];
-}
-
+/** 获取多指数牛市点位达标统计 GET /analysis/bull-markets/point */
 export function fetchBullMarketPointStats(
-  thresholds: PointThresholds,
-): Promise<MultiIndexPointStats> {
+  thresholds: API.PointThresholds,
+): Promise<API.MultiIndexPointStats> {
   return request.get('/analysis/bull-markets/point', {
     params: {
       threshold_000001: thresholds['000001'],
@@ -87,163 +40,58 @@ export function fetchBullMarketPointStats(
   });
 }
 
+/** 获取牛市成交额达标统计 GET /analysis/bull-markets/turnover */
 export function fetchBullMarketTurnoverStats(
   threshold: number,
-): Promise<BullMarketStats> {
+): Promise<API.BullMarketStats> {
   return request.get('/analysis/bull-markets/turnover', {
     params: { threshold },
   });
 }
 
-export function fetchTurnoverRanking(top: number): Promise<TurnoverRanking> {
+/** 获取大盘成交额 TopN GET /analysis/turnover/ranking */
+export function fetchTurnoverRanking(
+  top: number,
+): Promise<API.TurnoverRanking> {
   return request.get('/analysis/turnover/ranking', {
     params: { top },
   });
 }
 
-export function fetchStockRanking(top: number): Promise<StockRanking> {
+/** 获取个股成交额 TopN GET /analysis/stock/ranking */
+export function fetchStockRanking(top: number): Promise<API.StockRanking> {
   return request.get('/analysis/stock/ranking', {
     params: { top },
   });
 }
 
-export type PriceLevelConclusion =
-  | 'pending'
-  | 'nearAth'
-  | 'moderatePullback'
-  | 'significantPullback'
-  | 'deepPullback';
-
-export interface PriceLevelPendingItem {
-  ticker: string;
-  name: string;
-  asset_type: 'stock' | 'metal';
-  conclusion: PriceLevelConclusion;
-  data_pending: true;
-}
-
-export interface PriceLevelDataItem {
-  ticker: string;
-  name: string;
-  asset_type: 'stock' | 'metal';
-  current_price: number;
-  all_time_high: number;
-  ath_date: string;
-  percentage_diff: number;
-  ath_days: number;
-  daily_change: number | null;
-  weekly_change: number | null;
-  conclusion: PriceLevelConclusion;
-}
-
-export type PriceLevelRow = PriceLevelDataItem | PriceLevelPendingItem;
-
-export function isPriceLevelPending(
-  item: PriceLevelRow,
-): item is PriceLevelPendingItem {
-  return 'data_pending' in item && item.data_pending === true;
-}
-
-export interface AssetPriceLevels {
-  last_synced_at: string | null;
-  as_of: string;
-  latest_trading_date: string;
-  items: PriceLevelRow[];
-  cache_errors: string[];
-}
-
+/** 获取全球资产价格水位 GET /analysis/asset-price-levels */
 export function fetchAssetPriceLevels(
   forceRefresh = false,
-): Promise<AssetPriceLevels> {
+): Promise<API.AssetPriceLevels> {
   return request.get('/analysis/asset-price-levels', {
     params: { force_refresh: forceRefresh || undefined },
   });
 }
 
-export interface MarketOverviewErrorItem {
-  key: string;
-  name: string;
-  code: string;
-  error: string;
-}
-
-export interface MarketOverviewDataItem {
-  key: string;
-  name: string;
-  code: string;
-  current_price: number;
-  daily_change: number | null;
-  weekly_change: number | null;
-  period_start: string | null;
-  period_end: string | null;
-}
-
-export type MarketOverviewRow =
-  MarketOverviewDataItem | MarketOverviewErrorItem;
-
-export function isMarketOverviewError(
-  item: MarketOverviewRow,
-): item is MarketOverviewErrorItem {
-  return 'error' in item;
-}
-
-export interface MarketOverviewCategory {
-  key: string;
-  name: string;
-  items: MarketOverviewRow[];
-}
-
-export interface MarketOverview {
-  as_of: string;
-  latest_trading_date: string;
-  categories: MarketOverviewCategory[];
-  errors: string[];
-}
-
+/** 获取全球市场概览 GET /analysis/market-overview */
 export function fetchMarketOverview(
   forceRefresh = false,
-): Promise<MarketOverview> {
+): Promise<API.MarketOverview> {
   return request.get('/analysis/market-overview', {
     params: { force_refresh: forceRefresh || undefined },
   });
 }
 
-export interface UsMacroPointItem {
-  period: string;
-  cpi_yoy: number | null;
-  fed_rate_upper: number | null;
-}
-
-export interface UsMacroData {
-  start: string;
-  latest_period: string | null;
-  last_synced_at: string | null;
-  points: UsMacroPointItem[];
-}
-
-export function fetchUsMacroData(start = '2020-06'): Promise<UsMacroData> {
+/** 获取美国宏观月度序列 GET /analysis/us-macro */
+export function fetchUsMacroData(start = '2020-06'): Promise<API.UsMacroData> {
   return request.get('/analysis/us-macro', {
     params: { start },
   });
 }
 
-export interface CnMacroPointItem {
-  period: string;
-  cpi_yoy: number | null;
-  ppi_yoy: number | null;
-  pmi_manufacturing: number | null;
-  pmi_non_manufacturing: number | null;
-  consumer_confidence: number | null;
-}
-
-export interface CnMacroData {
-  start: string;
-  latest_period: string | null;
-  last_synced_at: string | null;
-  points: CnMacroPointItem[];
-}
-
-export function fetchCnMacroData(start?: string): Promise<CnMacroData> {
+/** 获取中国宏观月度序列 GET /analysis/cn-macro */
+export function fetchCnMacroData(start?: string): Promise<API.CnMacroData> {
   return request.get('/analysis/cn-macro', {
     params: start ? { start } : undefined,
   });

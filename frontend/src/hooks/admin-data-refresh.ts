@@ -1,10 +1,5 @@
 import { ref } from 'vue';
-import {
-  refreshAllDataStream,
-  type ImportAllResult,
-  type ImportProgressEvent,
-  type ImportStreamError,
-} from '@/api/admin';
+import { refreshAllDataStream } from '@/api/admin';
 import i18n from '@/locale';
 import { emitDataRefresh } from '@/utils/data-refresh';
 import {
@@ -60,15 +55,15 @@ export default function useAdminDataRefresh() {
     progressState.value.overallStatus = 'running';
 
     abortController = refreshAllDataStream({
-      onProgress: (event: ImportProgressEvent) => {
+      onProgress: (event: API.ImportProgressEvent) => {
         progressState.value = applyProgressEvent(progressState.value, event);
       },
-      onDone: (result: ImportAllResult) => {
+      onDone: (result: API.ImportAllResult) => {
         progressState.value = applyStreamDone(progressState.value, result);
         refreshing.value = false;
         abortController = null;
       },
-      onError: (error: ImportStreamError) => {
+      onError: (error: API.ImportStreamError) => {
         progressState.value = applyStreamError(progressState.value, error);
         refreshing.value = false;
         abortController = null;
