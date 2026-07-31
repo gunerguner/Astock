@@ -1,6 +1,5 @@
 """market_overview 数据集专属：近期收盘价裁剪与合并。"""
 
-from __future__ import annotations
 
 from datetime import timedelta
 

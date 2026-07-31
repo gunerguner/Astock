@@ -15,7 +15,6 @@
   python -m scripts.rewind_sync_dates --days 2 --dry-run
 """
 
-from __future__ import annotations
 
 import argparse
 import os

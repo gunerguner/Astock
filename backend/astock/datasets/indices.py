@@ -1,6 +1,5 @@
 """指数点位数据集：按配置选择 baostock / akshare。"""
 
-from __future__ import annotations
 
 import logging
 

@@ -1,6 +1,5 @@
 """市场概览本地 closes：优先复用 SQLite point 与全球资产 Redis。"""
 
-from __future__ import annotations
 
 import logging
 from collections import defaultdict

@@ -1,6 +1,5 @@
 """东方财富 HTTP：美元指数现货与 K 线。"""
 
-from __future__ import annotations
 
 from datetime import datetime
 from typing import Any

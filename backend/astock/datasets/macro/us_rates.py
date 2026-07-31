@@ -1,6 +1,5 @@
 """美联储目标利率上限：FRED 主源 + 官网 CSV 备源。"""
 
-from __future__ import annotations
 
 import logging
 from datetime import date

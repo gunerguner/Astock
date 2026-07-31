@@ -1,6 +1,5 @@
 """中国宏观月度指标：CPI/PPI/PMI/消费者信心。"""
 
-from __future__ import annotations
 
 from astock.datasets.macro.common import records_from_month_df
 from astock.datasets.result import FetchResult

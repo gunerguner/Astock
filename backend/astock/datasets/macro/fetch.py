@@ -1,6 +1,5 @@
 """中国/美国宏观公开入口。"""
 
-from __future__ import annotations
 
 from astock.datasets.macro.china import (
     fetch_consumer_confidence,

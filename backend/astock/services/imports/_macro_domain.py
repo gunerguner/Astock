@@ -1,6 +1,5 @@
 """宏观领域月频导入模板（写入统一 macro_value 长表）。"""
 
-from __future__ import annotations
 
 import logging
 import time

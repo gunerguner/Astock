@@ -3,7 +3,6 @@
 对齐 stockManager：A 股 XSHG、美股 XNYS，覆盖周末与交易所休市日。
 """
 
-from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 from typing import ClassVar, Literal

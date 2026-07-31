@@ -1,6 +1,5 @@
 """akshare 市场原始查询：A 股指数、美股指数。"""
 
-from __future__ import annotations
 
 import logging
 

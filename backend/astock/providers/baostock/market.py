@@ -1,6 +1,5 @@
 """baostock 市场数据原始查询：指数点位、交易所成交额。"""
 
-from __future__ import annotations
 
 import logging
 

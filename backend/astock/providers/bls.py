@@ -1,6 +1,5 @@
 """BLS Public API：美国 CPI 未季调指数。"""
 
-from __future__ import annotations
 
 import logging
 from typing import Any

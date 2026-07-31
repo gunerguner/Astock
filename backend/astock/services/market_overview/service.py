@@ -1,6 +1,5 @@
 """全球市场概览：Redis 缓存 + 日/周涨跌计算。"""
 
-from __future__ import annotations
 
 import logging
 from collections import defaultdict

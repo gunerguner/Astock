@@ -1,6 +1,5 @@
 """美债收益率近期收盘价。"""
 
-from __future__ import annotations
 
 from astock.config import MARKET_OVERVIEW_RECENT_DAYS, US_BOND_COLUMNS
 from astock.datasets.market_overview.common import df_to_tail_closes

@@ -1,6 +1,5 @@
 """美国宏观只读查询（长表 pivot 为宽格式响应）。"""
 
-from __future__ import annotations
 
 from sqlmodel import Session
 

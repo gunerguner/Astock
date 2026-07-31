@@ -1,6 +1,5 @@
 """中国宏观数据导入（月频 + sync_meta，写入统一 macro_value 长表）。"""
 
-from __future__ import annotations
 
 from sqlmodel import Session
 

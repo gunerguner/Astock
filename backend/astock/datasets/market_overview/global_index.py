@@ -1,6 +1,5 @@
 """全球指数近期收盘价。"""
 
-from __future__ import annotations
 
 import logging
 

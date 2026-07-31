@@ -1,6 +1,5 @@
 """外部数据源统一重试。"""
 
-from __future__ import annotations
 
 import logging
 import time

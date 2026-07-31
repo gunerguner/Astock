@@ -1,6 +1,5 @@
 """个股代码清单与全市场日成交数据集。"""
 
-from __future__ import annotations
 
 from astock.datasets.result import FetchResult
 from astock.providers.baostock import stocks as bs_stocks

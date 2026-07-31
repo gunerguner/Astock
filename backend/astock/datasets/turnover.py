@@ -1,6 +1,5 @@
 """沪深两市成交额数据集。"""
 
-from __future__ import annotations
 
 import logging
 

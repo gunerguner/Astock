@@ -1,6 +1,5 @@
 """日期、月份、数值解析。"""
 
-from __future__ import annotations
 
 import math
 import re

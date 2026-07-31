@@ -1,6 +1,5 @@
 """FRED：联邦基金目标利率上限 DFEDTARU。"""
 
-from __future__ import annotations
 
 import csv
 import io

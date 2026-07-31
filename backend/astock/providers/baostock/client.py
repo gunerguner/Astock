@@ -1,6 +1,5 @@
 """baostock 会话管理与错误助手。"""
 
-from __future__ import annotations
 
 import logging
 import socket

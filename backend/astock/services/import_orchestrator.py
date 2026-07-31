@@ -1,6 +1,5 @@
 """数据导入编排：SSE 流式。"""
 
-from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Iterator

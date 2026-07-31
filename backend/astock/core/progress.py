@@ -1,6 +1,5 @@
 """流式导入进度上报。"""
 
-from __future__ import annotations
 
 import json
 import time

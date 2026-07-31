@@ -1,6 +1,5 @@
 """分析查询公共工具。"""
 
-from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from typing import Any

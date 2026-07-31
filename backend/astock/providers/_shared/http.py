@@ -1,6 +1,5 @@
 """通用 httpx 请求封装。"""
 
-from __future__ import annotations
 
 from typing import Any
 

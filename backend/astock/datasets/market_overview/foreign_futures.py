@@ -1,6 +1,5 @@
 """外盘期货近期收盘价。"""
 
-from __future__ import annotations
 
 import logging
 

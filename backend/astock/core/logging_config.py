@@ -1,6 +1,5 @@
 """应用日志：控制台输出全量；文件按日分片，分「普通」与「错误」两级。"""
 
-from __future__ import annotations
 
 import logging
 import sys

@@ -1,6 +1,5 @@
 """baostock 个股原始查询：代码清单、全市场日成交。"""
 
-from __future__ import annotations
 
 import logging
 

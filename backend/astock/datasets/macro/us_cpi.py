@@ -1,6 +1,5 @@
 """美国 CPI：东方财富主源 + BLS 备源。"""
 
-from __future__ import annotations
 
 import logging
 from datetime import date, datetime

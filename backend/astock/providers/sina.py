@@ -1,6 +1,5 @@
 """新浪 HTTP：美元指数现货与日线。"""
 
-from __future__ import annotations
 
 import json
 import re

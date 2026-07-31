@@ -1,6 +1,5 @@
 """宏观数据集共享：长表记录构造与子源合并。"""
 
-from __future__ import annotations
 
 import logging
 from typing import Any

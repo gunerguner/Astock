@@ -1,11 +1,10 @@
 """导入结果类型契约与状态组装。"""
 
-from __future__ import annotations
 
 import logging
 import time
 from dataclasses import dataclass, field, replace
-from typing import Any
+from typing import Any, Self
 
 from astock.core.sync_status import SyncStatus
 
@@ -33,10 +32,10 @@ class ImportResult:
             "elapsed": self.elapsed,
         }
 
-    def with_status(self, status: SyncStatus) -> ImportResult:
+    def with_status(self, status: SyncStatus) -> Self:
         return replace(self, status=status)
 
-    def with_elapsed(self, elapsed: float) -> ImportResult:
+    def with_elapsed(self, elapsed: float) -> Self:
         return replace(self, elapsed=elapsed)
 
 

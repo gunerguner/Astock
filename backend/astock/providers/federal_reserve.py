@@ -1,6 +1,5 @@
 """美联储官网：目标利率静态 CSV。"""
 
-from __future__ import annotations
 
 import csv
 import io

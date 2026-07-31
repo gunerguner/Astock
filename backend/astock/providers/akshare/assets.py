@@ -1,6 +1,5 @@
 """akshare 全球资产原始查询：美股、贵金属、外盘期货。"""
 
-from __future__ import annotations
 
 import logging
 

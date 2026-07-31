@@ -1,6 +1,5 @@
 """配置：环境变量（pydantic-settings）+ settings.yaml 常量 + 领域 YAML 懒加载。"""
 
-from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path

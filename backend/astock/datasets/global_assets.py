@@ -1,6 +1,5 @@
 """全球资产历史、ATH、近期收盘价数据集。"""
 
-from __future__ import annotations
 
 import logging
 

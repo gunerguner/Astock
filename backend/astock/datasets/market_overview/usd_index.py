@@ -1,6 +1,5 @@
 """美元指数：日线历史为主，现货仅补最新结算日。"""
 
-from __future__ import annotations
 
 import logging
 import time
