@@ -1,15 +1,14 @@
 """日期时间工具：统一 UTC ISO 串与各市场本地结算日。"""
 
 from datetime import UTC, date, datetime, timedelta
-from typing import Any, Literal
+from typing import Any
 from zoneinfo import ZoneInfo
 
-from astock.core.trading_calendar import TradingCalendar
+from astock.core.trading_calendar import MarketCode, TradingCalendar
 
 _SHANGHAI = ZoneInfo("Asia/Shanghai")
 _NEW_YORK = ZoneInfo("America/New_York")
 
-MarketCode = Literal["cn", "us"]
 # A 股日线源（baostock/akshare）收盘后往往尚未就绪，傍晚后再视为「当日已结算」；
 # 美股仍按本地收盘 16:00 计。
 _MARKET_CLOSE_HOUR: dict[MarketCode, int] = {

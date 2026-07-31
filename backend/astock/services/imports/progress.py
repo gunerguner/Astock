@@ -1,6 +1,5 @@
 """流式导入进度上报。"""
 
-
 import json
 import time
 from collections.abc import Callable, Iterator

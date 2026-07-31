@@ -1,3 +1,5 @@
+"""宏观 region / metric 字面量约束。"""
+
 from typing import Literal
 
 MacroRegion = Literal["cn", "us"]

@@ -3,17 +3,8 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from astock.config import (
-    WEEKLY_BASELINE_OFFSET,
-    GlobalAssetConfig,
-    MarketOverviewItemConfig,
-)
-from astock.core.datetime_utils import (
-    MarketCode,
-    last_settled_date,
-    market_for_asset_type,
-    market_for_source,
-)
+from astock.config import WEEKLY_BASELINE_OFFSET
+from astock.core.datetime_utils import MarketCode, last_settled_date
 
 __all__ = [
     "BaselinePrices",
@@ -25,8 +16,6 @@ __all__ = [
     "resolve_latest_trading_date",
     "closes_cover_settled",
     "has_sufficient_baseline_points",
-    "overview_item_markets",
-    "global_asset_markets",
 ]
 
 
@@ -144,22 +133,8 @@ def has_sufficient_baseline_points(
     """判断在锚点日口径下是否足以计算日/周涨跌（至少 WEEKLY_BASELINE_OFFSET 个交易日点）。"""
     if not closes:
         return False
-    anchor = anchor_date
-    if anchor is None:
-        anchor = anchor_date_for_closes(closes, market)
+    anchor = anchor_date or anchor_date_for_closes(closes, market)
     if anchor is None:
         return False
     dates = [d for d in sorted_dates(closes) if d <= anchor]
     return len(dates) >= WEEKLY_BASELINE_OFFSET
-
-
-def overview_item_markets(
-    items: list[MarketOverviewItemConfig],
-) -> dict[str, MarketCode]:
-    """为市场概览条目建立 key → 结算市场映射。"""
-    return {item["key"]: market_for_source(item["source"]) for item in items}
-
-
-def global_asset_markets(assets: list[GlobalAssetConfig]) -> dict[str, MarketCode]:
-    """为全球资产建立 ticker → 结算市场映射。"""
-    return {asset["ticker"]: market_for_asset_type(asset["asset_type"]) for asset in assets}

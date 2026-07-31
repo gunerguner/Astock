@@ -4,7 +4,7 @@
 import logging
 from typing import Any
 
-from astock.core.types import MacroMetric, MacroRegion
+from astock.datasets.macro.types import MacroMetric, MacroRegion
 from astock.datasets.result import FetchResult
 from astock.providers._shared.parsing import parse_cn_month, to_float
 

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from sqlmodel import Session, SQLModel
 
-from astock.core.exceptions import ExternalSourceAppError
+from astock.core.errors import ExternalSourceAppError
 from astock.core.sync_status import SyncStatus
 from astock.datasets.result import FetchResult
 from astock.services.imports._common import (

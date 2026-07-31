@@ -4,7 +4,7 @@
 from sqlmodel import Session
 
 from astock.config import US_MACRO_START_PERIOD
-from astock.core.types import MacroMetric
+from astock.datasets.macro.types import MacroMetric
 from astock.schemas.analysis import UsMacroPointItem, UsMacroResponse
 from astock.services.queries._common import (
     latest_period_with,

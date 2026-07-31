@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterator
 
 from sqlmodel import Session
 
-from astock.core.progress import ProgressReporter, SSEBridge
+from astock.services.imports.progress import ProgressReporter, SSEBridge
 from astock.datasets.stocks import baostock_session_hold
 from astock.schemas.imports import ImportDataset
 from astock.services.imports import (
@@ -17,7 +17,7 @@ from astock.services.imports import (
     refresh_asset_highs,
 )
 from astock.services.imports.stock import import_stock_gen
-from astock.services.market_overview import warmup_market_overview
+from astock.services.queries.market_overview import warmup_market_overview
 from astock.services.sync.results import (
     ImportBatchResult,
     ImportResult,

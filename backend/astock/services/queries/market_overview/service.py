@@ -11,20 +11,12 @@ from astock.config import (
     MARKET_OVERVIEW_ITEMS,
     MarketOverviewItemConfig,
 )
-from astock.core.datetime_utils import iso_now, last_settled_date
+from astock.core.datetime_utils import iso_now, last_settled_date, market_for_source
 from astock.core.price_utils import (
     anchor_date_for_closes,
-    overview_item_markets,
     resolve_latest_trading_date,
 )
-from astock.core.redis_client import (
-    MARKET_OVERVIEW_LATEST_DATE_KEY,
-    delete_key,
-    get_string,
-    market_overview_failure_key,
-    market_overview_recent_key,
-    set_string,
-)
+from astock.core.redis_client import redis_gateway
 from astock.datasets.market_overview import fetch_all_items
 from astock.schemas.analysis import (
     MarketOverviewCategory,
@@ -40,7 +32,12 @@ from astock.services.cache.closes import (
     ensure_closes,
     redis_closes_io,
 )
-from astock.services.market_overview.local_closes import fill_closes_from_local
+from astock.services.cache.keys import (
+    MARKET_OVERVIEW_LATEST_DATE_KEY,
+    market_overview_failure_key,
+    market_overview_recent_key,
+)
+from astock.services.queries.market_overview.local_closes import fill_closes_from_local
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +45,9 @@ _read_closes, _write_closes = redis_closes_io(
     market_overview_recent_key, ttl=ASSET_PRICE_CACHE_TTL
 )
 
-_ITEM_MARKETS = overview_item_markets(MARKET_OVERVIEW_ITEMS)
+_ITEM_MARKETS = {
+    item["key"]: market_for_source(item["source"]) for item in MARKET_OVERVIEW_ITEMS
+}
 _OVERVIEW_CACHE_DEPS = ClosesCacheDeps(
     key_fn=lambda item: item["key"],
     market_fn=lambda item: _ITEM_MARKETS[item["key"]],
@@ -61,11 +60,11 @@ _OVERVIEW_CACHE_DEPS = ClosesCacheDeps(
 
 
 def _has_failure_marker(item_key: str) -> bool:
-    return get_string(market_overview_failure_key(item_key)) is not None
+    return redis_gateway.get_string(market_overview_failure_key(item_key)) is not None
 
 
 def _write_failure_marker(item_key: str) -> None:
-    set_string(
+    redis_gateway.set_string(
         market_overview_failure_key(item_key),
         "1",
         ttl=MARKET_OVERVIEW_FAILURE_TTL,
@@ -73,7 +72,7 @@ def _write_failure_marker(item_key: str) -> None:
 
 
 def _clear_failure_marker(item_key: str) -> None:
-    delete_key(market_overview_failure_key(item_key))
+    redis_gateway.delete_key(market_overview_failure_key(item_key))
 
 
 def _fetch_missing(missing: list[MarketOverviewItemConfig]) -> ClosesFetchResult:
@@ -177,7 +176,7 @@ def get_market_overview(*, force_refresh: bool = False) -> MarketOverviewRespons
     latest_trading_date_value = resolve_latest_trading_date(
         all_closes,
         markets=_ITEM_MARKETS,
-        redis_fallback=get_string(MARKET_OVERVIEW_LATEST_DATE_KEY),
+        redis_fallback=redis_gateway.get_string(MARKET_OVERVIEW_LATEST_DATE_KEY),
         meta_fallback=last_settled_date("cn"),
     ) or last_settled_date("cn")
     if not all_closes:

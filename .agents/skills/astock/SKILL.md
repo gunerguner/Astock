@@ -31,12 +31,12 @@ description: Astock A股、全球资产与中美宏观数据平台的开发约�
 │   │   ├── main.py            # FastAPI app + 本地开发入口（uvicorn reload）
 │   │   ├── config.py          # 环境变量 + 业务常量；YAML 懒加载 + TypedDict
 │   │   ├── config/            # YAML 配置（业务参数/牛市区间/全球资产/市场概览类目）
-│   │   ├── core/              # database、exceptions、logging、redis、deps、progress（SSE）
+│   │   ├── core/              # database、errors、logging、redis 网关、deps、datetime/trading_calendar/price_utils
 │   │   ├── models/            # SQLModel 表定义（包根 re-export 供 create_all 注册）
 │   │   ├── schemas/           # Pydantic 请求/响应
 │   │   ├── providers/         # 外部供应商适配（baostock/akshare/BLS/FRED/东财/新浪）
 │   │   ├── datasets/          # 稳定数据契约与多源编排（indices/turnover/stocks/macro/…）
-│   │   ├── services/          # imports/、queries/、sync/、cache/、global_asset/、market_overview/、编排层
+│   │   ├── services/          # import_orchestrator + imports/、queries/、sync/、cache/
 │   │   └── routers/           # admin / analysis 两组路由
 │   ├── requirements.txt
 │   └── .env.example
@@ -97,12 +97,12 @@ description: Astock A股、全球资产与中美宏观数据平台的开发约�
 |----|------|------|
 | `providers/` | 外部供应商 SDK/HTTP 适配，返回原始或中性数据 | 不依赖 `datasets/`、`models/`、`services/`；不构造业务记录形状 |
 | `datasets/` | 稳定数据契约、多源选择与标准化，返回 `FetchResult` | 不写库、不依赖 `services/`；扁平文件优先，复杂域再建子包 |
-| `services/` | 业务逻辑（导入编排、分析统计） | `imports/` 写路径、`queries/` 读路径；`sync/` 水位与 `ImportResult`、`cache/` Redis closes；通过 `datasets/` 取数，不感知具体供应商 |
+| `services/` | 业务逻辑（导入编排、分析统计） | `imports/` 写路径（含 `progress` SSE）、`queries/` 读路径；`sync/` 水位与 `ImportResult`、`cache/` Redis closes/keys；`import_orchestrator` 在包根组合写/读；通过 `datasets/` 取数，不感知具体供应商 |
 | `routers/` | HTTP 入口，薄层转发到 service | 查询参数校验在路由层；业务异常由 service 抛 `AppError`，路由不包 `ValueError` |
 | `models/` | SQLModel 表定义 | 主键显式声明，时间戳字段用 `str` 存 `cached_at`；`import astock.models` 注册 metadata |
 | `schemas/` | Pydantic 请求/响应 DTO | 响应统一走 `ApiResponse[T]` 信封 |
 
-**包 `__init__` 约定**：有真实消费者的 barrel 才 re-export（如 `models`、`imports`、`queries`、`global_asset`、`market_overview`、`datasets/macro`）；`sync`/`cache`/`providers/baostock` 等保持 docstring-only，调用方直引子模块。
+**包 `__init__` 约定**：有真实消费者的 barrel 才 re-export（如 `models`、`imports`、`queries`、`queries/market_overview`、`datasets/macro`）；`sync`/`cache`/`providers/baostock` 等保持 docstring-only，调用方直引子模块。
 
 ## 业务域（已实现）
 
@@ -110,11 +110,11 @@ description: Astock A股、全球资产与中美宏观数据平台的开发约�
 |----|----------|------|
 | 牛市统计 | `services/queries/` + `bull_markets.yaml` | 多指数点位 + 成交额达标天数与极值 |
 | 成交额排名 | `services/queries/rankings.py` | 大盘 TopN + 个股高水位切片 TopN |
-| 全球资产价格水位 | `imports/global_assets.py`（写）+ `global_asset/query.py`（读）+ `global_assets.yaml` | ATH 与当前价对比、结论标签 |
-| 全球市场概览 | `services/market_overview/` + `market_overview.yaml` | 6 类 18 项最近已结算日线概览（非实时） |
+| 全球资产价格水位 | `imports/global_assets.py`（写）+ `queries/global_asset.py`（读）+ `global_assets.yaml` | ATH 与当前价对比、结论标签 |
+| 全球市场概览 | `queries/market_overview/` + `market_overview.yaml` | 6 类 18 项最近已结算日线概览（非实时） |
 | 中国宏观 | `datasets/macro/china.py` + `imports/cn_macro.py` + `queries/cn_macro.py` | CPI/PPI 同比、制造业/非制造业 PMI、消费者信心（月频） |
 | 美国宏观 | `datasets/macro/us_cpi.py` + `us_rates.py` + `imports/us_macro.py` | CPI 同比、联邦基金目标利率上限（月频，主备源） |
-| 数据导入 | `services/imports/`（`pipeline` + `stock/` + `global_assets`）+ `import_orchestrator` + `sync/` | 增量 upsert + sync_meta；结果类型 `ImportResult` / 全量 `ImportBatchResult` |
+| 数据导入 | `services/imports/`（`pipeline` + `stock` + `global_assets`）+ `import_orchestrator` + `sync/` | 增量 upsert + sync_meta；结果类型 `services.sync.results.ImportResult` / `ImportBatchResult` |
 | 管理刷新 | 前端 `admin-refresh-button` + SSE | 6 阶段刷新；密码门（`VITE_ADMIN_REFRESH_PASSWORD`），后端无鉴权 |
 
 ## 配置驱动
@@ -141,17 +141,17 @@ YAML 懒加载结果用 TypedDict 约束（`PointIndexConfig`、`BullMarketPerio
 | 新宏观指标 | `models/macro.py` 指标常量 → `providers/` → `datasets/macro/` → importer/query schema → 前端 API/图表 |
 | 宏观刷新窗口/默认区间 | `config/settings.yaml` → `config.py`；不要把起始月份或发布日期写死在 service |
 | 分析逻辑/阈值 | `services/queries/` + `config.py` / YAML → 前端页面筛选默认值 |
-| 全球资产/概览项 | `config/global_assets.yaml` 或 `market_overview.yaml` → `imports/global_assets` / `global_asset/` 或 `market_overview/` |
+| 全球资产/概览项 | `config/global_assets.yaml` 或 `market_overview.yaml` → `imports/global_assets` / `queries/global_asset` 或 `queries/market_overview/` |
 | 数据库表 | `models/` → `sync/store.batch_upsert` → `sync/status` |
 | 新前端页 | `router/routes/modules/main.ts` + `views/` + locale |
 | 新宏观图表 | 页面专用 `use-*-macro-chart.ts` + 共享 `hooks/use-macro-line-chart.ts`；ECharts 组件按需注册 |
-| 缓存/TTL | `config.py` 环境变量 + `core/redis_client.py` + `services/cache/` |
+| 缓存/TTL | `config.py` 环境变量 + `core/redis_client.py` + `services/cache/`（含 `keys.py`） |
 | 部署/静态 404 | 改前端后须 **重建 frontend 镜像**；见 `docker/nginx.conf` |
 
 ## 快速决策树（先定位再改）
 
 - **症状：接口返回 code≠0**
-  - 先看：`core/exception_handlers.py`、对应 service 抛的 `AppError` / `ExternalSourceAppError`
+  - 先看：`routers/exception_handlers.py`、对应 service 抛的 `AppError` / `ExternalSourceAppError`
   - 再看：Swagger `/docs` 请求参数是否与 schema 一致
 - **症状：导入慢/失败/partial_failure**
   - 先看：`GET /admin/data/sync-status` 与 `source_errors`
@@ -164,7 +164,7 @@ YAML 懒加载结果用 TypedDict 约束（`PointIndexConfig`、`BullMarketPerio
   - 查询页只读 SQLite，不会打开页面即触网；需执行管理员刷新或单独导入宏观 dataset
 - **症状：全球资产/概览数据 stale 或不刷新**
   - 先看：`ensure_closes` 是否 `closes_cover_settled`（缓存须覆盖 `last_settled_date`）；`force_refresh` 应全部重拉
-  - 再看：`services/global_asset/` / `services/market_overview/` 失败标记冷却；本地 Redis 是否仍是旧序列
+  - 再看：`services/queries/global_asset.py` / `queries/market_overview/` 失败标记冷却；本地 Redis 是否仍是旧序列
 - **症状：改了前端但线上没变化**
   - 先做：`docker compose build frontend && docker compose up -d frontend`
 - **症状：新增字段前端拿不到**

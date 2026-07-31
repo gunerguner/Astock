@@ -13,15 +13,13 @@ from astock.core.datetime_utils import (
     market_for_asset_type,
     now_local,
 )
-from astock.core.error_codes import ErrorCode
-from astock.core.exceptions import AppError
+from astock.core.errors import AppError, ErrorCode
 from astock.core.price_utils import (
     anchor_date_for_closes,
-    global_asset_markets,
     resolve_latest_trading_date,
     sorted_dates,
 )
-from astock.core.redis_client import LATEST_TRADING_DATE_KEY, get_string
+from astock.core.redis_client import redis_gateway
 from astock.models.asset_high import AssetHigh
 from astock.schemas.analysis import (
     PriceLevelItem,
@@ -31,6 +29,7 @@ from astock.schemas.analysis import (
 from astock.services.cache.asset_prices import (
     backfill_from_akshare,
     conclusion,
+    global_asset_markets,
     pending_item,
     read_price_cache,
     write_price_cache,
@@ -42,6 +41,7 @@ from astock.services.cache.closes import (
     build_change_fields,
     ensure_closes,
 )
+from astock.services.cache.keys import LATEST_TRADING_DATE_KEY
 from astock.services.sync.store import get_sync_meta
 
 _PRICE_CACHE_DEPS = ClosesCacheDeps(
@@ -66,17 +66,28 @@ def _ensure_price_cache(
     )
 
 
+def _append_missing_price(
+    asset: GlobalAssetConfig,
+    *,
+    items: list[PriceLevelItem | PriceLevelPendingItem],
+    cache_errors: list[str],
+) -> None:
+    if asset.get("data_pending"):
+        items.append(pending_item(asset))
+    else:
+        cache_errors.append(f"{asset['ticker']}: 当前价格缺失")
+
+
 def get_price_levels(db: Session, *, force_refresh: bool = False) -> PriceLevelsResponse:
     """查询全球资产相对历史最高点的价格水位与日/周涨跌。"""
     rows = db.exec(select(AssetHigh)).all()
-    if not rows and not force_refresh:
-        meta = get_sync_meta(db, "asset_high")
-        if meta is None:
-            raise AppError(
-                message="全球资产历史最高点数据为空，请先刷新数据",
-                code=ErrorCode.VALIDATION_ERROR,
-                status_code=status.HTTP_400_BAD_REQUEST,
-            )
+    meta = get_sync_meta(db, "asset_high")
+    if not rows and not force_refresh and meta is None:
+        raise AppError(
+            message="全球资产历史最高点数据为空，请先刷新数据",
+            code=ErrorCode.VALIDATION_ERROR,
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
 
     fetched = _ensure_price_cache(GLOBAL_ASSETS, force_refresh=force_refresh)
     all_closes = fetched.closes
@@ -94,19 +105,13 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> PriceLevels
         closes = filter_settled_closes(all_closes.get(ticker, {}), market)
         anchor = anchor_date_for_closes(closes, market)
         if anchor is None:
-            if asset.get("data_pending"):
-                items.append(pending_item(asset))
-            else:
-                cache_errors.append(f"{ticker}: 当前价格缺失")
+            _append_missing_price(asset, items=items, cache_errors=cache_errors)
             continue
 
         fields = build_change_fields(closes, anchor)
         current = fields.current
         if current is None:
-            if asset.get("data_pending"):
-                items.append(pending_item(asset))
-            else:
-                cache_errors.append(f"{ticker}: 当前价格缺失")
+            _append_missing_price(asset, items=items, cache_errors=cache_errors)
             continue
 
         row = row_map.get(ticker)
@@ -149,7 +154,6 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> PriceLevels
         )
     )
 
-    meta = get_sync_meta(db, "asset_high")
     settled_closes = {
         ticker: filter_settled_closes(closes, asset_markets[ticker])
         for ticker, closes in all_closes.items()
@@ -158,7 +162,7 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> PriceLevels
     latest_trading_date_value = resolve_latest_trading_date(
         settled_closes,
         markets=asset_markets,
-        redis_fallback=get_string(LATEST_TRADING_DATE_KEY),
+        redis_fallback=redis_gateway.get_string(LATEST_TRADING_DATE_KEY),
         meta_fallback=meta.last_synced_date if meta else None,
         display_cap=max(last_settled_date("cn"), last_settled_date("us")),
     )

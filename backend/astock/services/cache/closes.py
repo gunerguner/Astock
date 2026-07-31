@@ -14,7 +14,7 @@ from astock.core.price_utils import (
     pct_change,
     sorted_dates,
 )
-from astock.core.redis_client import get_string, set_string
+from astock.core.redis_client import redis_gateway
 
 ReadClosesFn = Callable[[str, MarketCode], dict[str, float]]
 WriteClosesFn = Callable[[str, dict[str, float], MarketCode], None]
@@ -145,14 +145,24 @@ def _should_refetch(
     """是否需要回填：强制刷新 / 无缓存 / 未覆盖最近结算日 / 涨跌基准点不足。"""
     if force_refresh:
         return True
-    if not closes:
-        return not (has_failure and has_failure(key))
-    if not closes_cover_settled(closes, market):
-        # 源侧节假日可能仍无结算日 K 线：冷却期内复用旧缓存，避免每次打开都打源
-        return not (has_failure and has_failure(key))
-    if require_baseline and not has_sufficient_baseline_points(closes, market=market):
-        return not (has_failure and has_failure(key))
-    return False
+    needs_fetch = (
+        not closes
+        or not closes_cover_settled(closes, market)
+        or (
+            require_baseline
+            and not has_sufficient_baseline_points(closes, market=market)
+        )
+    )
+    if not needs_fetch:
+        return False
+    # 冷却期内复用旧缓存，避免节假日空窗反复打源
+    return not (has_failure and has_failure(key))
+
+
+def cache_latest_trading_date(key: str, latest: str | None, *, ttl: int) -> None:
+    """有锚点日时写入 Redis latest key。"""
+    if latest:
+        redis_gateway.set_string(key, latest, ttl=ttl)
 
 
 def ensure_closes(
@@ -194,11 +204,12 @@ def ensure_closes(
             missing.append(item)
 
     if not missing:
-        latest = get_string(deps.latest_date_key)
-        if latest is None:
-            latest = anchor_date_excluding_today(all_closes, markets=markets)
-            if latest:
-                set_string(deps.latest_date_key, latest, ttl=deps.latest_ttl)
+        if redis_gateway.get_string(deps.latest_date_key) is None:
+            cache_latest_trading_date(
+                deps.latest_date_key,
+                anchor_date_excluding_today(all_closes, markets=markets),
+                ttl=deps.latest_ttl,
+            )
         return ClosesFetchResult(all_closes)
 
     fetched = deps.fetch_missing(missing)
@@ -224,9 +235,11 @@ def ensure_closes(
         elif write_failure:
             write_failure(key)
 
-    latest = anchor_date_excluding_today(all_closes, markets=markets)
-    if latest:
-        set_string(deps.latest_date_key, latest, ttl=deps.latest_ttl)
+    cache_latest_trading_date(
+        deps.latest_date_key,
+        anchor_date_excluding_today(all_closes, markets=markets),
+        ttl=deps.latest_ttl,
+    )
     return ClosesFetchResult(all_closes, fetched.errors)
 
 
@@ -236,14 +249,15 @@ def redis_closes_io(
     ttl: int,
 ):
     """返回 (read_fn, write_fn) 绑定到同一 Redis key 前缀。"""
-    from astock.core.redis_client import get_json, set_json
 
     def read_fn(key: str, market: MarketCode) -> dict[str, float]:
-        return read_recent_closes_cache(get_json, key_builder(key), market=market)
+        return read_recent_closes_cache(
+            redis_gateway.get_json, key_builder(key), market=market
+        )
 
     def write_fn(key: str, closes: dict[str, float], market: MarketCode) -> None:
         write_recent_closes_cache(
-            set_json, key_builder(key), closes, ttl=ttl, market=market
+            redis_gateway.set_json, key_builder(key), closes, ttl=ttl, market=market
         )
 
     return read_fn, write_fn

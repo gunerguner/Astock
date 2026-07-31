@@ -1,6 +1,6 @@
 # 外部数据获取
 
-> 范围：`backend/astock/providers/`（供应商适配）+ `backend/astock/datasets/`（稳定数据契约）+ `services/imports/` / `services/global_asset/` / `services/market_overview/` / `services/queries/` 编排。`sync_meta` 水位、Redis Key/TTL 明细见 [reference.md — 增量同步与缓存](.agents/skills/astock/references/reference.md)。
+> 范围：`backend/astock/providers/`（供应商适配）+ `backend/astock/datasets/`（稳定数据契约）+ `services/imports/` / `services/queries/`（含全球资产/市场概览）编排。`sync_meta` 水位、Redis Key/TTL 明细见 [reference.md — 增量同步与缓存](.agents/skills/astock/references/reference.md)。
 
 ## 阅读指引
 
@@ -26,7 +26,7 @@
 | 美国宏观·CPI | 主/备 | akshare 东财 / BLS Public API | `datasets.macro.us_cpi` | 东财主源失败、空或滞后超过 3 个月时回退 BLS NSA 指数并自行计算同比 | SQLite + `sync_meta.us_macro` | 同上，默认每月 15 日切换期望月 | 串行 |
 | 美国宏观·政策利率 | 主/备 | FRED / Fed 官网 CSV | `datasets.macro.us_rates` | DFEDTARU 主源失败、空或滞后超过 4 个月时回退官网；事件序列按月末值展开 | 同上 | 与美国 CPI 合并为同一 dataset | 串行 |
 | 市场概览·美股三指数 | — | akshare `index_us_stock_sina` | `datasets.market_overview.global_index` | 道指/标普/纳指有稳定新浪符号（`.DJI`/`.INX`/`.IXIC`） | **仅 Redis** | 项级 `closes_cover_settled`；缺项先本地再外网 | darwin 串行 / Linux 并行（与非美债项共享） |
-| 市场概览·A股指数 | ①主·本地 | SQLite `point` | `services/market_overview/local_closes` | 四指数（含科创50）点位导入已入库；概览优先读库 | 同上 | 本地覆盖结算日且基准够则跳过外网 | — |
+| 市场概览·A股指数 | ①主·本地 | SQLite `point` | `services/queries/market_overview/local_closes` | 四指数（含科创50）点位导入已入库；概览优先读库 | 同上 | 本地覆盖结算日且基准够则跳过外网 | — |
 | ↳ | ②备·外网 | akshare `stock_zh_index_daily` | `datasets.market_overview.cn_index` | 库不足时回退；与点位科创50同底层 | 同上 | 同上 | 同非美债批次 |
 | 市场概览·贵金属 | ①主·本地 | 全球资产 Redis | `local_closes`（读 `global_asset:recent`） | GC/SI 与全球资产共用；导入后可复用 | 同上 | 本地够用则跳过外网 | — |
 | ↳ | ②备·外网 / 原油 | akshare `futures_foreign_hist` | `datasets.market_overview.foreign_futures` | WTI(CL) 无全球资产缓存；GC/SI 本地不足时回退 | 同上 | 同上 | 同非美债批次 |
@@ -158,7 +158,7 @@ class FetchResult:
 
 ### datasets/market_overview（全球市场概览）
 
-- **目录**：`datasets/market_overview/`（`dispatcher.py` + 按 source 拆分）；本地优先在 `services/market_overview/local_closes.py`
+- **目录**：`datasets/market_overview/`（`dispatcher.py` + 按 source 拆分）；本地优先在 `services/queries/market_overview/local_closes.py`
 - **重试**：`FETCH_RETRIES=4`，退避 `FETCH_RETRY_DELAY=2s × attempt`（`providers/_shared/retry.py`）
 - **并发**：美债 `us_bond` 一次批量；其余项 **darwin 串行 / Linux 小线程池（max 4）**
 - **类目定义**：`backend/astock/config/market_overview.yaml`（6 类 **18** 项）
@@ -188,13 +188,13 @@ class FetchResult:
 |-----------|-------------|---------|---------------------|
 | `POST /admin/data/import/stream?dataset=turnover` | `imports/turnover`（`pipeline.run_daily_import`） | baostock 两市成交额 | SQLite + `sync_meta`；`cn` 水位已结算则跳过 |
 | `POST /admin/data/import/stream?dataset=point` | `imports/point` | baostock 三指数 + akshare 科创50 | 按指数独立水位；`cn` 结算日跳过 |
-| `POST /admin/data/import/stream?dataset=stock` | `imports/stock/` | baostock 日更全市场 TopN + `query_all_stock` 名称 | 依赖 turnover 最新日；无新交易日跳过 |
+| `POST /admin/data/import/stream?dataset=stock` | `imports/stock.py` | baostock 日更全市场 TopN + `query_all_stock` 名称 | 依赖 turnover 最新日；无新交易日跳过 |
 | `POST /admin/data/import/stream?dataset=global_assets` | `imports/global_assets.py` | akshare ATH + recent closes | SQLite + Redis；`is_multi_market_synced` 跳过 |
 | `POST /admin/data/import/stream?dataset=us_macro` | `imports/us_macro` → `_macro_domain` | CPI：东财→BLS；利率：FRED→Fed 官网 | SQLite `macro_value` + `sync_meta.us_macro`；月频期望水位 |
 | `POST /admin/data/import/stream?dataset=cn_macro` | `imports/cn_macro` → `_macro_domain` | akshare 东财 CPI/PPI/PMI/消费者信心 | SQLite `macro_value` + `sync_meta.cn_macro`；月频期望水位 |
 | `POST /admin/data/import/stream?dataset=all` | `import_orchestrator` | baostock 三段共享 login；之后全球资产、美国宏观、中国宏观在主线程串行；结束后 `warmup_market_overview` | 六阶段各自跳过；概览预热仅补落后项 |
-| `GET /analysis/asset-price-levels` | `global_asset/query.py` | 读 DB + Redis（miss 时 akshare 补拉） | 每股按 `us` 结算过滤；`force_refresh` 全部重拉；Redis TTL 86400s |
-| `GET /analysis/market-overview` | `market_overview/service` | Redis（未覆盖结算日 / 不足时：本地 point/全球资产 → `fetch_all_items`） | 每项独立锚点；`closes_cover_settled` 复用；失败冷却 300s；`force_refresh` 全部重拉 |
+| `GET /analysis/asset-price-levels` | `queries/global_asset.py` | 读 DB + Redis（miss 时 akshare 补拉） | 每股按 `us` 结算过滤；`force_refresh` 全部重拉；Redis TTL 86400s |
+| `GET /analysis/market-overview` | `queries/market_overview/service` | Redis（未覆盖结算日 / 不足时：本地 point/全球资产 → `fetch_all_items`） | 每项独立锚点；`closes_cover_settled` 复用；失败冷却 300s；`force_refresh` 全部重拉 |
 | `GET /analysis/us-macro?start=YYYY-MM` | `queries/us_macro` | **无外部请求**，读取长表并 pivot CPI/利率 | SQLite；尾部截到最新 CPI 月份 |
 | `GET /analysis/cn-macro?start=YYYY-MM` | `queries/cn_macro` | **无外部请求**，读取长表并 pivot 5 项指标 | SQLite；缺指标返回 `null` |
 | 分析类只读 API（牛市统计/排名） | `services/queries/` | **无外部请求**，纯 SQLite 聚合 | — |

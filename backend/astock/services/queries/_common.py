@@ -8,9 +8,8 @@ from fastapi import status
 from sqlmodel import Session, SQLModel, col, select
 
 from astock.config import BULL_MARKETS
-from astock.core.error_codes import ErrorCode
-from astock.core.exceptions import AppError
-from astock.core.types import MacroMetric, MacroRegion
+from astock.core.errors import AppError, ErrorCode
+from astock.datasets.macro.types import MacroMetric, MacroRegion
 from astock.models.macro import MacroValue
 from astock.schemas.analysis import BullMarketItem
 

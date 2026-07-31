@@ -1,8 +1,18 @@
+"""统一业务错误码与业务异常。"""
+
 from dataclasses import dataclass
+from enum import IntEnum
 
 from fastapi import status
 
-from astock.core.error_codes import ErrorCode
+
+class ErrorCode(IntEnum):
+    VALIDATION_ERROR = 1001
+    PERMISSION_DENIED = 1002
+    RESOURCE_NOT_FOUND = 1003
+    EXTERNAL_SOURCE_ERROR = 2001
+    DATABASE_ERROR = 3001
+    INTERNAL_ERROR = 9000
 
 
 @dataclass(eq=False, kw_only=True)

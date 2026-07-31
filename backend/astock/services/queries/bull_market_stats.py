@@ -5,7 +5,7 @@ from sqlalchemy.orm.attributes import InstrumentedAttribute
 from sqlmodel import Session, SQLModel, select
 
 from astock.config import BULL_MARKETS, POINT_INDEX_CONFIG
-from astock.core.exceptions import AppError
+from astock.core.errors import AppError
 from astock.models.point import Point
 from astock.models.turnover import Turnover
 from astock.schemas.analysis import (

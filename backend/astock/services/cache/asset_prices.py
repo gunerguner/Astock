@@ -6,23 +6,21 @@ from typing import Any
 
 from astock.config import ASSET_PRICE_CACHE_TTL, PRICE_LEVEL_CONCLUSIONS, PRICE_LEVEL_DEFAULT
 from astock.core.datetime_utils import MarketCode, filter_settled_closes, market_for_asset_type
-from astock.core.price_utils import anchor_date_excluding_today, global_asset_markets
-from astock.core.redis_client import (
-    LATEST_TRADING_DATE_KEY,
-    get_json,
-    get_string,
-    price_key,
-    recent_closes_key,
-    set_json,
-    set_string,
-)
+from astock.core.price_utils import anchor_date_excluding_today
+from astock.core.redis_client import redis_gateway
 from astock.datasets.global_assets import fetch_all_assets
 from astock.datasets.result import FetchResult
 from astock.schemas.analysis import PriceLevelPendingItem
 from astock.services.cache.closes import (
     ClosesFetchResult,
+    cache_latest_trading_date,
     read_recent_closes_cache,
     write_recent_closes_cache,
+)
+from astock.services.cache.keys import (
+    LATEST_TRADING_DATE_KEY,
+    price_key,
+    recent_closes_key,
 )
 
 
@@ -34,6 +32,11 @@ class AssetFetchRecord:
     record: dict[str, Any]
     market: MarketCode
     closes: dict[str, float]
+
+
+def global_asset_markets(assets: list[dict[str, Any]]) -> dict[str, MarketCode]:
+    """为全球资产建立 ticker → 结算市场映射。"""
+    return {asset["ticker"]: market_for_asset_type(asset["asset_type"]) for asset in assets}
 
 
 def conclusion(percentage_diff: float) -> str:
@@ -54,9 +57,9 @@ def write_price_cache(
         return
     sorted_items = sorted(settled.items())
     for d, price in sorted_items:
-        set_string(price_key(ticker, d), str(price), ttl=ASSET_PRICE_CACHE_TTL)
+        redis_gateway.set_string(price_key(ticker, d), str(price), ttl=ASSET_PRICE_CACHE_TTL)
     write_recent_closes_cache(
-        set_json,
+        redis_gateway.set_json,
         recent_closes_key(ticker),
         settled,
         ttl=ASSET_PRICE_CACHE_TTL,
@@ -65,14 +68,14 @@ def write_price_cache(
 
 def read_price_cache(ticker: str, *, market: MarketCode) -> dict[str, float]:
     """读取单资产近期收盘价缓存，缺失时回退最新单日价。"""
-    closes = read_recent_closes_cache(get_json, recent_closes_key(ticker), market=market)
+    closes = read_recent_closes_cache(
+        redis_gateway.get_json, recent_closes_key(ticker), market=market
+    )
     if closes:
         return closes
 
-    latest = get_string(LATEST_TRADING_DATE_KEY)
-    if latest:
-        raw = get_string(price_key(ticker, latest))
-        if raw is not None:
+    if latest := redis_gateway.get_string(LATEST_TRADING_DATE_KEY):
+        if raw := redis_gateway.get_string(price_key(ticker, latest)):
             return {latest: float(raw)}
     return {}
 
@@ -118,8 +121,7 @@ def backfill_from_akshare(assets: list[dict[str, str]]) -> ClosesFetchResult:
         all_closes[ticker] = row.closes
         write_price_cache(ticker, row.closes, market=row.market)
     latest = anchor_date_excluding_today(all_closes, markets=global_asset_markets(assets))
-    if latest:
-        set_string(LATEST_TRADING_DATE_KEY, latest, ttl=ASSET_PRICE_CACHE_TTL)
+    cache_latest_trading_date(LATEST_TRADING_DATE_KEY, latest, ttl=ASSET_PRICE_CACHE_TTL)
     return ClosesFetchResult(all_closes, errors)
 
 

@@ -14,7 +14,7 @@ from astock.config import (
     HOST,
 )
 from astock.core.database import init_db
-from astock.core.exception_handlers import register_exception_handlers
+from astock.routers.exception_handlers import register_exception_handlers
 from astock.core.logging_config import setup_logging
 from astock.routers import admin, analysis
 

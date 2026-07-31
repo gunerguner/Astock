@@ -1,4 +1,4 @@
-"""Redis 客户端封装：按日期缓存资产收盘价快照。"""
+"""Redis 客户端封装：连接网关与通用读写。"""
 
 import json
 import logging
@@ -85,31 +85,3 @@ class RedisGateway:
 
 
 redis_gateway = RedisGateway()
-
-# 向后兼容：保留模块级函数转发
-get_string = redis_gateway.get_string
-set_string = redis_gateway.set_string
-delete_key = redis_gateway.delete_key
-get_json = redis_gateway.get_json
-set_json = redis_gateway.set_json
-
-
-def price_key(ticker: str, date: str) -> str:
-    return f"global_asset:price:{ticker}:{date}"
-
-
-def recent_closes_key(ticker: str) -> str:
-    return f"global_asset:recent:{ticker}"
-
-
-LATEST_TRADING_DATE_KEY = "global_asset:meta:latest_trading_date"
-
-MARKET_OVERVIEW_LATEST_DATE_KEY = "market_overview:meta:latest_trading_date"
-
-
-def market_overview_recent_key(item_key: str) -> str:
-    return f"market_overview:recent:{item_key}"
-
-
-def market_overview_failure_key(item_key: str) -> str:
-    return f"market_overview:failure:{item_key}"

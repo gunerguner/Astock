@@ -13,18 +13,18 @@ SKILL.md 的扩展材料；改 API、前端、部署、同步缓存时按需阅�
 | FastAPI 入口 | `backend/astock/main.py` |
 | 环境变量 + 阈值 + TypedDict | `backend/astock/config.py`（`PointIndexConfig` / `GlobalAssetConfig` / …） |
 | YAML 配置 | `backend/astock/config/settings.yaml` + `{bull_markets,point_indices,global_assets,market_overview}.yaml` |
-| 异常与错误码 | `backend/astock/core/exceptions.py`、`core/error_codes.py`、`core/exception_handlers.py` |
-| 数据库 / Redis | `backend/astock/core/database.py`、`core/redis_client.py` |
-| SSE 进度 | `backend/astock/core/progress.py` |
+| 异常与错误码 | `backend/astock/core/errors.py`、`routers/exception_handlers.py` |
+| 数据库 / Redis | `backend/astock/core/database.py`、`core/redis_client.py`（网关）；领域 key 在 `services/cache/keys.py` |
+| SSE 进度 | `backend/astock/services/imports/progress.py` |
 | SQLModel 表 | `backend/astock/models/` |
 | Pydantic DTO | `backend/astock/schemas/` |
 | 数据源 | `backend/astock/providers/` + `backend/astock/datasets/` |
 | 导入编排 | `backend/astock/services/import_orchestrator.py`、`services/imports/`、`services/sync/status.py` |
-| 导入结果类型 | `backend/astock/services/sync/results.py`（`ImportResult`、`ImportBatchResult`） |
+| 导入结果类型 | `backend/astock/services/sync/results.py`（`ImportResult`、`ImportBatchResult` + 组装助手） |
 | 同步 / 缓存 | `backend/astock/services/sync/{store,status,results}.py`、`services/cache/{closes,asset_prices}.py` |
-| 分析查询 | `backend/astock/services/queries/`（共享 `_common.py`：牛市骨架 / 宏观 load+pivot） |
-| 全球资产 | `backend/astock/services/imports/global_assets.py`（写）、`services/global_asset/`（读） |
-| 市场概览 | `backend/astock/services/market_overview/` |
+| 分析查询 | `backend/astock/services/queries/`（牛市/排名/宏观/全球资产/市场概览；共享 `_common.py`） |
+| 全球资产 | `backend/astock/services/imports/global_assets.py`（写）、`services/queries/global_asset.py`（读） |
+| 市场概览 | `backend/astock/services/queries/market_overview/` |
 | 宏观长表 / 导入 / 查询 | `backend/astock/models/macro.py`、`datasets/macro/`、`services/imports/{_macro_domain,cn_macro,us_macro}.py`、`services/queries/{cn_macro,us_macro}.py` |
 | 路由 | `backend/astock/routers/{admin,analysis}.py` |
 | 前端 API | `frontend/src/api/{request,analysis,admin}.ts` |
@@ -53,7 +53,7 @@ class ApiResponse(BaseModel, Generic[T]):
 
 前端请求封装（`src/api/request.ts`）：`code !== 0` 弹 `Message.error(message)` 并 reject；成功直接返回业务 `data`，因此各 API 函数的 Promise 类型就是业务载荷。
 
-**错误码**（`core/error_codes.py`）：`1001` 校验 / `1002` 权限 / `1003` 未找到 / `2001` 外部源 / `3001` 数据库 / `9000` 内部。HTTP 状态码通常仍为 200，靠 `code` 区分。
+**错误码**（`core/errors.py`）：`1001` 校验 / `1002` 权限 / `1003` 未找到 / `2001` 外部源 / `3001` 数据库 / `9000` 内部。HTTP 状态码通常仍为 200，靠 `code` 区分。
 
 ### 分析路由（prefix `/api/v1/analysis`）
 
@@ -239,7 +239,7 @@ class ApiResponse(BaseModel, Generic[T]):
 | `error` | 致命错误 |
 | `ping` | 保活（个股阶段每 100 只） |
 
-后端内部全程使用 `ImportResult` dataclass；仅 SSE 序列化边界调用 `.to_dict()`。`ProgressReporter.phase_done` 只收 `ImportResult`，`done` 收实现 `to_dict()` 的对象（`ImportResult` / `ImportBatchResult`）。
+后端内部全程使用 `ImportResult` dataclass（定义于 `services/sync/results.py`）；仅 SSE 序列化边界调用 `.to_dict()`。`ProgressReporter.phase_done` 只收 `ImportResult`，`done` 收实现 `to_dict()` 的对象（`ImportResult` / `ImportBatchResult`）。
 
 前端通过 `refreshAllDataStream()`（`admin.ts`）消费，`useAdminDataRefresh` 按 `turnover → point → stock → global_assets → us_macro → cn_macro` 驱动六阶段进度弹窗。全部阶段在后端主流程串行执行；前三段共享 baostock session。
 
@@ -262,7 +262,7 @@ class ApiResponse(BaseModel, Generic[T]):
 - `all` 或缺省：全区间
 - 未知值 → `AppError`（`code=1001`，`services/queries/_common.get_bull_market_period`）；路由层不再 `try/except ValueError`
 
-服务层业务失败统一抛 `AppError` / `ExternalSourceAppError`（如全球资产空表、导入 FAILED），由 `core/exception_handlers` 转成信封响应。
+服务层业务失败统一抛 `AppError` / `ExternalSourceAppError`（如全球资产空表、导入 FAILED），由 `routers/exception_handlers` 转成信封响应。
 
 ---
 
@@ -291,7 +291,7 @@ class ApiResponse(BaseModel, Generic[T]):
 
 ### stock 数据集
 
-实现于 `services/imports/stock/importer.py`：
+实现于 `services/imports/stock.py`：
 
 1. 以 turnover 表最新日期为 `as_of_date`；缺口日取 turnover 中 `(last_synced, as_of]`
 2. 缺口整段共用一次 `baostock_session`；`query_all_stock(as_of)` 名称拉一次复用
@@ -458,7 +458,7 @@ backend 挂载 `${SQLITE_HOST_DIR:-./sqlite-data}:/app/data` + `log_data:/var/lo
 
 | 你改了什么 | 还要联动检查 |
 |-----------|----------------|
-| `providers/*` / `datasets/*` | 对应 `services/imports/` / `global_asset/` / `market_overview/`；[external-data.md](.agents/skills/astock/references/external-data.md) |
+| `providers/*` / `datasets/*` | 对应 `services/imports/` / `queries/`（含 global_asset / market_overview）；[external-data.md](.agents/skills/astock/references/external-data.md) |
 | `models/` | `sync/store.batch_upsert`、`sync/status` |
 | `schemas/` | 前端 `src/api/*.ts` interface、Swagger |
 | `config/*.yaml` | 重启 backend；前端下拉/展示项可能变化 |

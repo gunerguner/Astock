@@ -1,6 +1,5 @@
 """导入结果类型契约与状态组装。"""
 
-
 import logging
 import time
 from dataclasses import dataclass, field, replace
@@ -9,6 +8,15 @@ from typing import Any, Self
 from astock.core.sync_status import SyncStatus
 
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    "ImportResult",
+    "ImportBatchResult",
+    "resolve_status",
+    "aggregate_status",
+    "build_result",
+    "finalize_import_result",
+]
 
 
 @dataclass

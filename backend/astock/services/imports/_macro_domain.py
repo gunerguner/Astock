@@ -11,7 +11,7 @@ from sqlmodel import Session
 
 from astock.core.datetime_utils import iso_now, today_local
 from astock.core.sync_status import SyncStatus
-from astock.core.types import MacroRegion
+from astock.datasets.macro.types import MacroRegion
 from astock.datasets.result import FetchResult
 from astock.models.macro import MacroValue
 from astock.services.sync.results import (
@@ -62,17 +62,17 @@ def should_skip_macro(
     region: MacroRegion,
     sync_table: str,
     refresh_day: int,
-) -> bool:
-    """水位已覆盖期望月份且上次成功、该 region 有数据时跳过外网。"""
+):
+    """水位已覆盖期望月份且上次成功、该 region 有数据时可跳过；返回 (是否跳过, sync_meta)。"""
     meta = get_sync_meta(db, sync_table)
     if not meta or not meta.last_synced_date:
-        return False
+        return False, meta
     if meta.last_status != SyncStatus.SUCCESS:
-        return False
+        return False, meta
     if count_macro_rows(db, region) <= 0:
-        return False
+        return False, meta
     expected = expected_macro_period(refresh_day=refresh_day)
-    return str(meta.last_synced_date) >= expected
+    return str(meta.last_synced_date) >= expected, meta
 
 
 def _latest_cpi_period(records: list[dict[str, Any]]) -> str | None:
@@ -95,13 +95,13 @@ def run_macro_import(
 ) -> ImportResult:
     """拉取宏观月度指标并 upsert；尊重月频跳过窗口。"""
     start_ts = time.perf_counter()
-    if should_skip_macro(
+    skip, meta = should_skip_macro(
         db,
         region=region,
         sync_table=sync_table,
         refresh_day=refresh_day,
-    ):
-        meta = get_sync_meta(db, sync_table)
+    )
+    if skip:
         if meta is None:
             raise RuntimeError(f"{sync_table}: should_skip_macro 为真但 sync_meta 缺失")
         total = count_macro_rows(db, region)
