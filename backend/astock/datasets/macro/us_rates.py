@@ -1,16 +1,12 @@
 """美联储目标利率上限：FRED 主源 + 官网 CSV 备源。"""
 
 
-import logging
-from datetime import date
 from typing import Any
 
-from astock.datasets.macro.common import macro_record
+from astock.datasets.macro.common import macro_record, with_fallback
 from astock.datasets.result import FetchResult
 from astock.providers._shared.parsing import month_end
 from astock.providers import federal_reserve, fred
-
-logger = logging.getLogger(__name__)
 
 
 def _events_to_monthly(events: list[tuple[str, float]]) -> list[dict[str, Any]]:
@@ -79,48 +75,10 @@ def fetch_fed_rate_official() -> FetchResult:
 
 def fetch_fed_rate() -> FetchResult:
     """利率：FRED 主源，失败或最新观测异常时回退官网 CSV。"""
-    primary = fetch_fed_rate_fred()
-    latest_ok = False
-    if primary.ok and primary.records:
-        latest = primary.records[-1]["period"]
-        today = date.today()
-        try:
-            ly, lm = int(latest[:4]), int(latest[5:7])
-            months_behind = (today.year - ly) * 12 + (today.month - lm)
-            latest_ok = 0 <= months_behind <= 4
-        except (TypeError, ValueError):
-            latest_ok = False
-
-    if primary.ok and primary.records and latest_ok:
-        return primary
-
-    logger.warning(
-        "Fed 利率主源不可用或滞后，回退官网 CSV (ok=%s records=%s latest_ok=%s)",
-        primary.ok,
-        len(primary.records),
-        latest_ok,
-    )
-    fallback = fetch_fed_rate_official()
-    if fallback.ok and fallback.records:
-        if not primary.ok:
-            logger.info(
-                "Fed 利率使用官网 CSV 备源（主源错误: %s）",
-                primary.error_summary(),
-            )
-        return fallback
-    if primary.records:
-        primary.ok = False
-        primary.errors.append(fallback.error_summary() or "Fed 官网回退失败")
-        return primary
-    return FetchResult.failure(
-        "; ".join(
-            filter(
-                None,
-                [
-                    primary.error_summary(),
-                    fallback.error_summary(),
-                    "Fed 利率主备源均失败",
-                ],
-            )
-        )
+    return with_fallback(
+        fetch_fed_rate_fred(),
+        fetch_fed_rate_official,
+        max_lag_months=4,
+        label="Fed 利率",
+        fallback_error_label="Fed 官网回退失败",
     )

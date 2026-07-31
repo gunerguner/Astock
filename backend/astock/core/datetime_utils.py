@@ -30,9 +30,19 @@ def iso_now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
+def now_local() -> datetime:
+    """返回上海时区当前本地时间。"""
+    return datetime.now(_SHANGHAI)
+
+
+def today_local_date() -> date:
+    """上海时区当前日历日。"""
+    return now_local().date()
+
+
 def today_local() -> str:
     """上海时区当前日历日 YYYY-MM-DD。"""
-    return datetime.now(_SHANGHAI).strftime("%Y-%m-%d")
+    return today_local_date().isoformat()
 
 
 def market_for_source(source: str) -> MarketCode:
@@ -84,11 +94,6 @@ def is_multi_market_synced(last_synced_date: str | None) -> bool:
     return is_synced_through_settled(last_synced_date, "cn") and is_synced_through_settled(
         last_synced_date, "us"
     )
-
-
-def now_local() -> datetime:
-    """返回上海时区当前本地时间。"""
-    return datetime.now(_SHANGHAI)
 
 
 def add_calendar_days(date_str: str, days: int = 1) -> str:

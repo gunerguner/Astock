@@ -9,6 +9,8 @@ import yaml
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from astock.core.datetime_utils import today_local_date as _today_local_date
+
 _CONFIG_DIR = Path(__file__).resolve().parent / "config"
 
 
@@ -143,10 +145,7 @@ CN_MACRO_REFRESH_DAY = int(_business.get("cn_macro_refresh_day", 15))
 
 def _default_cn_macro_start_period() -> str:
     """当前北京时间月份往前 60 个月。"""
-    from datetime import datetime
-    from zoneinfo import ZoneInfo
-
-    today = datetime.now(ZoneInfo("Asia/Shanghai")).date()
+    today = _today_local_date()
     year, month = today.year, today.month - 60
     while month <= 0:
         month += 12

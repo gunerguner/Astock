@@ -13,6 +13,7 @@ from astock.core.datetime_utils import (
     iso_now,
 )
 from astock.core.sync_status import SyncStatus
+from astock.models.macro import MacroValue
 from astock.models.sync_meta import SyncMeta
 
 
@@ -69,8 +70,6 @@ def count_rows(db: Session, model: type) -> int:
 
 def count_macro_rows(db: Session, region: str) -> int:
     """统计 macro_value 表中某 region 的行数。"""
-    from astock.models.macro import MacroValue
-
     return db.exec(
         select(func.count())
         .select_from(MacroValue)

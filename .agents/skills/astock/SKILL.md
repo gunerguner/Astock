@@ -113,7 +113,7 @@ description: Astock A股、全球资产与中美宏观数据平台的开发约�
 | 全球资产价格水位 | `imports/global_assets.py`（写）+ `queries/global_asset.py`（读）+ `global_assets.yaml` | ATH 与当前价对比、结论标签 |
 | 全球市场概览 | `queries/market_overview/` + `market_overview.yaml` | 6 类 18 项最近已结算日线概览（非实时） |
 | 中国宏观 | `datasets/macro/china.py` + `imports/cn_macro.py` + `queries/cn_macro.py` | CPI/PPI 同比、制造业/非制造业 PMI、消费者信心（月频） |
-| 美国宏观 | `datasets/macro/us_cpi.py` + `us_rates.py` + `imports/us_macro.py` | CPI 同比、联邦基金目标利率上限（月频，主备源） |
+| 美国宏观 | `datasets/macro/{common,us_cpi,us_rates}.py` + `imports/us_macro.py` | CPI 同比、联邦基金目标利率上限（月频；`common.with_fallback` 主备源） |
 | 数据导入 | `services/imports/`（`pipeline` + `stock` + `global_assets`）+ `import_orchestrator` + `sync/` | 增量 upsert + sync_meta；结果类型 `services.sync.results.ImportResult` / `ImportBatchResult` |
 | 管理刷新 | 前端 `admin-refresh-button` + SSE | 6 阶段刷新；密码门（`VITE_ADMIN_REFRESH_PASSWORD`），后端无鉴权 |
 

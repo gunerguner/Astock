@@ -14,6 +14,7 @@ SKILL.md 的扩展材料；改 API、前端、部署、同步缓存时按需阅�
 | 环境变量 + 阈值 + TypedDict | `backend/astock/config.py`（`PointIndexConfig` / `GlobalAssetConfig` / …） |
 | YAML 配置 | `backend/astock/config/settings.yaml` + `{bull_markets,point_indices,global_assets,market_overview}.yaml` |
 | 异常与错误码 | `backend/astock/core/errors.py`、`routers/exception_handlers.py` |
+| 日期/结算/涨跌纯函数 | `backend/astock/core/datetime_utils.py`（含 `today_local_date`）、`core/price_utils.py`（含 `pct_change`）、`core/trading_calendar.py` |
 | 数据库 / Redis | `backend/astock/core/database.py`、`core/redis_client.py`（网关）；领域 key 在 `services/cache/keys.py` |
 | SSE 进度 | `backend/astock/services/imports/progress.py` |
 | SQLModel 表 | `backend/astock/models/` |
@@ -25,7 +26,7 @@ SKILL.md 的扩展材料；改 API、前端、部署、同步缓存时按需阅�
 | 分析查询 | `backend/astock/services/queries/`（牛市/排名/宏观/全球资产/市场概览；共享 `_common.py`） |
 | 全球资产 | `backend/astock/services/imports/global_assets.py`（写）、`services/queries/global_asset.py`（读） |
 | 市场概览 | `backend/astock/services/queries/market_overview/` |
-| 宏观长表 / 导入 / 查询 | `backend/astock/models/macro.py`、`datasets/macro/`、`services/imports/{_macro_domain,cn_macro,us_macro}.py`、`services/queries/{cn_macro,us_macro}.py` |
+| 宏观长表 / 导入 / 查询 | `backend/astock/models/macro.py`、`datasets/macro/`（共享 `common.py`：`merge_domain_sources` / `with_fallback` / `months_behind`）、`services/imports/{_macro_domain,cn_macro,us_macro}.py`、`services/queries/{cn_macro,us_macro}.py` |
 | 路由 | `backend/astock/routers/{admin,analysis}.py` |
 | 前端 API | `frontend/src/api/{request,analysis,admin}.ts` |
 | 前端页面 | `frontend/src/views/{bull-market,turnover-rank,asset-price-levels,market-overview,cn-macro-data,us-macro-data}/` |

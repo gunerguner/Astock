@@ -16,6 +16,7 @@ from astock.core.datetime_utils import (
 from astock.core.errors import AppError, ErrorCode
 from astock.core.price_utils import (
     anchor_date_for_closes,
+    pct_change,
     resolve_latest_trading_date,
     sorted_dates,
 )
@@ -125,7 +126,10 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> PriceLevels
             all_time_high = current
             ath_date = sorted_dates(closes)[-1] if closes else ath_date
 
-        percentage_diff = (current - all_time_high) / all_time_high * 100
+        percentage_diff = pct_change(current, all_time_high)
+        if percentage_diff is None:
+            cache_errors.append(f"{ticker}: ATH 无效，无法计算水位")
+            continue
         try:
             ath_days = (now.date() - date.fromisoformat(ath_date)).days
         except ValueError:

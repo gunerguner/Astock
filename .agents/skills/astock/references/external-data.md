@@ -113,6 +113,7 @@ class FetchResult:
 
 | 函数 / 概念 | 说明 |
 |-------------|------|
+| `today_local()` / `today_local_date()` | 上海时区当前日历日（字符串 / `date`）。宏观滞后判断、`expected_macro_period`、中国宏观默认起点等统一走这里，勿再自建 `ZoneInfo("Asia/Shanghai")` 或用 `date.today()` |
 | `last_settled_date(market)` | 各市场本地时区下「最近一个已收盘**交易日**」。`cn`：**20:00 前** → 昨日、**20:00 后** → 当日为候选上界（避开 A 股日线源收盘后空窗）；`us`：美东 **16:00** 前后同理。候选日经 `exchange_calendars`（`XSHG` / `XNYS`，见 `core/trading_calendar.py`）回退到最近 session，跳过周末与休市 |
 | `market` | `"cn"`：`Asia/Shanghai`（A 股导入、在岸指数、央行汇率、美债）；`"us"`：`America/New_York`（美股、外盘期货、美元指数等） |
 | `market_for_source(source)` | 概览项 `source` → `cn`/`us`，见 `datetime_utils._MARKET_SOURCE` |
@@ -120,6 +121,7 @@ class FetchResult:
 | `filter_settled_closes(closes, market)` | 写入/读取 Redis 与展示前剔除 `date > last_settled_date(market)` |
 | `is_synced_through_settled(date, market)` | A 股类 `sync_meta` 跳过：`last_synced_date ≥ last_settled_date(market)` 且 `success` |
 | `is_multi_market_synced(date)` | 全球资产导入跳过：中、美两侧 `last_settled_date` **均**已覆盖 |
+| `pct_change(cur, base)` | `(cur-base)/base*100`；日/周涨跌与全球资产距 ATH 的 `percentage_diff` 共用 |
 | `anchor_date_for_closes(closes, market)` | **单项**锚点：该资产在对应市场结算日内的最新 `date` |
 | `anchor_date_excluding_today(all_closes, markets=...)` | 多资产「数据截至」：各 key 按自身 `market` 取锚点后 `max` |
 | `resolve_latest_trading_date(...)` | 展示用「最新交易日」统一解析：锚点 → Redis → meta/兜底，可选 `display_cap` 截断；全球资产与市场概览共用 |
@@ -360,7 +362,8 @@ flowchart TD
 | 资产清单 | `global_assets.yaml`：20 只美股 + 黄金/白银（`GC`/`SI`） |
 | 导入跳过 | `refresh_asset_highs`：`last_status=success` 且 `is_multi_market_synced(last_synced_date)` 且表非空 |
 | 结算市场 | 美股 `stock`、贵金属 `metal` → `us`；写/读 Redis 前 `filter_settled_closes(..., market)` |
-| 展示锚点 | 每股 `anchor_date_for_closes(closes, market)` + `baseline_prices_at_anchor` |
+| 展示锚点 | 每股 `anchor_date_for_closes(closes, market)` + `baseline_prices_at_anchor`；日/周涨跌经 `build_change_fields` → `pct_change` |
+| 距 ATH | `percentage_diff = pct_change(current, ath)`（与日/周涨跌同一公式） |
 | `latest_trading_date` | 响应字段：`resolve_latest_trading_date(..., display_cap=max(cn, us))` |
 | Redis Key | `global_asset:recent:{ticker}`（最近 N 日收盘价 JSON）；`global_asset:price:{ticker}:{date}`（逐日兜底）；`global_asset:meta:latest_trading_date` |
 | TTL | `ASSET_PRICE_CACHE_TTL = 86400s`（环境变量 `asset_price_cache_ttl`） |
@@ -443,11 +446,13 @@ flowchart TD
 
 | 项 | 说明 |
 |----|------|
+| 主备源模板 | CPI / 利率共用 `datasets.macro.common.with_fallback`；滞后月数用 `months_behind(period)`（相对 `today_local_date`），阈值分别为 3 / 4 |
 | CPI 主源 | `ak.macro_usa_cpi_yoy`（东财），过滤尚未到发布日期的记录 |
 | CPI 备源 | BLS Public API v1，series `CUUR0000SA0`；按最多 10 年窗口拉 NSA 指数，再与上年同月计算同比 |
 | 已知断点 | `datasets/macro/us_cpi.py` 对 `2025-10` 使用财政部 TIPS 应急指数补值；这是显式代码常量，不应扩散到 provider |
 | 利率主源 | FRED CSV `DFEDTARU`；事件日期/上限按每月月末最后有效值前向展开 |
 | 利率备源 | Fed 官网 `target-funds-2014-2024.csv`；为静态历史备源，修改时注意其覆盖上限 |
+| 子源合并 | `merge_domain_sources`（同文件）把 CPI + 利率拼成长表后再 upsert |
 | 存储指标 | `cpi_yoy`、`fed_rate_upper`；主键 `(us, period, metric)` |
 | 默认查询起点 | `settings.yaml → us_macro_start_period`，默认 `2020-06` |
 | 页面展示 | CPI 普通折线，利率 `step: end` 阶梯线；空值不伪造 |

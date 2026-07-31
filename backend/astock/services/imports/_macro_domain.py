@@ -9,7 +9,7 @@ from typing import Any
 
 from sqlmodel import Session
 
-from astock.core.datetime_utils import iso_now, today_local
+from astock.core.datetime_utils import iso_now, today_local_date
 from astock.core.sync_status import SyncStatus
 from astock.datasets.macro.types import MacroRegion
 from astock.datasets.result import FetchResult
@@ -33,10 +33,6 @@ _CONFLICT_COLS = ["region", "period", "metric"]
 WATERMARK_METRIC = "cpi_yoy"
 
 
-def _today_shanghai() -> date:
-    return date.fromisoformat(today_local())
-
-
 def expected_macro_period(
     today: date | None = None,
     *,
@@ -47,7 +43,7 @@ def expected_macro_period(
     - 每月 refresh_day（含）之后：期望上月已发布
     - 此前：仅期望上上月
     """
-    now = today or _today_shanghai()
+    now = today or today_local_date()
     first = now.replace(day=1)
     prev_month_last = first - timedelta(days=1)
     if now.day >= refresh_day:

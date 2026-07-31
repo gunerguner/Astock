@@ -1,30 +1,20 @@
 """美国 CPI：东方财富主源 + BLS 备源。"""
 
 
-import logging
-from datetime import date, datetime
 from typing import Any
-from zoneinfo import ZoneInfo
 
-from astock.datasets.macro.common import macro_record
+from astock.core.datetime_utils import today_local_date
+from astock.datasets.macro.common import macro_record, with_fallback
 from astock.datasets.result import FetchResult
 from astock.providers._shared.parsing import parse_iso_date, parse_period, to_float
 from astock.providers.akshare import economics as ak_econ
 from astock.providers import bls
-
-logger = logging.getLogger(__name__)
-
-_SHANGHAI = ZoneInfo("Asia/Shanghai")
 
 # BLS 因 2025 政府停摆未发布 Oct CPI；财政部按 TIPS 应急条款公布 NSA 指数 325.604，
 # 相对 BLS 2024-10 指数 315.664 计算同比，补齐图表断点。
 _CPI_GAP_YOY: dict[str, float] = {
     "2025-10": round((325.604 / 315.664 - 1.0) * 100.0, 1),
 }
-
-
-def _today_shanghai() -> date:
-    return datetime.now(_SHANGHAI).date()
 
 
 def _fill_known_cpi_gaps(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -39,7 +29,7 @@ def _fill_known_cpi_gaps(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _normalize_cpi_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    today = _today_shanghai().isoformat()
+    today = today_local_date().isoformat()
     out: list[dict[str, Any]] = []
     for row in rows:
         period = row.get("period")
@@ -94,7 +84,7 @@ def _bls_yoy_from_index(points: dict[str, float]) -> list[dict[str, Any]]:
 
 
 def fetch_cpi_bls(*, start_year: int = 2008) -> FetchResult:
-    end_year = _today_shanghai().year
+    end_year = today_local_date().year
     points, errors = bls.fetch_cpi_index_points(start_year=start_year, end_year=end_year)
     rows = _bls_yoy_from_index(points)
     records = _normalize_cpi_rows(rows)
@@ -109,46 +99,10 @@ def fetch_cpi_bls(*, start_year: int = 2008) -> FetchResult:
 
 def fetch_cpi() -> FetchResult:
     """CPI：东财主源，失败/空/明显滞后时回退 BLS。"""
-    primary = fetch_cpi_eastmoney()
-    expected_lag_ok = False
-    if primary.ok and primary.records:
-        latest = primary.records[-1]["period"]
-        today = _today_shanghai()
-        try:
-            ly, lm = int(latest[:4]), int(latest[5:7])
-            months_behind = (today.year - ly) * 12 + (today.month - lm)
-            expected_lag_ok = 0 <= months_behind <= 3
-        except (TypeError, ValueError):
-            expected_lag_ok = False
-
-    if primary.ok and primary.records and expected_lag_ok:
-        return primary
-
-    logger.warning(
-        "CPI 主源不可用或滞后，回退 BLS (ok=%s records=%s lag_ok=%s errors=%s)",
-        primary.ok,
-        len(primary.records),
-        expected_lag_ok,
-        primary.errors,
-    )
-    fallback = fetch_cpi_bls()
-    if fallback.ok and fallback.records:
-        if not primary.ok:
-            logger.info("CPI 使用 BLS 备源（主源错误: %s）", primary.error_summary())
-        return fallback
-    if primary.records:
-        primary.ok = False
-        primary.errors.append(fallback.error_summary() or "BLS 回退失败")
-        return primary
-    return FetchResult.failure(
-        "; ".join(
-            filter(
-                None,
-                [
-                    primary.error_summary(),
-                    fallback.error_summary(),
-                    "CPI 主备源均失败",
-                ],
-            )
-        )
+    return with_fallback(
+        fetch_cpi_eastmoney(),
+        fetch_cpi_bls,
+        max_lag_months=3,
+        label="CPI",
+        fallback_error_label="BLS 回退失败",
     )
