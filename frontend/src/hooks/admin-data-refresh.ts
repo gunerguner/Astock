@@ -28,6 +28,7 @@ function getDatasetLabels(): Record<PhaseKey, string> {
     global_assets: t('adminRefresh.dataset.globalAssets'),
     us_macro: t('adminRefresh.dataset.usMacro'),
     cn_macro: t('adminRefresh.dataset.cnMacro'),
+    market_overview: t('adminRefresh.dataset.marketOverview'),
   };
 }
 

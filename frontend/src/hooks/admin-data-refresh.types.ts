@@ -31,6 +31,7 @@ export const PHASE_ORDER: PhaseKey[] = [
   'global_assets',
   'us_macro',
   'cn_macro',
+  'market_overview',
 ];
 
 export function isPhaseKey(value: string | undefined): value is PhaseKey {
@@ -40,7 +41,8 @@ export function isPhaseKey(value: string | undefined): value is PhaseKey {
     value === 'stock' ||
     value === 'global_assets' ||
     value === 'us_macro' ||
-    value === 'cn_macro'
+    value === 'cn_macro' ||
+    value === 'market_overview'
   );
 }
 
@@ -89,6 +91,14 @@ export function createInitialProgressState(): RefreshProgressState {
       },
       cn_macro: {
         phase: 'cn_macro',
+        label: '',
+        status: 'pending',
+        current: 0,
+        total: 1,
+        imported: 0,
+      },
+      market_overview: {
+        phase: 'market_overview',
         label: '',
         status: 'pending',
         current: 0,

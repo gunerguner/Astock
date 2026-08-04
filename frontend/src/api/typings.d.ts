@@ -197,11 +197,18 @@ declare namespace API {
     global_assets?: ImportResultItem;
     us_macro?: ImportResultItem;
     cn_macro?: ImportResultItem;
+    market_overview?: ImportResultItem;
     status: ImportStatus;
   };
 
   type ImportPhaseKey =
-    'turnover' | 'point' | 'stock' | 'global_assets' | 'us_macro' | 'cn_macro';
+    | 'turnover'
+    | 'point'
+    | 'stock'
+    | 'global_assets'
+    | 'us_macro'
+    | 'cn_macro'
+    | 'market_overview';
 
   type ImportProgressEvent = {
     phase: ImportPhaseKey;

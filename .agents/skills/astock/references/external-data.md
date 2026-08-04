@@ -194,7 +194,7 @@ class FetchResult:
 | `POST /admin/data/import/stream?dataset=global_assets` | `imports/global_assets.py` | akshare ATH + recent closes | SQLite + Redis；`is_multi_market_synced` 跳过 |
 | `POST /admin/data/import/stream?dataset=us_macro` | `imports/us_macro` → `_macro_domain` | CPI：东财→BLS；利率：FRED→Fed 官网 | SQLite `macro_value` + `sync_meta.us_macro`；月频期望水位 |
 | `POST /admin/data/import/stream?dataset=cn_macro` | `imports/cn_macro` → `_macro_domain` | akshare 东财 CPI/PPI/PMI/消费者信心 | SQLite `macro_value` + `sync_meta.cn_macro`；月频期望水位 |
-| `POST /admin/data/import/stream?dataset=all` | `import_orchestrator` | baostock 三段共享 login；之后全球资产、美国宏观、中国宏观在主线程串行；结束后 `warmup_market_overview` | 六阶段各自跳过；概览预热仅补落后项 |
+| `POST /admin/data/import/stream?dataset=all` | `import_orchestrator` | baostock 三段共享 login；之后全球资产、美国宏观、中国宏观在主线程串行；最后 `warmup_market_overview` 作为第 7 阶段上报进度 | 前六阶段各自可跳过；概览预热仅补落后项 |
 | `GET /analysis/asset-price-levels` | `queries/global_asset.py` | 读 DB + Redis（miss 时 akshare 补拉） | 每股按 `us` 结算过滤；`force_refresh` 全部重拉；Redis TTL 86400s |
 | `GET /analysis/market-overview` | `queries/market_overview/service` | Redis（未覆盖结算日 / 不足时：本地 point/全球资产 → `fetch_all_items`） | 每项独立锚点；`closes_cover_settled` 复用；失败冷却 300s；`force_refresh` 全部重拉 |
 | `GET /analysis/us-macro?start=YYYY-MM` | `queries/us_macro` | **无外部请求**，读取长表并 pivot CPI/利率 | SQLite；尾部截到最新 CPI 月份 |
@@ -372,7 +372,7 @@ flowchart TD
 
 ### 7.5 全球市场概览（18 项，6 类）
 
-**页面**：全球市场概览。**无独立 SQLite 导入阶段**；打开页面或 `force_refresh` 时按需回填 Redis。管理员 `dataset=all` 结束后会 `warmup_market_overview`（增量 ensure）。前端管理员刷新后默认 `force_refresh=false`（只补落后项）。
+**页面**：全球市场概览。**无独立 SQLite 导入阶段**；打开页面或 `force_refresh` 时按需回填 Redis。管理员 `dataset=all` 的第 7 阶段会 `warmup_market_overview`（增量 ensure）。前端管理员刷新后默认 `force_refresh=false`（只补落后项）。
 
 ```mermaid
 flowchart TD
@@ -407,7 +407,7 @@ flowchart TD
 | 锚点日 / 当前价 | **按项独立** `anchor_date_for_closes` → 该日收盘价即「当前价」 |
 | `latest_trading_date` | 响应优先 `resolve_latest_trading_date(...)`，兜底 `last_settled_date("cn")` |
 | 并发 | 美债单独批量；其余 **darwin 串行 / Linux 线程池 max 4**；日志含 `key/source/elapsed` 便于线上核对 |
-| 预热 | `dataset=all` 六阶段结束后调用 `warmup_market_overview` |
+| 预热 | `dataset=all` 第 7 阶段 `market_overview` 调用 `warmup_market_overview` |
 
 **source → market 映射**（`datetime_utils._MARKET_SOURCE`）：
 
@@ -525,11 +525,11 @@ flowchart TD
 
 ### 7.10 全量刷新编排（`dataset=all`）
 
-SSE 进度按固定顺序上报：`turnover` → `point` → `stock` → `global_assets` → `us_macro` → `cn_macro`。墙钟上有三处优化：
+SSE 进度按固定顺序上报：`turnover` → `point` → `stock` → `global_assets` → `us_macro` → `cn_macro` → `market_overview`。墙钟上有三处优化：
 
 1. **共享 baostock 登录**：`baostock_session_hold()` 包住成交额 / 点位 / 个股三段；嵌套的 `baostock_session()` 可重入，整段只 login/logout 一次。hold 本身不 login——若三段均 skip 则不触网。
 2. **akshare / HTTP 宏观串行**：`global_assets`、`us_macro`、`cn_macro` 在 baostock 段之后于**主线程依次调用**。全球资产和中国宏观均含 akshare，不用线程池预拉，避免 macOS mini_racer fatal/挂死；也不对 baostock 开多线程。
-3. **市场概览预热**：六阶段结束后调用 `warmup_market_overview()`（`force_refresh=False`），把 A 股 point / GC·SI 缓存写入概览 Redis，用户首次打开尽量零外网。
+3. **市场概览预热**：作为第 7 阶段调用 `warmup_market_overview()`（`force_refresh=False`），把 A 股 point / GC·SI 缓存写入概览 Redis，用户首次打开尽量零外网；进度弹窗可见，避免收尾空白等待。
 
 每阶段经 `ProgressReporter` 推送 SSE `progress` 事件（`phase` / `imported` / `elapsed` / `last_date`）。`stock` 阶段为生成器，步骤间 `SSEBridge` 保活。
 

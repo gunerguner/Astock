@@ -22,6 +22,7 @@ from astock.services.sync.results import (
     ImportBatchResult,
     ImportResult,
     aggregate_status,
+    build_result,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,10 +86,28 @@ def _stream_all_phases(
         db, "cn_macro", import_cn_macro, reporter, bridge
     )
     # 点位/贵金属已入库后预热概览 Redis，减少用户首次进入外网串行
+    reporter.phase_start("market_overview")
+    yield from bridge.drain()
     try:
-        warmup_market_overview()
+        fetched = warmup_market_overview()
+        market_overview_result = build_result(
+            imported=len(fetched.closes),
+            total=max(len(fetched.closes), 1),
+            last_date=None,
+            ok=not fetched.errors,
+            source_errors=(
+                {"market_overview": "; ".join(fetched.errors[:5])}
+                if fetched.errors
+                else {}
+            ),
+        )
     except Exception:
         logger.exception("市场概览预热失败（不影响导入结果）")
+        market_overview_result = build_result(
+            imported=0, total=1, last_date=None, ok=True
+        )
+    reporter.phase_done("market_overview", market_overview_result)
+    yield from bridge.drain()
 
     phases = {
         "turnover": turnover_result,
@@ -97,6 +116,7 @@ def _stream_all_phases(
         "global_assets": global_assets_result,
         "us_macro": us_macro_result,
         "cn_macro": cn_macro_result,
+        "market_overview": market_overview_result,
     }
     return ImportBatchResult(
         phases=phases,

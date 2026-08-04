@@ -125,9 +125,11 @@
       item.status === 'done' ||
       item.status === 'failed'
     ) {
-      return `${item.imported.toLocaleString()} ${t(
-        'adminRefresh.progress.rows',
-      )}`;
+      const unit =
+        key === 'market_overview'
+          ? t('adminRefresh.progress.items')
+          : t('adminRefresh.progress.rows');
+      return `${item.imported.toLocaleString()} ${unit}`;
     }
     return item.detail || '—';
   }

@@ -115,7 +115,7 @@ description: Astock A股、全球资产与中美宏观数据平台的开发约�
 | 中国宏观 | `datasets/macro/china.py` + `imports/cn_macro.py` + `queries/cn_macro.py` | CPI/PPI 同比、制造业/非制造业 PMI、消费者信心（月频） |
 | 美国宏观 | `datasets/macro/{common,us_cpi,us_rates}.py` + `imports/us_macro.py` | CPI 同比、联邦基金目标利率上限（月频；`common.with_fallback` 主备源） |
 | 数据导入 | `services/imports/`（`pipeline` + `stock` + `global_assets`）+ `import_orchestrator` + `sync/` | 增量 upsert + sync_meta；结果类型 `services.sync.results.ImportResult` / `ImportBatchResult` |
-| 管理刷新 | 前端 `admin-refresh-button` + SSE | 6 阶段刷新；密码门（`VITE_ADMIN_REFRESH_PASSWORD`），后端无鉴权 |
+| 管理刷新 | 前端 `admin-refresh-button` + SSE | 7 阶段刷新（含市场概览预热）；密码门（`VITE_ADMIN_REFRESH_PASSWORD`），后端无鉴权 |
 
 ## 配置驱动
 
@@ -209,7 +209,7 @@ cd backend && python -m astock.main          # 默认 :8000
 # 启动前端（dev server 代理 /api → :8000）
 cd frontend && pnpm dev
 
-# SSE 流式导入全部数据集（6 阶段）
+# SSE 流式导入全部数据集（7 阶段，含市场概览预热）
 curl -N -X POST "http://localhost:8000/api/v1/admin/data/import/stream?dataset=all"
 
 # 单独刷新中美宏观
@@ -226,7 +226,7 @@ curl -N -X POST "http://localhost:8000/api/v1/admin/data/import/stream?dataset=u
 - 是否修改模型：`sync/store.batch_upsert` 与 `sync/status` 是否覆盖
 - 是否修改外部源：providers 是否只做外部访问；datasets 是否仍只标准化不写库；失败行为是否符合 `FetchResult` 约定
 - 是否修改宏观指标：`models/macro.py`、长表写入、查询 pivot、Pydantic/TS 类型、图表 series 是否全部联动
-- 是否修改导入阶段：后端枚举/编排/同步状态与前端 6 阶段进度类型、文案是否同步
+- 是否修改导入阶段：后端枚举/编排/同步状态与前端 7 阶段进度类型、文案是否同步
 - 是否修改 YAML 配置：重启 backend 后导入/展示是否正确
 - 是否修改前端路由或静态资源：是否验证 Docker frontend 重建流程
 

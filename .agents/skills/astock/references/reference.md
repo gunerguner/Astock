@@ -242,7 +242,7 @@ class ApiResponse(BaseModel, Generic[T]):
 
 后端内部全程使用 `ImportResult` dataclass（定义于 `services/sync/results.py`）；仅 SSE 序列化边界调用 `.to_dict()`。`ProgressReporter.phase_done` 只收 `ImportResult`，`done` 收实现 `to_dict()` 的对象（`ImportResult` / `ImportBatchResult`）。
 
-前端通过 `refreshAllDataStream()`（`admin.ts`）消费，`useAdminDataRefresh` 按 `turnover → point → stock → global_assets → us_macro → cn_macro` 驱动六阶段进度弹窗。全部阶段在后端主流程串行执行；前三段共享 baostock session。
+前端通过 `refreshAllDataStream()`（`admin.ts`）消费，`useAdminDataRefresh` 按 `turnover → point → stock → global_assets → us_macro → cn_macro → market_overview` 驱动七阶段进度弹窗。全部阶段在后端主流程串行执行；前三段共享 baostock session。
 
 #### GET `/data/sync-status`
 
@@ -393,7 +393,7 @@ class ApiResponse(BaseModel, Generic[T]):
 
 - 导航栏 `admin-refresh-button`：前端密码门（`VITE_ADMIN_REFRESH_PASSWORD`），**后端无鉴权**
 - 开发默认密码见 `.env.development`；生产经 Docker 构建期注入
-- `useAdminDataRefresh` + `refresh-progress-modal`：SSE 六阶段进度弹窗；完成并关闭后 `emitDataRefresh` 通知各页 reload
+- `useAdminDataRefresh` + `refresh-progress-modal`：SSE 七阶段进度弹窗；完成并关闭后 `emitDataRefresh` 通知各页 reload
 
 ### 环境变量
 
