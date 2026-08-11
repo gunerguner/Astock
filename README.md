@@ -2,6 +2,8 @@
 
 Astock 是一个 **A 股历史行情 + 全球资产水位 + 中美宏观** 分析平台：从外部数据源增量拉取行情与宏观指标，缓存到本地 SQLite / Redis，再通过 Web 页面做牛市统计、成交额排名、全球资产价格水位、市场概览与中美宏观图表。
 
+**预览**：[https://astock.zhangzhicheng.info/](https://astock.zhangzhicheng.info/)
+
 ## 功能一览
 
 
