@@ -67,48 +67,42 @@
     return `${start} ${t('pages.marketOverview.periodTo')} ${end}`;
   };
 
+  const minDate = (values: Array<string | null | undefined>) => {
+    const dates = values.filter((value): value is string => Boolean(value));
+    return dates.length > 0 ? dates.reduce((a, b) => (a < b ? a : b)) : null;
+  };
+
+  const maxDate = (values: Array<string | null | undefined>) => {
+    const dates = values.filter((value): value is string => Boolean(value));
+    return dates.length > 0 ? dates.reduce((a, b) => (a > b ? a : b)) : null;
+  };
+
   /** 债券、汇率展示到小数点后 3 位 */
   const priceDigitsForRow = (key: string) =>
     key.startsWith('bonds:') || key.startsWith('forex:') ? 3 : 2;
 
   const tableRows = computed<TableRow[]>(() => {
     const categories = overview.value?.categories ?? [];
-    const rows: TableRow[] = [];
-
-    categories.forEach((cat) => {
+    return categories.flatMap((cat) => {
       const validItems = cat.items.filter(
         (item): item is API.MarketOverviewDataItem =>
           !isMarketOverviewError(item),
       );
-      const periodStarts = validItems
-        .map((item) => item.period_start)
-        .filter((value): value is string => Boolean(value));
-      const periodEnds = validItems
-        .map((item) => item.period_end)
-        .filter((value): value is string => Boolean(value));
-      const periodStart =
-        periodStarts.length > 0
-          ? periodStarts.reduce((a, b) => (a < b ? a : b))
-          : null;
-      const periodEnd =
-        periodEnds.length > 0
-          ? periodEnds.reduce((a, b) => (a > b ? a : b))
-          : null;
-      const periodText = formatPeriod(periodStart, periodEnd);
+      const periodText = formatPeriod(
+        minDate(validItems.map((item) => item.period_start)),
+        maxDate(validItems.map((item) => item.period_end)),
+      );
 
-      rows.push({
-        key: `divider-${cat.key}`,
-        rowKind: 'divider',
-        label: cat.name,
-        periodText,
-      });
-
-      cat.items.forEach((item) => {
-        rows.push({ ...item, rowKind: 'data' });
-      });
+      return [
+        {
+          key: `divider-${cat.key}`,
+          rowKind: 'divider' as const,
+          label: cat.name,
+          periodText,
+        },
+        ...cat.items.map((item) => ({ ...item, rowKind: 'data' as const })),
+      ];
     });
-
-    return rows;
   });
 
   const guardDataRow = (record: TableData) => {

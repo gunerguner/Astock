@@ -78,13 +78,16 @@
     formatLatestDateMeta(levels.value?.latest_trading_date),
   );
 
-  const conclusionColor = (conclusion: API.PriceLevelConclusion) => {
-    if (conclusion === 'pending') return 'gray';
-    if (conclusion === 'nearAth') return 'arcoblue';
-    if (conclusion === 'moderatePullback') return 'gold';
-    if (conclusion === 'significantPullback') return 'orangered';
-    return 'red';
+  const CONCLUSION_COLORS: Record<API.PriceLevelConclusion, string> = {
+    pending: 'gray',
+    nearAth: 'arcoblue',
+    moderatePullback: 'gold',
+    significantPullback: 'orangered',
+    deepPullback: 'red',
   };
+
+  const conclusionColor = (conclusion: API.PriceLevelConclusion) =>
+    CONCLUSION_COLORS[conclusion] ?? 'red';
 
   const isFocusedTicker = (ticker: string) => FOCUSED_TICKERS.has(ticker);
 
@@ -95,34 +98,25 @@
 
   const tableRows = computed<TableRow[]>(() => {
     const items = levels.value?.items ?? [];
-    const groups = {
-      pendingStocks: [] as TableRow[],
-      normalStocks: [] as API.PriceLevelDataItem[],
-      metals: [] as API.PriceLevelDataItem[],
-    };
-
-    items.forEach((item) => {
-      if (isPriceLevelPending(item)) {
-        if (item.asset_type === 'stock') {
-          groups.pendingStocks.push({ ...item, key: item.ticker });
-        }
-        return;
-      }
-      if (item.asset_type === 'metal') {
-        groups.metals.push(item);
-      } else {
-        groups.normalStocks.push(item);
-      }
-    });
+    const pendingStocks = items
+      .filter(
+        (item) => isPriceLevelPending(item) && item.asset_type === 'stock',
+      )
+      .map((item) => ({ ...item, key: item.ticker }));
+    const settled = items.filter(
+      (item): item is API.PriceLevelDataItem => !isPriceLevelPending(item),
+    );
+    const normalStocks = settled.filter((item) => item.asset_type !== 'metal');
+    const metalItems = settled.filter((item) => item.asset_type === 'metal');
 
     const stocks = [
-      ...groups.pendingStocks,
-      ...groups.normalStocks.sort(sortByPercentageDiff).map((item) => ({
+      ...pendingStocks,
+      ...normalStocks.sort(sortByPercentageDiff).map((item) => ({
         ...item,
         key: item.ticker,
       })),
     ];
-    const metals = groups.metals.sort(sortByPercentageDiff).map((item) => ({
+    const metals = metalItems.sort(sortByPercentageDiff).map((item) => ({
       ...item,
       key: item.ticker,
     }));

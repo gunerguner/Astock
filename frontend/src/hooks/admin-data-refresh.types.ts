@@ -47,65 +47,22 @@ export function isPhaseKey(value: string | undefined): value is PhaseKey {
 }
 
 export function createInitialProgressState(): RefreshProgressState {
+  const phases = Object.fromEntries(
+    PHASE_ORDER.map((phase) => [
+      phase,
+      {
+        phase,
+        label: '',
+        status: 'pending' as const,
+        current: 0,
+        total: phase === 'stock' ? 0 : 1,
+        imported: 0,
+      },
+    ]),
+  ) as Record<PhaseKey, PhaseState>;
+
   return {
-    phases: {
-      turnover: {
-        phase: 'turnover',
-        label: '',
-        status: 'pending',
-        current: 0,
-        total: 1,
-        imported: 0,
-      },
-      point: {
-        phase: 'point',
-        label: '',
-        status: 'pending',
-        current: 0,
-        total: 1,
-        imported: 0,
-      },
-      stock: {
-        phase: 'stock',
-        label: '',
-        status: 'pending',
-        current: 0,
-        total: 0,
-        imported: 0,
-      },
-      global_assets: {
-        phase: 'global_assets',
-        label: '',
-        status: 'pending',
-        current: 0,
-        total: 1,
-        imported: 0,
-      },
-      us_macro: {
-        phase: 'us_macro',
-        label: '',
-        status: 'pending',
-        current: 0,
-        total: 1,
-        imported: 0,
-      },
-      cn_macro: {
-        phase: 'cn_macro',
-        label: '',
-        status: 'pending',
-        current: 0,
-        total: 1,
-        imported: 0,
-      },
-      market_overview: {
-        phase: 'market_overview',
-        label: '',
-        status: 'pending',
-        current: 0,
-        total: 1,
-        imported: 0,
-      },
-    },
+    phases,
     completedCount: 0,
     totalPhases: PHASE_ORDER.length,
     overallStatus: 'idle',

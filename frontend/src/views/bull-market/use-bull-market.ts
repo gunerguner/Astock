@@ -98,20 +98,21 @@ export default function useBullMarket() {
 
     return base.map((item) => {
       const turnoverItem = turnoverByMarket.get(item.market);
-      const indices = POINT_INDEX_CODES.reduce<Record<string, IndexCell>>(
-        (acc, code) => {
+      const indices = Object.fromEntries(
+        POINT_INDEX_CODES.map((code) => {
           const indexItem = pointStatsByIndex.value
             .get(code)
             ?.items.find((entry) => entry.market === item.market);
-          acc[code] = {
-            days: indexItem?.days ?? null,
-            max: indexItem?.max_value ?? null,
-            notAvailable: indexItem?.not_available ?? false,
-          };
-          return acc;
-        },
-        {},
-      );
+          return [
+            code,
+            {
+              days: indexItem?.days ?? null,
+              max: indexItem?.max_value ?? null,
+              notAvailable: indexItem?.not_available ?? false,
+            },
+          ] as const;
+        }),
+      ) as Record<string, IndexCell>;
 
       return {
         market: item.market,
