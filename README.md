@@ -203,7 +203,20 @@ pnpm dev
 
 日常浏览六个菜单页即可验证功能，无需先记 API。需要调试接口时再打开 `http://127.0.0.1:8000/docs`。
 
-### 6. 本地开发检查清单
+### 6. 运行测试
+
+前后端各有一套零外部依赖的自动化测试（内存数据库、不出网），统一从仓库根目录触发：
+
+```bash
+make test            # 前后端全量（首选回归命令）
+make test-backend    # 仅后端 pytest（backend/tests/）
+make test-frontend   # 仅前端 vitest（frontend/tests/）
+make check           # 测试 + 前端 lint/type:check
+```
+
+测试约定（位置禁区、改动范围对应命令、mock 规则）见 `.agents/skills/astock/references/testing.md`。
+
+### 7. 本地开发检查清单
 
 - [ ] Redis 在 `6379` 可连
 - [ ] `backend/.env` 已从 `.env.example` 复制

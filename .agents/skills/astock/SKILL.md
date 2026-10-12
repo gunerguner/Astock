@@ -236,3 +236,4 @@ curl -N -X POST "http://localhost:8000/api/v1/admin/data/import/stream?dataset=u
 |------|------|
 | API 字段 / 前端 / 部署 / 同步缓存 / 排障 | [reference.md](.agents/skills/astock/references/reference.md) |
 | 外部数据源 / providers + datasets 层 / 调用路径 / 失败行为 | [external-data.md](.agents/skills/astock/references/external-data.md) |
+| 自动化测试 / 回归命令(`make test`) / 测试位置禁区 | [testing.md](.agents/skills/astock/references/testing.md) |
