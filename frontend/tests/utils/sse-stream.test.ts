@@ -133,7 +133,7 @@ describe('streamPost(SSE POST 解析)', () => {
     const onError = vi.fn();
     streamPost('/stream', { onError });
     await flush();
-    expect(onError).toHaveBeenCalledWith({ message: '上游失败' });
+    expect(onError).toHaveBeenCalledWith({ message: '上游失败', status: 502 });
   });
 
   test('HTTP 非 2xx 且无 JSON 时回退状态码文案', async () => {
@@ -151,7 +151,10 @@ describe('streamPost(SSE POST 解析)', () => {
     const onError = vi.fn();
     streamPost('/stream', { onError });
     await flush();
-    expect(onError).toHaveBeenCalledWith({ message: '请求失败 (500)' });
+    expect(onError).toHaveBeenCalledWith({
+      message: '请求失败 (500)',
+      status: 500,
+    });
   });
 
   test('流关闭但无终态事件 → 连接意外断开', async () => {

@@ -33,6 +33,7 @@ services:
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-}
       GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-300}
       GUNICORN_LOG_LEVEL: ${GUNICORN_LOG_LEVEL:-info}
+      ADMIN_REFRESH_PASSWORD: ${ADMIN_REFRESH_PASSWORD:-}
     volumes:
       - ${SQLITE_HOST_DIR:-./sqlite-data}:/app/data
       - log_data:/var/log/astock
@@ -43,8 +44,6 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.frontend
-      args:
-        VITE_ADMIN_REFRESH_PASSWORD: ${VITE_ADMIN_REFRESH_PASSWORD:-change-me}
     image: astock-frontend:local
     container_name: astock-frontend
     restart: unless-stopped

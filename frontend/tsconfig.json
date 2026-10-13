@@ -23,7 +23,6 @@
     "src/**/*.tsx",
     "src/**/*.vue",
     "config/**/*.ts",
-    "components.d.ts",
     "src/env.d.ts"
   ],
   "exclude": ["node_modules", "dist"]

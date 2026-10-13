@@ -93,6 +93,7 @@ class Settings(BaseSettings):
     app_version: str = "1.0.0"
     cors_methods: list[str] = ["*"]
     cors_headers: list[str] = ["*"]
+    admin_refresh_password: str = ""
 
     @field_validator("cors_origins", "cors_methods", "cors_headers", mode="before")
     @classmethod

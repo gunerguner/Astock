@@ -62,29 +62,25 @@ description: Astock A股、全球资产与中美宏观数据平台的开发约�
 │   │   │   └── us-macro-data/       # 美国 CPI 与联邦基金目标利率上限
 │   │   ├── router/
 │   │   │   ├── index.ts
-│   │   │   ├── guard/               # 路由守卫
 │   │   │   └── routes/
 │   │   │       ├── base.ts          # DEFAULT_LAYOUT
 │   │   │       └── modules/main.ts  # 6 子路由，/ → /bull-market
 │   │   ├── components/
 │   │   │   ├── navbar/              # 顶栏（含 admin-refresh-button）
-│   │   │   ├── menu/、breadcrumb/、tab-bar/、footer/  # Pro 布局组件
-│   │   │   └── admin-refresh-button/  # 密码门 + SSE 全量刷新 + 进度弹窗
+│   │   │   ├── menu/、footer/
+│   │   │   └── admin-refresh-button/  # 密码输入 + SSE 全量刷新 + 进度弹窗
 │   │   ├── hooks/
 │   │   │   ├── admin-data-refresh.ts  # 流式导入状态机 + 完成后通知
-│   │   │   ├── use-macro-line-chart.ts # ECharts 生命周期/暗色/resize
-│   │   │   └── loading.ts、request.ts、themes.ts 等
+│   │   │   └── use-macro-line-chart.ts # ECharts 生命周期/暗色/resize
 │   │   ├── utils/
 │   │   │   ├── format.ts      # formatAmount / formatPoint / formatPeriod
 │   │   │   ├── sync-meta.ts   # 卡片 extra 同步状态文案
 │   │   │   ├── sse-stream.ts  # 通用 SSE POST 解析
 │   │   │   └── data-refresh.ts # mitt 事件总线，刷新后各页 reload
 │   │   ├── layout/            # default-layout.vue、page-layout.vue
-│   │   ├── store/modules/     # app / user / tab-bar（Pro 脚手架状态）
 │   │   ├── locale/            # zh-CN / en-US 菜单与设置文案
-│   │   ├── config/settings.json   # 主题色、menuWidth、navbar 开关
 │   │   └── assets/style/      # global.less、breakpoint.less
-│   ├── .env.development       # VITE_ADMIN_REFRESH_PASSWORD 等
+│   ├── .env.development       # VITE_API_BASE_URL
 │   ├── .env.production
 │   ├── index.html
 │   └── package.json           # pnpm；husky + commitlint
@@ -115,7 +111,7 @@ description: Astock A股、全球资产与中美宏观数据平台的开发约�
 | 中国宏观 | `datasets/macro/china.py` + `imports/cn_macro.py` + `queries/cn_macro.py` | CPI/PPI 同比、制造业/非制造业 PMI、消费者信心（月频） |
 | 美国宏观 | `datasets/macro/{common,us_cpi,us_rates}.py` + `imports/us_macro.py` | CPI 同比、联邦基金目标利率上限（月频；`common.with_fallback` 主备源） |
 | 数据导入 | `services/imports/`（`pipeline` + `stock` + `global_assets`）+ `import_orchestrator` + `sync/` | 增量 upsert + sync_meta；结果类型 `services.sync.results.ImportResult` / `ImportBatchResult` |
-| 管理刷新 | 前端 `admin-refresh-button` + SSE | 7 阶段刷新（含市场概览预热）；密码门（`VITE_ADMIN_REFRESH_PASSWORD`），后端无鉴权 |
+| 管理刷新 | 前端 `admin-refresh-button` + SSE | 7 阶段刷新（含市场概览预热）；导入接口校验请求头 `X-Admin-Password`，密码为后端环境变量 `ADMIN_REFRESH_PASSWORD` |
 
 ## 配置驱动
 

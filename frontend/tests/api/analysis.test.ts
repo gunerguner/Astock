@@ -85,8 +85,13 @@ describe('URL 与参数构造', () => {
     });
   });
 
-  test('美国宏观默认起点 2020-06;中国宏观无 start 时不带 query', async () => {
+  test('中美宏观无 start 时不带 query', async () => {
     await fetchUsMacroData();
+    expect(getMock).toHaveBeenCalledWith('/analysis/us-macro', {
+      params: undefined,
+    });
+
+    await fetchUsMacroData('2020-06');
     expect(getMock).toHaveBeenCalledWith('/analysis/us-macro', {
       params: { start: '2020-06' },
     });
@@ -109,8 +114,9 @@ describe('联合类型守卫', () => {
       ticker: 'SPCX',
       name: 'SpaceX',
       asset_type: 'stock',
+      conclusion: 'pending',
       data_pending: true,
-    };
+    } satisfies API.PriceLevelPendingItem;
     const normal = {
       ticker: 'AAPL',
       name: '苹果',
@@ -120,22 +126,31 @@ describe('联合类型守卫', () => {
       ath_date: '2024-12-16',
       percentage_diff: -16.67,
       ath_days: 100,
+      daily_change: null,
+      weekly_change: null,
       conclusion: 'moderatePullback',
-    };
+    } satisfies API.PriceLevelDataItem;
     expect(isPriceLevelPending(pending)).toBe(true);
     expect(isPriceLevelPending(normal)).toBe(false);
   });
 
   test('isMarketOverviewError 仅认 error 字段', () => {
-    const errorItem = { key: 'k', name: 'n', code: 'c', error: '数据获取失败' };
+    const errorItem = {
+      key: 'k',
+      name: 'n',
+      code: 'c',
+      error: '数据获取失败',
+    } satisfies API.MarketOverviewErrorItem;
     const normal = {
       key: 'k',
       name: 'n',
       code: 'c',
       current_price: 1,
+      daily_change: null,
+      weekly_change: null,
       period_start: 'd1',
       period_end: 'd2',
-    };
+    } satisfies API.MarketOverviewDataItem;
     expect(isMarketOverviewError(errorItem)).toBe(true);
     expect(isMarketOverviewError(normal)).toBe(false);
   });

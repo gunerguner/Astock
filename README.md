@@ -147,6 +147,7 @@ cp .env.example .env
 | `REDIS_URL`             | `redis://localhost:6379/0` | Redis                    |
 | `LOG_LEVEL` / `LOG_DIR` | `INFO` / `logs`            | 日志                       |
 | `ASSET_PRICE_CACHE_TTL` | `86400`                    | 全球资产等缓存 TTL（秒）           |
+| `ADMIN_REFRESH_PASSWORD` | 空                         | 管理端导入密码。留空时导入接口拒绝        |
 
 
 历史起始日、成交额阈值、个股 TopN 等业务常量在 `backend/astock/config.py` 与同目录 YAML 中，不是 `.env`。
@@ -179,7 +180,6 @@ pnpm install
 | 变量                            | 说明                                                     |
 | ----------------------------- | ------------------------------------------------------ |
 | `VITE_API_BASE_URL`           | 开发保持为空；请求走同源 `/api`，由 Vite 代理到 `http://localhost:8000` |
-| `VITE_ADMIN_REFRESH_PASSWORD` | 页面「刷新全部数据」确认密码（前端门禁，后端无鉴权）                             |
 
 
 启动：
@@ -195,7 +195,7 @@ pnpm dev
 刚启动时各页多为空，需要先导入历史数据：
 
 1. 打开前端页面，点导航栏右上角的 **刷新** 按钮（「刷新全部数据」）。
-2. 输入 `frontend/.env.development` 里配置的 `VITE_ADMIN_REFRESH_PASSWORD`。
+2. 输入 `backend/.env` 里配置的 `ADMIN_REFRESH_PASSWORD`。
 3. 确认后会出现 SSE 进度弹窗，依次导入成交额、指数点位、个股切片、全球资产、美/中宏观等；**首次全量可能较久**（个股阶段最慢），请保持网络畅通。
 4. 完成后各业务页会自动 reload；之后可按需再刷新做增量。
 

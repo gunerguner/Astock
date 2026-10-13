@@ -10,7 +10,7 @@
         </div>
       </a-space>
     </div>
-    <div v-if="showMenu" class="center-side">
+    <div class="center-side">
       <Menu />
     </div>
     <ul class="right-side">
@@ -29,9 +29,9 @@
       <li>
         <a-tooltip
           :content="
-            theme === 'light'
-              ? $t('settings.navbar.theme.toDark')
-              : $t('settings.navbar.theme.toLight')
+            isDark
+              ? $t('settings.navbar.theme.toLight')
+              : $t('settings.navbar.theme.toDark')
           "
         >
           <a-button
@@ -40,7 +40,7 @@
             @click="handleToggleTheme"
           >
             <template #icon>
-              <icon-moon-fill v-if="theme === 'dark'" />
+              <icon-moon-fill v-if="isDark" />
               <icon-sun-fill v-else />
             </template>
           </a-button>
@@ -54,16 +54,12 @@
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useDark, useToggle } from '@vueuse/core';
-  import { useAppStore } from '@/store';
   import useLocale from '@/hooks/locale';
   import Menu from '@/components/menu/index.vue';
   import AdminRefreshButton from '@/components/admin-refresh-button/index.vue';
 
-  const appStore = useAppStore();
   const { t } = useI18n();
   const { currentLocale, toggleLocale } = useLocale();
-  const theme = computed(() => appStore.theme);
-  const showMenu = computed(() => appStore.menu);
   const localeToggleHint = computed(() =>
     currentLocale.value === 'zh-CN'
       ? t('navbar.action.switchToEn')
@@ -75,9 +71,6 @@
     valueDark: 'dark',
     valueLight: 'light',
     storageKey: 'arco-theme',
-    onChanged(dark: boolean) {
-      appStore.toggleTheme(dark);
-    },
   });
   const toggleTheme = useToggle(isDark);
   const handleToggleTheme = () => {

@@ -1,3 +1,7 @@
+import i18n from '@/locale';
+
+const { t } = i18n.global;
+
 export interface SSEHandlers<
   TProgress = unknown,
   TDone = unknown,
@@ -5,12 +9,13 @@ export interface SSEHandlers<
 > {
   onProgress?: (data: TProgress) => void;
   onDone?: (data: TDone) => void;
-  /** 服务端 error 事件为 TError；本地断连/超时等仅保证有 message */
-  onError?: (data: TError | { message: string }) => void;
+  /** 服务端 error 事件为 TError；本地断连/超时等仅保证有 message。HTTP 失败附带 status */
+  onError?: (data: TError | { message: string; status?: number }) => void;
 }
 
 export interface StreamPostOptions {
   idleTimeoutMs?: number;
+  headers?: Record<string, string>;
 }
 
 function parseSSEFrame(raw: string): { event: string; data: string } | null {
@@ -59,7 +64,7 @@ export function streamPost<
     }
     idleTimer = setTimeout(() => {
       controller.abort();
-      emitLocalError('连接超时');
+      emitLocalError(t('sse.timeout'));
     }, idleTimeoutMs);
   };
 
@@ -108,12 +113,13 @@ export function streamPost<
         method: 'POST',
         headers: {
           Accept: 'text/event-stream',
+          ...options.headers,
         },
         signal: controller.signal,
       });
 
       if (!response.ok) {
-        let message = `请求失败 (${response.status})`;
+        let message = t('sse.httpFailed', { status: response.status });
         try {
           const body = await response.json();
           message = body.message || message;
@@ -121,14 +127,14 @@ export function streamPost<
           // ignore parse error
         }
         receivedTerminalEvent = true;
-        emitLocalError(message);
+        handlers.onError?.({ message, status: response.status });
         return;
       }
 
       const reader = response.body?.getReader();
       if (!reader) {
         receivedTerminalEvent = true;
-        emitLocalError('无法读取响应流');
+        emitLocalError(t('sse.noBody'));
         return;
       }
 
@@ -166,13 +172,14 @@ export function streamPost<
       }
 
       if (!receivedTerminalEvent) {
-        emitLocalError('连接意外断开');
+        emitLocalError(t('sse.disconnected'));
       }
     } catch (error) {
       if (controller.signal.aborted) {
         return;
       }
-      const message = error instanceof Error ? error.message : '网络请求失败';
+      const message =
+        error instanceof Error ? error.message : t('sse.networkFailed');
       emitLocalError(message);
     } finally {
       clearIdleTimer();

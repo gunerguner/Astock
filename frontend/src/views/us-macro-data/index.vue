@@ -5,7 +5,10 @@
         <span v-if="metaText" class="meta-text">{{ metaText }}</span>
       </template>
       <a-spin :loading="loading" class="chart-spin">
-        <div v-if="!loading && !hasData" class="chart-empty">
+        <div v-if="!loading && loadError" class="chart-empty">
+          {{ $t('common.loadFailed') }}
+        </div>
+        <div v-else-if="!loading && !hasData" class="chart-empty">
           {{ $t('pages.usMacroData.noData') }}
         </div>
         <div v-else ref="chartRef" class="chart-canvas" />
@@ -31,8 +34,9 @@
   const {
     loading,
     data: macro,
+    error: loadError,
     run: loadMacro,
-  } = useAsyncRequest(() => fetchUsMacroData('2020-06'));
+  } = useAsyncRequest(() => fetchUsMacroData());
 
   const points = computed<API.UsMacroPointItem[]>(
     () => macro.value?.points ?? [],

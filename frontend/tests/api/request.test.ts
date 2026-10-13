@@ -6,7 +6,7 @@ const { messageMock, interceptors, instanceLike } = vi.hoisted(() => {
   const captured = {
     request: { ok: undefined as unknown, err: undefined as unknown },
     response: {
-      ok: undefined as (response: unknown) => unknown,
+      ok: undefined as unknown as (response: unknown) => unknown,
       err: undefined as unknown,
     },
   };

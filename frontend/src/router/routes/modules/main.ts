@@ -8,7 +8,6 @@ const MAIN: AppRouteRecordRaw = {
   redirect: '/bull-market',
   meta: {
     hideInMenu: true,
-    requiresAuth: false,
     order: 0,
   },
   children: [
@@ -18,8 +17,6 @@ const MAIN: AppRouteRecordRaw = {
       component: () => import('@/views/bull-market/index.vue'),
       meta: {
         locale: 'menu.bullMarket',
-        requiresAuth: false,
-        icon: 'icon-bar-chart',
         order: 1,
       },
     },
@@ -29,8 +26,6 @@ const MAIN: AppRouteRecordRaw = {
       component: () => import('@/views/turnover-rank/index.vue'),
       meta: {
         locale: 'menu.turnoverRank',
-        requiresAuth: false,
-        icon: 'icon-sort',
         order: 2,
       },
     },
@@ -40,8 +35,6 @@ const MAIN: AppRouteRecordRaw = {
       component: () => import('@/views/asset-price-levels/index.vue'),
       meta: {
         locale: 'menu.assetPriceLevels',
-        requiresAuth: false,
-        icon: 'icon-fire',
         order: 3,
       },
     },
@@ -51,8 +44,6 @@ const MAIN: AppRouteRecordRaw = {
       component: () => import('@/views/market-overview/index.vue'),
       meta: {
         locale: 'menu.marketOverview',
-        requiresAuth: false,
-        icon: 'icon-apps',
         order: 4,
       },
     },
@@ -62,8 +53,6 @@ const MAIN: AppRouteRecordRaw = {
       component: () => import('@/views/cn-macro-data/index.vue'),
       meta: {
         locale: 'menu.cnMacroData',
-        requiresAuth: false,
-        icon: 'icon-bar-chart',
         order: 5,
       },
     },
@@ -73,8 +62,6 @@ const MAIN: AppRouteRecordRaw = {
       component: () => import('@/views/us-macro-data/index.vue'),
       meta: {
         locale: 'menu.usMacroData',
-        requiresAuth: false,
-        icon: 'icon-public',
         order: 6,
       },
     },

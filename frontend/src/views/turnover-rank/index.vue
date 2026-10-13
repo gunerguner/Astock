@@ -54,7 +54,8 @@
     syncKey: PanelSyncKey;
     loading: Ref<boolean>;
     data: Ref<RankingResult | null>;
-    run: () => Promise<RankingResult>;
+    error: Ref<unknown>;
+    run: () => Promise<RankingResult | undefined>;
   }
 
   const marketColumns = computed<TableColumnData[]>(() => [

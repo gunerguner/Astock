@@ -15,9 +15,6 @@ RUN pnpm install --frozen-lockfile
 
 COPY frontend ./
 
-ARG VITE_ADMIN_REFRESH_PASSWORD=
-ENV VITE_ADMIN_REFRESH_PASSWORD=${VITE_ADMIN_REFRESH_PASSWORD}
-
 RUN pnpm build
 
 FROM nginx:stable-alpine AS production

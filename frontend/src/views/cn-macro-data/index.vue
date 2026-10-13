@@ -5,7 +5,10 @@
         <span v-if="metaText" class="meta-text">{{ metaText }}</span>
       </template>
       <a-spin :loading="loading" class="chart-spin chart-spin-main">
-        <div v-if="!loading && !cpiHasData" class="chart-empty">
+        <div v-if="!loading && loadError" class="chart-empty">
+          {{ $t('common.loadFailed') }}
+        </div>
+        <div v-else-if="!loading && !cpiHasData" class="chart-empty">
           {{ $t('pages.cnMacroData.noData') }}
         </div>
         <div v-else ref="cpiChartRef" class="chart-canvas chart-canvas-main" />
@@ -19,7 +22,13 @@
       >
         <a-spin :loading="loading" class="chart-spin chart-spin-half">
           <div
-            v-if="!loading && !pmiHasData"
+            v-if="!loading && loadError"
+            class="chart-empty chart-empty-half"
+          >
+            {{ $t('common.loadFailed') }}
+          </div>
+          <div
+            v-else-if="!loading && !pmiHasData"
             class="chart-empty chart-empty-half"
           >
             {{ $t('pages.cnMacroData.noData') }}
@@ -38,7 +47,13 @@
       >
         <a-spin :loading="loading" class="chart-spin chart-spin-half">
           <div
-            v-if="!loading && !consumerHasData"
+            v-if="!loading && loadError"
+            class="chart-empty chart-empty-half"
+          >
+            {{ $t('common.loadFailed') }}
+          </div>
+          <div
+            v-else-if="!loading && !consumerHasData"
             class="chart-empty chart-empty-half"
           >
             {{ $t('pages.cnMacroData.noData') }}
@@ -73,6 +88,7 @@
   const {
     loading,
     data: macro,
+    error: loadError,
     run: loadMacro,
   } = useAsyncRequest(() => fetchCnMacroData());
 

@@ -18,7 +18,7 @@
     :ok-text="$t('adminRefresh.okText')"
     :cancel-text="$t('adminRefresh.cancelText')"
     :ok-button-props="{ status: 'danger' }"
-    @ok="handleConfirm"
+    :on-before-ok="handleConfirm"
     @cancel="handleClose"
     @open="focusPasswordInput"
   >
@@ -41,8 +41,6 @@
   import { useI18n } from 'vue-i18n';
   import RefreshProgressModal from '@/components/refresh-progress-modal/index.vue';
   import useAdminDataRefresh from '@/hooks/admin-data-refresh';
-
-  const CONFIRM_PASSWORD = import.meta.env.VITE_ADMIN_REFRESH_PASSWORD ?? '';
 
   const { t } = useI18n();
   const { refreshAllData, refreshing } = useAdminDataRefresh();
@@ -67,17 +65,18 @@
     inputPassword.value = '';
   }
 
-  function handleConfirm() {
-    if (!CONFIRM_PASSWORD) {
-      Message.error(t('adminRefresh.missingPassword'));
+  async function handleConfirm() {
+    const password = inputPassword.value.trim();
+    if (!password) {
+      Message.error(t('adminRefresh.passwordPlaceholder'));
       return false;
     }
-    if (inputPassword.value !== CONFIRM_PASSWORD) {
-      Message.error(t('adminRefresh.wrongPassword'));
+    const result = await refreshAllData(password);
+    if (!result.accepted) {
+      Message.error(result.message || t('adminRefresh.wrongPassword'));
       return false;
     }
-    handleClose();
-    refreshAllData();
+    inputPassword.value = '';
     return true;
   }
 </script>

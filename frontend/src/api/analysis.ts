@@ -83,10 +83,10 @@ export function fetchMarketOverview(
   });
 }
 
-/** 获取美国宏观月度序列 GET /analysis/us-macro */
-export function fetchUsMacroData(start = '2020-06'): Promise<API.UsMacroData> {
+/** 获取美国宏观月度序列 GET /analysis/us-macro。不传 start 时使用后端默认起点。 */
+export function fetchUsMacroData(start?: string): Promise<API.UsMacroData> {
   return request.get('/analysis/us-macro', {
-    params: { start },
+    params: start ? { start } : undefined,
   });
 }
 

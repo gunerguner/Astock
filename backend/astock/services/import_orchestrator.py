@@ -101,10 +101,14 @@ def _stream_all_phases(
                 else {}
             ),
         )
-    except Exception:
-        logger.exception("市场概览预热失败（不影响导入结果）")
+    except Exception as exc:
+        logger.exception("市场概览预热失败")
         market_overview_result = build_result(
-            imported=0, total=1, last_date=None, ok=True
+            imported=0,
+            total=1,
+            last_date=None,
+            ok=False,
+            source_errors={"market_overview": str(exc)},
         )
     reporter.phase_done("market_overview", market_overview_result)
     yield from bridge.drain()

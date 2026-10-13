@@ -65,7 +65,7 @@
 2. 编辑 `docker/.env`，至少修改：
 
    - **`COMPOSE_PROJECT_NAME`**：默认 `astock`（同机部署时勿删）
-   - **`VITE_ADMIN_REFRESH_PASSWORD`**：页面「刷新全部数据」二次确认码（构建时写入前端，**务必改成非默认值**）
+   - **`ADMIN_REFRESH_PASSWORD`**：页面「刷新全部数据」的确认密码（backend 运行时读取；留空则导入接口拒绝）
    - 若端口冲突，调整 **`FRONTEND_PUBLISH_PORT`** / **`BACKEND_PUBLISH_PORT`**
 
 3. SQLite 数据文件默认位于 `docker/sqlite-data/astock.db`。首次启动会创建空库；**已有数据的库文件可直接拷贝到该目录覆盖**，无需迁移脚本。
@@ -108,15 +108,16 @@ docker compose -f docker/docker-compose.yml --env-file docker/.env build backend
 docker compose -f docker/docker-compose.yml --env-file docker/.env up -d
 ```
 
-修改 `VITE_ADMIN_REFRESH_PASSWORD` 后须 **重建 frontend** 镜像。
+修改 `ADMIN_REFRESH_PASSWORD` 后重启 backend 即可，不必重建 frontend。
 
 ## 数据初始化
 
 1. 启动栈后访问前端页面，或通过 Swagger 调用管理接口。
 2. 首次使用需执行数据导入（耗时较长，个股阶段最久）：
-   - **推荐**：页面右上角「刷新全部数据」→ 输入 `VITE_ADMIN_REFRESH_PASSWORD` → SSE 四阶段进度弹窗（`POST /api/v1/admin/data/import/stream`）
+   - **推荐**：页面右上角「刷新全部数据」→ 输入 `ADMIN_REFRESH_PASSWORD` → SSE 七阶段进度弹窗（`POST /api/v1/admin/data/import/stream`）
    ```bash
-   curl -N -X POST http://127.0.0.1:8002/api/v1/admin/data/import/stream?dataset=all
+   curl -N -X POST http://127.0.0.1:8002/api/v1/admin/data/import/stream?dataset=all \
+     -H "X-Admin-Password: $ADMIN_REFRESH_PASSWORD"
    ```
 
 3. 导入完成后各业务页会自动 reload 数据；OpenAPI 文档：`http://127.0.0.1:8002/docs`（或通过前端同源 `/api` 访问）。

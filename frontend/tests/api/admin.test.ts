@@ -4,7 +4,16 @@ import { fetchSyncStatusApi, refreshAllDataStream } from '@/api/admin';
 
 const { getMock, streamPostMock } = vi.hoisted(() => ({
   getMock: vi.fn(),
-  streamPostMock: vi.fn(() => ({ abort: vi.fn() })),
+  streamPostMock: vi.fn(
+    (
+      _url: string,
+      _handlers: unknown,
+      _options?: {
+        idleTimeoutMs?: number;
+        headers?: Record<string, string>;
+      },
+    ) => ({ abort: vi.fn() }),
+  ),
 }));
 
 vi.mock('@/api/request', () => ({ default: { get: getMock, post: vi.fn() } }));
@@ -24,12 +33,15 @@ describe('admin 数据接口', () => {
 
   test('全量刷新走 SSE POST,空闲超时 300s(与 nginx/Gunicorn 对齐)', () => {
     const handlers = { onProgress: vi.fn(), onDone: vi.fn(), onError: vi.fn() };
-    refreshAllDataStream(handlers);
+    refreshAllDataStream(handlers, 'secret');
 
     expect(streamPostMock).toHaveBeenCalledTimes(1);
     const [url, passedHandlers, options] = streamPostMock.mock.calls[0];
     expect(url).toBe('/api/v1/admin/data/import/stream');
     expect(passedHandlers).toBe(handlers);
-    expect(options).toEqual({ idleTimeoutMs: 300_000 });
+    expect(options).toEqual({
+      idleTimeoutMs: 300_000,
+      headers: { 'X-Admin-Password': 'secret' },
+    });
   });
 });

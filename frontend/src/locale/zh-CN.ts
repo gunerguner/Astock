@@ -19,6 +19,12 @@ export default {
   'common.unit.yuan': '元',
   'common.requestFailed': '请求失败',
   'common.networkFailed': '网络请求失败',
+  'common.loadFailed': '加载失败',
+  'sse.timeout': '连接超时',
+  'sse.httpFailed': '请求失败 ({status})',
+  'sse.noBody': '无法读取响应流',
+  'sse.disconnected': '连接意外断开',
+  'sse.networkFailed': '网络请求失败',
   'common.notFound.subtitle': '页面不存在',
   'common.notFound.back': '返回首页',
 
@@ -27,7 +33,7 @@ export default {
   'adminRefresh.okText': '确认刷新',
   'adminRefresh.cancelText': '取消',
   'adminRefresh.hint':
-    '此操作将从外部数据源重新拉取成交额、指数点位与个股切片数据，耗时较长。请输入密码以继续。',
+    '此操作将从外部数据源重新拉取成交额、指数点位、个股切片、全球资产、美国宏观、中国宏观与市场概览，耗时较长。请输入密码以继续。',
   'adminRefresh.passwordPlaceholder': '请输入密码',
   'adminRefresh.missingPassword': '未配置刷新密码',
   'adminRefresh.wrongPassword': '密码错误',
@@ -116,7 +122,7 @@ export default {
   'pages.marketOverview.columns.weeklyChange': '周涨跌',
   'pages.marketOverview.periodTo': '至',
 
-  'pages.usMacroData.title': 'CPI 与 联邦基金利率走势对比',
+  'pages.usMacroData.title': 'CPI与联邦基金利率走势对比',
   'pages.usMacroData.series.cpi': 'CPI 通胀率 (同比 %)',
   'pages.usMacroData.series.fedRate': '联邦基金利率上限 (%)',
   'pages.usMacroData.noData': '暂无数据，请先在管理端刷新全部数据',

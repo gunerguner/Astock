@@ -9,6 +9,7 @@ const IMPORT_STREAM_IDLE_TIMEOUT_MS = 300_000;
 /** SSE 流式全量数据导入 POST /admin/data/import/stream */
 export function refreshAllDataStream(
   handlers: API.ImportStreamHandlers,
+  password: string,
 ): AbortController {
   return streamPost<
     API.ImportProgressEvent,
@@ -16,6 +17,7 @@ export function refreshAllDataStream(
     API.ImportStreamError
   >(STREAM_URL, handlers, {
     idleTimeoutMs: IMPORT_STREAM_IDLE_TIMEOUT_MS,
+    headers: { 'X-Admin-Password': password },
   });
 }
 

@@ -349,7 +349,7 @@ class ApiResponse(BaseModel, Generic[T]):
 ### 技术栈与入口
 
 - Vue3 + Vite + TypeScript + Arco Design Pro Vue
-- 构建：`frontend/config/vite.config.{base,dev}.ts`；主题 `src/config/settings.json`
+- 构建：`frontend/config/vite.config.{base,dev,prod}.ts`；暗色主题由 VueUse `useDark` 写入 `body[arco-theme]`
 
 ### API 层
 
@@ -359,16 +359,16 @@ class ApiResponse(BaseModel, Generic[T]):
 
 ### 路由（`router/routes/modules/main.ts`）
 
-`/` → `/bull-market`，6 子页面，`requiresAuth: false`：
+`/` → `/bull-market`，6 子页面：
 
-| 路径 | 视图 | 菜单 icon |
-|------|------|-----------|
-| `/bull-market` | `views/bull-market/` | bar-chart |
-| `/turnover-rank` | `views/turnover-rank/` | sort |
-| `/asset-price-levels` | `views/asset-price-levels/` | fire |
-| `/market-overview` | `views/market-overview/` | apps |
-| `/cn-macro-data` | `views/cn-macro-data/` | bar-chart |
-| `/us-macro-data` | `views/us-macro-data/` | public |
+| 路径 | 视图 |
+|------|------|
+| `/bull-market` | `views/bull-market/` |
+| `/turnover-rank` | `views/turnover-rank/` |
+| `/asset-price-levels` | `views/asset-price-levels/` |
+| `/market-overview` | `views/market-overview/` |
+| `/cn-macro-data` | `views/cn-macro-data/` |
+| `/us-macro-data` | `views/us-macro-data/` |
 
 ### 页面写法
 
@@ -391,19 +391,19 @@ class ApiResponse(BaseModel, Generic[T]):
 
 ### 管理刷新
 
-- 导航栏 `admin-refresh-button`：前端密码门（`VITE_ADMIN_REFRESH_PASSWORD`），**后端无鉴权**
-- 开发默认密码见 `.env.development`；生产经 Docker 构建期注入
+- 导航栏 `admin-refresh-button` 收集密码，经请求头 `X-Admin-Password` 交给 `POST /admin/data/import/stream`
+- 密码只存在后端环境变量 `ADMIN_REFRESH_PASSWORD`。未配置时导入接口返回 503；缺失或不匹配返回 401。`GET /admin/data/sync-status` 保持公开
+- 修改密码后重启 backend 即可，不必重建 frontend
 - `useAdminDataRefresh` + `refresh-progress-modal`：SSE 七阶段进度弹窗；完成并关闭后 `emitDataRefresh` 通知各页 reload
 
 ### 环境变量
 
-- `.env.development`：`VITE_API_BASE_URL=`(空)、`VITE_ADMIN_REFRESH_PASSWORD`
-- `.env.production`：`VITE_ADMIN_REFRESH_PASSWORD=`(空)
-- 生产 API 依赖 nginx 反代 `/api`，非运行时注入
+- 前端 `.env.development` / `.env.production`：`VITE_API_BASE_URL=`(空)。生产 API 依赖 nginx 反代 `/api`
+- 后端 `ADMIN_REFRESH_PASSWORD`：管理端导入密码。见 `backend/.env.example` 与 `docker/.env.example`
 
 ### 代码规范
 
-ESLint(airbnb-base) + Prettier + Stylelint；husky + commitlint；组件按需 `unplugin-vue-components`。
+ESLint(airbnb-base) + Prettier + Stylelint；husky + commitlint。Arco 组件在 `main.ts` 全量注册，样式由 `@arco-plugins/vite-vue` 按需引入。
 
 ---
 

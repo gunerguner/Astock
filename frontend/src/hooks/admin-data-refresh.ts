@@ -41,34 +41,68 @@ function initProgressState(): RefreshProgressState {
   return state;
 }
 
+export type RefreshStartResult =
+  { accepted: true } | { accepted: false; message: string };
+
+function isAuthRejection(error: { status?: number }): boolean {
+  return error.status === 401 || error.status === 503;
+}
+
 export default function useAdminDataRefresh() {
   function resetProgressState() {
     progressState.value = initProgressState();
   }
 
-  function refreshAllData() {
-    if (refreshing.value) return;
+  function refreshAllData(password: string): Promise<RefreshStartResult> {
+    if (refreshing.value) {
+      return Promise.resolve({ accepted: false, message: '' });
+    }
 
-    abortController?.abort();
-    resetProgressState();
-    refreshing.value = true;
-    progressVisible.value = true;
-    progressState.value.overallStatus = 'running';
+    return new Promise((resolve) => {
+      let accepted = false;
+      const accept = () => {
+        if (accepted) return;
+        accepted = true;
+        progressVisible.value = true;
+        progressState.value.overallStatus = 'running';
+        resolve({ accepted: true });
+      };
 
-    abortController = refreshAllDataStream({
-      onProgress: (event: API.ImportProgressEvent) => {
-        progressState.value = applyProgressEvent(progressState.value, event);
-      },
-      onDone: (result: API.ImportAllResult) => {
-        progressState.value = applyStreamDone(progressState.value, result);
-        refreshing.value = false;
-        abortController = null;
-      },
-      onError: (error: API.ImportStreamError) => {
-        progressState.value = applyStreamError(progressState.value, error);
-        refreshing.value = false;
-        abortController = null;
-      },
+      abortController?.abort();
+      resetProgressState();
+      refreshing.value = true;
+
+      abortController = refreshAllDataStream(
+        {
+          onProgress: (event: API.ImportProgressEvent) => {
+            accept();
+            progressState.value = applyProgressEvent(
+              progressState.value,
+              event,
+            );
+          },
+          onDone: (result: API.ImportAllResult) => {
+            accept();
+            progressState.value = applyStreamDone(progressState.value, result);
+            refreshing.value = false;
+            abortController = null;
+          },
+          onError: (error: API.ImportStreamError) => {
+            if (!accepted && isAuthRejection(error)) {
+              refreshing.value = false;
+              abortController = null;
+              resetProgressState();
+              resolve({ accepted: false, message: error.message });
+              return;
+            }
+            accept();
+            progressState.value = applyStreamError(progressState.value, error);
+            refreshing.value = false;
+            abortController = null;
+          },
+        },
+        password,
+      );
     });
   }
 

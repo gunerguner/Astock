@@ -1,33 +1,23 @@
 <template>
   <a-layout class="layout">
-    <div v-if="navbar" class="layout-navbar">
+    <div class="layout-navbar">
       <NavBar />
     </div>
     <a-layout class="layout-content" :style="paddingStyle">
       <a-layout-content>
         <PageLayout />
       </a-layout-content>
-      <Footer v-if="footer" />
+      <Footer />
     </a-layout>
   </a-layout>
 </template>
 
 <script lang="ts" setup>
-  import { computed } from 'vue';
-  import { useAppStore } from '@/store';
   import NavBar from '@/components/navbar/index.vue';
   import Footer from '@/components/footer/index.vue';
-  import useResponsive from '@/hooks/responsive';
   import PageLayout from './page-layout.vue';
 
-  const appStore = useAppStore();
-  useResponsive(true);
-  const navbarHeight = 'var(--navbar-height)';
-  const navbar = computed(() => appStore.navbar);
-  const footer = computed(() => appStore.footer);
-  const paddingStyle = computed(() =>
-    navbar.value ? { paddingTop: navbarHeight } : {},
-  );
+  const paddingStyle = { paddingTop: 'var(--navbar-height)' };
 </script>
 
 <style scoped lang="less">

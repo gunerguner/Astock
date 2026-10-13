@@ -1,13 +1,12 @@
 import { mergeConfig } from 'vite';
 import baseConfig from './vite.config.base';
 import configVisualizerPlugin from './plugin/visualizer';
-import configArcoResolverPlugin from './plugin/arcoResolver';
 
 export default async () =>
   mergeConfig(
     {
       mode: 'production',
-      plugins: [await configVisualizerPlugin(), configArcoResolverPlugin()],
+      plugins: [await configVisualizerPlugin()],
       build: {
         // Vite 6 默认拆包即可；静态 manualChunks(arco/vue) 会触发 Circular chunk 警告
         chunkSizeWarningLimit: 2000,

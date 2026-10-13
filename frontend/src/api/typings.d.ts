@@ -225,6 +225,7 @@ declare namespace API {
   type ImportStreamError = {
     message: string;
     phase?: ImportPhaseKey;
+    status?: number;
   };
 
   type ImportStreamHandlers = {

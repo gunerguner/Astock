@@ -4,11 +4,23 @@ import json
 
 import pytest
 
+from astock.config import settings
 from astock.core.sync_status import SyncStatus
 from astock.services.cache.closes import ClosesFetchResult
 from astock.services.sync.results import ImportResult
 
 _FIXED_AT = "2026-01-01T00:00:00+00:00"
+_ADMIN_PASSWORD = "test-admin-password"
+
+
+def _post_import(client, dataset: str, password: str | None = _ADMIN_PASSWORD):
+    headers = {}
+    if password is not None:
+        headers["X-Admin-Password"] = password
+    return client.post(
+        f"/api/v1/admin/data/import/stream?dataset={dataset}",
+        headers=headers,
+    )
 
 
 def _result(status: SyncStatus = SyncStatus.SUCCESS, imported: int = 5) -> ImportResult:
@@ -67,11 +79,43 @@ def patch_import_turnover(monkeypatch):
     return calls
 
 
+class TestImportAuth:
+    def test_missing_password_config_returns_503(self, client, monkeypatch):
+        monkeypatch.setattr(settings, "admin_refresh_password", "")
+        resp = _post_import(client, "turnover", password="anything")
+        assert resp.status_code == 503
+        body = resp.json()
+        assert body["code"] == 1002
+        assert body["message"] == "未配置刷新密码"
+
+    def test_missing_header_returns_401(self, client, monkeypatch):
+        monkeypatch.setattr(settings, "admin_refresh_password", _ADMIN_PASSWORD)
+        resp = _post_import(client, "turnover", password=None)
+        assert resp.status_code == 401
+        assert resp.json()["code"] == 1002
+        assert resp.json()["message"] == "密码错误"
+
+    def test_wrong_password_returns_401(self, client, monkeypatch):
+        monkeypatch.setattr(settings, "admin_refresh_password", _ADMIN_PASSWORD)
+        resp = _post_import(client, "turnover", password="wrong")
+        assert resp.status_code == 401
+        assert resp.json()["message"] == "密码错误"
+
+    def test_sync_status_stays_public(self, client):
+        resp = client.get("/api/v1/admin/data/sync-status")
+        assert resp.status_code == 200
+        assert resp.json()["code"] == 0
+
+
 class TestImportStream:
+    @pytest.fixture(autouse=True)
+    def _admin_password(self, monkeypatch):
+        monkeypatch.setattr(settings, "admin_refresh_password", _ADMIN_PASSWORD)
+
     def test_single_dataset_emits_progress_then_done(
         self, client, patch_import_turnover
     ):
-        resp = client.post("/api/v1/admin/data/import/stream?dataset=turnover")
+        resp = _post_import(client, "turnover")
         assert resp.status_code == 200
         assert resp.headers["content-type"].startswith("text/event-stream")
         assert patch_import_turnover == ["turnover"]
@@ -94,7 +138,7 @@ class TestImportStream:
         monkeypatch.setattr(
             "astock.services.import_orchestrator.import_turnover", _boom
         )
-        resp = client.post("/api/v1/admin/data/import/stream?dataset=turnover")
+        resp = _post_import(client, "turnover")
         frames = _parse_sse(resp.text)
         assert frames[-1][0] == "error"
         assert "baostock down" in frames[-1][1]["message"]
@@ -123,7 +167,7 @@ class TestImportStream:
             lambda: ClosesFetchResult(closes={}, errors=[]),
         )
 
-        resp = client.post("/api/v1/admin/data/import/stream?dataset=all")
+        resp = _post_import(client, "all")
         frames = _parse_sse(resp.text)
         events = [e for e, _ in frames]
         assert "error" not in events
@@ -149,6 +193,49 @@ class TestImportStream:
         assert len(done_frames) == 1
         assert set(done_frames[0].keys()) == {*running_phases, "status"}
         assert done_frames[0]["status"] == "success"
+
+    def test_market_overview_warmup_failure_is_partial(self, client, monkeypatch):
+        def _stock_gen(db, on_progress=None, bridge=None):  # noqa: ANN001
+            return _result(imported=1)
+            yield  # pragma: no cover
+
+        for name in (
+            "import_turnover",
+            "import_point",
+            "refresh_asset_highs",
+            "import_us_macro",
+            "import_cn_macro",
+        ):
+            monkeypatch.setattr(
+                f"astock.services.import_orchestrator.{name}",
+                lambda db, _name=name: _result(imported=1),
+            )
+        monkeypatch.setattr(
+            "astock.services.import_orchestrator.import_stock_gen", _stock_gen
+        )
+
+        def _boom():
+            raise RuntimeError("redis down")
+
+        monkeypatch.setattr(
+            "astock.services.import_orchestrator.warmup_market_overview",
+            _boom,
+        )
+
+        resp = _post_import(client, "all")
+        frames = _parse_sse(resp.text)
+        overview_done = [
+            d
+            for e, d in frames
+            if e == "progress"
+            and d["phase"] == "market_overview"
+            and d["status"] == "failed"
+        ]
+        assert len(overview_done) == 1
+        assert "redis down" in overview_done[0]["source_errors"]["market_overview"]
+        done = [d for e, d in frames if e == "done"]
+        assert done[0]["status"] == "partial_failure"
+        assert done[0]["turnover"]["status"] == "success"
 
     def test_unknown_dataset_rejected_by_validation(self, client):
         resp = client.post("/api/v1/admin/data/import/stream?dataset=nope")

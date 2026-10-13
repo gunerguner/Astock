@@ -19,6 +19,12 @@ export default {
   'common.unit.yuan': ' CNY',
   'common.requestFailed': 'Request failed',
   'common.networkFailed': 'Network request failed',
+  'common.loadFailed': 'Failed to load',
+  'sse.timeout': 'Connection timed out',
+  'sse.httpFailed': 'Request failed ({status})',
+  'sse.noBody': 'Unable to read the response stream',
+  'sse.disconnected': 'Connection closed unexpectedly',
+  'sse.networkFailed': 'Network request failed',
   'common.notFound.subtitle': 'Page not found',
   'common.notFound.back': 'Back to home',
 
@@ -27,7 +33,7 @@ export default {
   'adminRefresh.okText': 'Confirm',
   'adminRefresh.cancelText': 'Cancel',
   'adminRefresh.hint':
-    'This will re-fetch turnover, index points and stock slice data from external sources, which may take a while. Please enter the password to continue.',
+    'This will re-fetch turnover, index points, stock slices, global assets, US macro, China macro, and the market overview from external sources, which may take a while. Please enter the password to continue.',
   'adminRefresh.passwordPlaceholder': 'Enter password',
   'adminRefresh.missingPassword': 'Refresh password not configured',
   'adminRefresh.wrongPassword': 'Incorrect password',
