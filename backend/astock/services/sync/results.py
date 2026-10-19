@@ -40,9 +40,6 @@ class ImportResult:
             "elapsed": self.elapsed,
         }
 
-    def with_status(self, status: SyncStatus) -> Self:
-        return replace(self, status=status)
-
     def with_elapsed(self, elapsed: float) -> Self:
         return replace(self, elapsed=elapsed)
 

@@ -1,24 +1,11 @@
 import { computed, type Ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import * as echarts from 'echarts/core';
-import { LineChart } from 'echarts/charts';
 import {
-  GridComponent,
-  LegendComponent,
-  MarkLineComponent,
-  TooltipComponent,
-} from 'echarts/components';
-import { CanvasRenderer } from 'echarts/renderers';
-import { useMacroLineChart } from '@/hooks/use-macro-line-chart';
-
-echarts.use([
-  LineChart,
-  GridComponent,
-  LegendComponent,
-  MarkLineComponent,
-  TooltipComponent,
-  CanvasRenderer,
-]);
+  formatMacroNumber,
+  macroLineOption,
+  macroTooltipDataIndex,
+  useMacroLineChart,
+} from '@/hooks/use-macro-line-chart';
 
 export type CnMacroChartKind = 'cpiPpi' | 'pmi' | 'consumer';
 
@@ -27,11 +14,6 @@ const CN_MACRO_COLORS = {
   primary: '#0d9488',
   secondary: '#4f46e5',
 } as const;
-
-function formatNumber(value: number | null | undefined, suffix = ''): string {
-  if (value == null || Number.isNaN(value)) return '—';
-  return `${value.toFixed(2)}${suffix}`;
-}
 
 export default function useCnMacroChart(
   chartEl: Ref<HTMLElement | null>,
@@ -51,13 +33,11 @@ export default function useCnMacroChart(
     });
   });
 
-  function buildOption({
-    isDark,
-  }: {
-    isDark: boolean;
-  }): echarts.EChartsCoreOption {
-    const textColor = isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.65)';
-    const splitLine = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)';
+  function pointAt(params: unknown) {
+    return points.value[macroTooltipDataIndex(params)];
+  }
+
+  function buildOption({ isDark }: { isDark: boolean }) {
     const colorA = CN_MACRO_COLORS.primary;
     const colorB = CN_MACRO_COLORS.secondary;
     const categories = points.value.map((p) => p.period);
@@ -65,55 +45,26 @@ export default function useCnMacroChart(
     if (kind === 'cpiPpi') {
       const cpiName = t('pages.cnMacroData.series.cpi');
       const ppiName = t('pages.cnMacroData.series.ppi');
-      return {
-        animation: false,
-        color: [colorB, colorA],
-        textStyle: {
-          color: textColor,
-          fontFamily: 'var(--font-family-sans)',
-        },
-        legend: {
-          top: 8,
-          data: [cpiName, ppiName],
-          textStyle: { color: textColor },
-        },
-        tooltip: {
-          trigger: 'axis',
-          axisPointer: { type: 'cross' },
-          formatter: (params: unknown) => {
-            const items = Array.isArray(params) ? params : [params];
-            const first = items[0] as { dataIndex?: number } | undefined;
-            const idx = first?.dataIndex ?? 0;
-            const point = points.value[idx];
-            if (!point) return '';
-            return [
-              `${t('pages.cnMacroData.tooltip.period')}: ${point.period}`,
-              `${t('pages.cnMacroData.tooltip.cpi')}: ${formatNumber(
-                point.cpi_yoy,
-                '%',
-              )}`,
-              `${t('pages.cnMacroData.tooltip.ppi')}: ${formatNumber(
-                point.ppi_yoy,
-                '%',
-              )}`,
-            ].join('<br/>');
-          },
-        },
-        grid: { left: 56, right: 24, top: 56, bottom: 40 },
-        xAxis: {
-          type: 'category',
-          boundaryGap: false,
-          data: categories,
-          axisLabel: { color: textColor, hideOverlap: true },
-          axisLine: { lineStyle: { color: splitLine } },
-        },
-        yAxis: {
-          type: 'value',
-          axisLabel: {
-            color: textColor,
-            formatter: (v: number) => `${v}%`,
-          },
-          splitLine: { lineStyle: { color: splitLine, type: 'dashed' } },
+      return macroLineOption({
+        isDark,
+        colors: [colorB, colorA],
+        categories,
+        legend: [cpiName, ppiName],
+        yAxisPercent: true,
+        tooltipFormatter: (params) => {
+          const point = pointAt(params);
+          if (!point) return '';
+          return [
+            `${t('pages.cnMacroData.tooltip.period')}: ${point.period}`,
+            `${t('pages.cnMacroData.tooltip.cpi')}: ${formatMacroNumber(
+              point.cpi_yoy,
+              '%',
+            )}`,
+            `${t('pages.cnMacroData.tooltip.ppi')}: ${formatMacroNumber(
+              point.ppi_yoy,
+              '%',
+            )}`,
+          ].join('<br/>');
         },
         series: [
           {
@@ -135,58 +86,31 @@ export default function useCnMacroChart(
             lineStyle: { width: 2 },
           },
         ],
-      };
+      });
     }
 
     if (kind === 'pmi') {
       const mfgName = t('pages.cnMacroData.series.pmiMfg');
       const nonMfgName = t('pages.cnMacroData.series.pmiNonMfg');
       const boomBust = t('pages.cnMacroData.series.boomBust');
-      return {
-        animation: false,
-        color: [colorA, colorB],
-        textStyle: {
-          color: textColor,
-          fontFamily: 'var(--font-family-sans)',
-        },
-        legend: {
-          top: 8,
-          data: [mfgName, nonMfgName],
-          textStyle: { color: textColor },
-        },
-        tooltip: {
-          trigger: 'axis',
-          axisPointer: { type: 'cross' },
-          formatter: (params: unknown) => {
-            const items = Array.isArray(params) ? params : [params];
-            const first = items[0] as { dataIndex?: number } | undefined;
-            const idx = first?.dataIndex ?? 0;
-            const point = points.value[idx];
-            if (!point) return '';
-            return [
-              `${t('pages.cnMacroData.tooltip.period')}: ${point.period}`,
-              `${t('pages.cnMacroData.tooltip.pmiMfg')}: ${formatNumber(
-                point.pmi_manufacturing,
-              )}`,
-              `${t('pages.cnMacroData.tooltip.pmiNonMfg')}: ${formatNumber(
-                point.pmi_non_manufacturing,
-              )}`,
-            ].join('<br/>');
-          },
-        },
-        grid: { left: 56, right: 24, top: 56, bottom: 40 },
-        xAxis: {
-          type: 'category',
-          boundaryGap: false,
-          data: categories,
-          axisLabel: { color: textColor, hideOverlap: true },
-          axisLine: { lineStyle: { color: splitLine } },
-        },
-        yAxis: {
-          type: 'value',
-          scale: true,
-          axisLabel: { color: textColor },
-          splitLine: { lineStyle: { color: splitLine, type: 'dashed' } },
+      return macroLineOption({
+        isDark,
+        colors: [colorA, colorB],
+        categories,
+        legend: [mfgName, nonMfgName],
+        yAxisScale: true,
+        tooltipFormatter: (params) => {
+          const point = pointAt(params);
+          if (!point) return '';
+          return [
+            `${t('pages.cnMacroData.tooltip.period')}: ${point.period}`,
+            `${t('pages.cnMacroData.tooltip.pmiMfg')}: ${formatMacroNumber(
+              point.pmi_manufacturing,
+            )}`,
+            `${t('pages.cnMacroData.tooltip.pmiNonMfg')}: ${formatMacroNumber(
+              point.pmi_non_manufacturing,
+            )}`,
+          ].join('<br/>');
         },
         series: [
           {
@@ -206,7 +130,6 @@ export default function useCnMacroChart(
             lineStyle: { width: 2 },
           },
           {
-            // 独立序列承载荣枯线，不进 legend，取消制造/非制造选中时仍保留
             name: boomBust,
             type: 'line',
             data: [],
@@ -218,7 +141,7 @@ export default function useCnMacroChart(
               label: {
                 formatter: boomBust,
                 position: 'insideEndTop',
-                color: textColor,
+                color: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.65)',
               },
               lineStyle: {
                 type: 'dashed',
@@ -229,52 +152,25 @@ export default function useCnMacroChart(
             },
           },
         ],
-      };
+      });
     }
 
     const consumerName = t('pages.cnMacroData.series.consumer');
-    return {
-      animation: false,
-      color: [colorA],
-      textStyle: {
-        color: textColor,
-        fontFamily: 'var(--font-family-sans)',
-      },
-      legend: {
-        top: 8,
-        data: [consumerName],
-        textStyle: { color: textColor },
-      },
-      tooltip: {
-        trigger: 'axis',
-        axisPointer: { type: 'cross' },
-        formatter: (params: unknown) => {
-          const items = Array.isArray(params) ? params : [params];
-          const first = items[0] as { dataIndex?: number } | undefined;
-          const idx = first?.dataIndex ?? 0;
-          const point = points.value[idx];
-          if (!point) return '';
-          return [
-            `${t('pages.cnMacroData.tooltip.period')}: ${point.period}`,
-            `${t('pages.cnMacroData.tooltip.consumer')}: ${formatNumber(
-              point.consumer_confidence,
-            )}`,
-          ].join('<br/>');
-        },
-      },
-      grid: { left: 56, right: 24, top: 56, bottom: 40 },
-      xAxis: {
-        type: 'category',
-        boundaryGap: false,
-        data: categories,
-        axisLabel: { color: textColor, hideOverlap: true },
-        axisLine: { lineStyle: { color: splitLine } },
-      },
-      yAxis: {
-        type: 'value',
-        scale: true,
-        axisLabel: { color: textColor },
-        splitLine: { lineStyle: { color: splitLine, type: 'dashed' } },
+    return macroLineOption({
+      isDark,
+      colors: [colorA],
+      categories,
+      legend: [consumerName],
+      yAxisScale: true,
+      tooltipFormatter: (params) => {
+        const point = pointAt(params);
+        if (!point) return '';
+        return [
+          `${t('pages.cnMacroData.tooltip.period')}: ${point.period}`,
+          `${t('pages.cnMacroData.tooltip.consumer')}: ${formatMacroNumber(
+            point.consumer_confidence,
+          )}`,
+        ].join('<br/>');
       },
       series: [
         {
@@ -286,7 +182,7 @@ export default function useCnMacroChart(
           lineStyle: { width: 2 },
         },
       ],
-    };
+    });
   }
 
   useMacroLineChart(chartEl, hasData, buildOption, [points, locale]);

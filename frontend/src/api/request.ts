@@ -9,11 +9,6 @@ export interface RequestInstance {
     url: string,
     config?: AxiosRequestConfig<D>,
   ): Promise<T>;
-  post<T = unknown, D = unknown>(
-    url: string,
-    data?: D,
-    config?: AxiosRequestConfig<D>,
-  ): Promise<T>;
 }
 
 const instance = axios.create({
@@ -57,9 +52,6 @@ instance.interceptors.response.use(
 const request: RequestInstance = {
   get<T, D = unknown>(url: string, config?: AxiosRequestConfig<D>) {
     return instance.get(url, config) as Promise<T>;
-  },
-  post<T, D = unknown>(url: string, data?: D, config?: AxiosRequestConfig<D>) {
-    return instance.post(url, data, config) as Promise<T>;
   },
 };
 

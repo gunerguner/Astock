@@ -59,8 +59,6 @@ export default {
   'footer.copyright': '{range} Robin Zhang',
 
   'pages.bullMarket.title': 'A-Share Bull Market Overview',
-  'pages.bullMarket.thresholdLabel': '{name} Threshold',
-  'pages.bullMarket.turnoverLabel': 'Turnover Threshold (Trillion CNY)',
   'pages.bullMarket.turnoverLabelShort': 'Turnover (T)',
   'pages.bullMarket.filterSh': 'SSE',
   'pages.bullMarket.filterHS300': 'CSI300',
@@ -77,13 +75,9 @@ export default {
   'pages.bullMarket.indexKCB50': 'STAR 50',
   'pages.bullMarket.columns.market': 'Bull Market',
   'pages.bullMarket.columns.period': 'Period',
-  'pages.bullMarket.columns.turnoverDimension': 'Turnover Dimension',
   'pages.bullMarket.columns.turnoverDimensionShort': 'Turnover',
-  'pages.bullMarket.columns.standardDays': 'Qualified Days',
   'pages.bullMarket.columns.standardDaysShort': 'Days',
-  'pages.bullMarket.columns.maxPoint': 'Max Point',
   'pages.bullMarket.columns.maxPointShort': 'Max',
-  'pages.bullMarket.columns.maxTurnover': 'Max Turnover',
   'pages.bullMarket.columns.maxTurnoverShort': 'Max Amt',
 
   'pages.turnoverRank.marketTitle': 'Market Turnover Ranking',

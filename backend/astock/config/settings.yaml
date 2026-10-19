@@ -4,6 +4,7 @@ business:
   turnover_threshold: 2000000000000
   stock_slice_top_n: 20
   market_overview_recent_days: 10
+  global_asset_recent_days: 10
   weekly_baseline_offset: 6
   price_level_conclusions:
     - [5, "nearAth"]

@@ -34,7 +34,6 @@
   },
   "dependencies": {
     "@arco-design/web-vue": "^2.58.0",
-    "@vue/devtools-api": "^8.2.1",
     "@vueuse/core": "^14.4.0",
     "axios": "^1.19.0",
     "echarts": "^6.1.0",

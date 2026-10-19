@@ -128,7 +128,7 @@ CORS_HEADERS = settings.cors_headers
 TURNOVER_THRESHOLD = int(_business.get("turnover_threshold", 2_000_000_000_000))
 STOCK_SLICE_TOP_N = int(_business.get("stock_slice_top_n", 20))
 START_DATE = str(_business.get("start_date", "2005-01-01"))
-GLOBAL_ASSET_RECENT_DAYS = 10
+GLOBAL_ASSET_RECENT_DAYS = int(_business.get("global_asset_recent_days", 10))
 MARKET_OVERVIEW_RECENT_DAYS = int(_business.get("market_overview_recent_days", 10))
 WEEKLY_BASELINE_OFFSET = int(_business.get("weekly_baseline_offset", 6))
 PRICE_LEVEL_CONCLUSIONS: list[tuple[int, str]] = [
@@ -289,8 +289,6 @@ def _load_market_overview_items() -> list[MarketOverviewItemConfig]:
 def __getattr__(name: str) -> Any:
     if name == "POINT_INDEX_CONFIG":
         return _load_point_index_config()
-    if name == "THRESHOLD_POINT":
-        return int(_load_point_index_config()["000001"]["default_threshold"])
     if name == "BULL_MARKETS":
         return _load_bull_markets()
     if name == "GLOBAL_ASSETS":

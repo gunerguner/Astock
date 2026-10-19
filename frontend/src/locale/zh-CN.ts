@@ -59,8 +59,6 @@ export default {
   'footer.copyright': '{range} 溯宁',
 
   'pages.bullMarket.title': 'A股牛市数据总览',
-  'pages.bullMarket.thresholdLabel': '{name}阈值',
-  'pages.bullMarket.turnoverLabel': '成交额阈值(万亿)',
   'pages.bullMarket.turnoverLabelShort': '成交额(万亿)',
   'pages.bullMarket.filterSh': '上证',
   'pages.bullMarket.filterHS300': '沪深300',
@@ -77,13 +75,9 @@ export default {
   'pages.bullMarket.indexKCB50': '科创50',
   'pages.bullMarket.columns.market': '牛市名称',
   'pages.bullMarket.columns.period': '区间',
-  'pages.bullMarket.columns.turnoverDimension': '成交额维度',
   'pages.bullMarket.columns.turnoverDimensionShort': '成交额',
-  'pages.bullMarket.columns.standardDays': '达标天数',
   'pages.bullMarket.columns.standardDaysShort': '天数',
-  'pages.bullMarket.columns.maxPoint': '最高点位',
   'pages.bullMarket.columns.maxPointShort': '最高',
-  'pages.bullMarket.columns.maxTurnover': '最高成交额',
   'pages.bullMarket.columns.maxTurnoverShort': '最高额',
 
   'pages.turnoverRank.marketTitle': '大盘成交额排名',

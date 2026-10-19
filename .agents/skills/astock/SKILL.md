@@ -190,8 +190,8 @@ YAML 懒加载结果用 TypedDict 约束（`PointIndexConfig`、`BullMarketPerio
 | 表 | 主键 | 说明 |
 |----|------|------|
 | `point` | `(date, index_code)` | 多指数收盘价（上证/沪深300/创业板/科创50） |
-| `turnover` | `date` | 三市成交额 + 合计 |
-| `stock_turnover` | `(date, code)` | 大市值个股高水位成交额切片 |
+| `turnover` | `date` | 上证 + 深证成交额合计 |
+| `stock_turnover` | `(date, code)` | 按日全市场成交额 TopN 切片 |
 | `asset_high` | `ticker` | 全球资产历史最高点 |
 | `macro_value` | `(region, period, metric)` | 中美宏观月度长表；`region=cn/us`、`period=YYYY-MM` |
 | `sync_meta` | `table_name` | 增量同步水位与状态（点位按 `point_{code}` 分项） |

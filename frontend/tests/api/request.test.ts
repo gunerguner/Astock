@@ -83,12 +83,9 @@ describe('request 响应拦截器(信封解包)', () => {
 });
 
 describe('request 实例封装', () => {
-  test('get/post 透传到 axios 实例', () => {
+  test('get 透传到 axios 实例', () => {
     instanceLike.get.mockResolvedValueOnce({ ok: true });
     request.get('/x', { params: { a: 1 } });
     expect(instanceLike.get).toHaveBeenCalledWith('/x', { params: { a: 1 } });
-
-    request.post('/y', { b: 2 });
-    expect(instanceLike.post).toHaveBeenCalledWith('/y', { b: 2 }, undefined);
   });
 });

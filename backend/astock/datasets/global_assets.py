@@ -5,7 +5,7 @@ import logging
 
 import pandas as pd
 
-from astock.config import GLOBAL_ASSETS
+from astock.config import GLOBAL_ASSET_RECENT_DAYS, GLOBAL_ASSETS
 from astock.core.datetime_utils import last_settled_date, market_for_asset_type, normalize_date
 from astock.datasets.result import FetchResult
 from astock.providers.akshare.assets import fetch_asset_history
@@ -25,7 +25,6 @@ def _extract_ath(df: pd.DataFrame) -> tuple[float, str] | None:
 
 def _extract_recent_closes(
     df: pd.DataFrame,
-    n: int = 10,
     *,
     market: str = "cn",
 ) -> dict[str, float]:
@@ -35,7 +34,7 @@ def _extract_recent_closes(
     df = df[df["date"] <= cap]
     if df.empty:
         return {}
-    tail = df.tail(n)
+    tail = df.tail(GLOBAL_ASSET_RECENT_DAYS)
     return {
         normalize_date(row["date"]): float(row["close"])
         for _, row in tail.iterrows()
