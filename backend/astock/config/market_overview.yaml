@@ -1,5 +1,5 @@
 # 全球市场概览 - 资产清单（不含数字货币）
-# source: global_index | cn_index | foreign_futures | boc_forex | us_bond
+# source: global_index | cn_index | foreign_futures | boc_forex | us_bond | cn_bond
 categories:
   - key: us_stocks
     display_name: 美股
@@ -71,10 +71,10 @@ categories:
         source: us_bond
       - name: 中国国债2年
         code: cn_bond_2y
-        source: us_bond
+        source: cn_bond
       - name: 中国国债10年
         code: cn_bond_10y
-        source: us_bond
+        source: cn_bond
       - name: 中国国债30年
         code: cn_bond_30y
-        source: us_bond
+        source: cn_bond

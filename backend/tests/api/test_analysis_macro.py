@@ -44,8 +44,13 @@ class TestCnMacro:
 
     def test_start_validation(self, client):
         resp = client.get("/api/v1/analysis/cn-macro?start=2026-9")
-        assert resp.status_code == 422
+        assert resp.status_code == 400
         assert resp.json()["code"] == 1001
+        assert "YYYY-MM" in resp.json()["message"]
+
+        invalid_month = client.get("/api/v1/analysis/us-macro?start=2026-13")
+        assert invalid_month.status_code == 400
+        assert invalid_month.json()["code"] == 1001
 
 
 class TestUsMacro:

@@ -1,12 +1,16 @@
-from fastapi import APIRouter, Query
+import re
+
+from fastapi import APIRouter, Query, Request, status
 
 from astock.config import (
-    CN_MACRO_START_PERIOD,
     POINT_INDEX_CONFIG,
     TURNOVER_THRESHOLD,
     US_MACRO_START_PERIOD,
+    cn_macro_start_period,
 )
 from astock.core.deps import DbSession
+from astock.core.errors import AppError, ErrorCode
+from astock.core.rate_limit import force_refresh_limit
 from astock.schemas.analysis import (
     BullMarketStatsResponse,
     CnMacroResponse,
@@ -31,37 +35,60 @@ from astock.services.queries import (
 
 router = APIRouter(prefix="/api/v1/analysis", tags=["analysis"])
 
+_PERIOD_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+
+
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded.strip():
+        return forwarded.split(",")[0].strip()
+    if request.client is None:
+        return "unknown"
+    return request.client.host
+
+
+def _require_period(start: str) -> str:
+    if not _PERIOD_RE.fullmatch(start):
+        raise AppError(
+            message="start 须为 YYYY-MM",
+            code=ErrorCode.VALIDATION_ERROR,
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    return start
+
+
+def _index_thresholds(request: Request) -> dict[str, float]:
+    """按已配置指数读取 threshold_{code}；缺省用 YAML，未知参数忽略。"""
+    thresholds: dict[str, float] = {}
+    for code, item in POINT_INDEX_CONFIG.items():
+        raw = request.query_params.get(f"threshold_{code}")
+        if raw is None or raw == "":
+            thresholds[code] = float(item["default_threshold"])
+            continue
+        try:
+            value = float(raw)
+        except ValueError as exc:
+            raise AppError(
+                message=f"threshold_{code} 须为数字",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=status.HTTP_400_BAD_REQUEST,
+            ) from exc
+        if value <= 0:
+            raise AppError(
+                message=f"threshold_{code} 须大于 0",
+                code=ErrorCode.VALIDATION_ERROR,
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        thresholds[code] = value
+    return thresholds
+
 
 @router.get(
     "/bull-markets/point",
     response_model=ApiResponse[MultiIndexPointStatsResponse],
 )
-def bull_market_point_stats_api(
-    db: DbSession,
-    threshold_000001: float = Query(
-        default=POINT_INDEX_CONFIG["000001"]["default_threshold"],
-        gt=0,
-    ),
-    threshold_000300: float = Query(
-        default=POINT_INDEX_CONFIG["000300"]["default_threshold"],
-        gt=0,
-    ),
-    threshold_399006: float = Query(
-        default=POINT_INDEX_CONFIG["399006"]["default_threshold"],
-        gt=0,
-    ),
-    threshold_000688: float = Query(
-        default=POINT_INDEX_CONFIG["000688"]["default_threshold"],
-        gt=0,
-    ),
-):
-    thresholds = {
-        "000001": threshold_000001,
-        "000300": threshold_000300,
-        "399006": threshold_399006,
-        "000688": threshold_000688,
-    }
-    return success(bull_market_multi_index_point_stats(db, thresholds))
+def bull_market_point_stats_api(db: DbSession, request: Request):
+    return success(bull_market_multi_index_point_stats(db, _index_thresholds(request)))
 
 
 @router.get(
@@ -105,8 +132,11 @@ def stock_ranking_api(
 )
 def asset_price_levels_api(
     db: DbSession,
+    request: Request,
     force_refresh: bool = Query(default=False),
 ):
+    if force_refresh:
+        force_refresh_limit.hit(_client_ip(request))
     return success(get_price_levels(db, force_refresh=force_refresh))
 
 
@@ -115,8 +145,11 @@ def asset_price_levels_api(
     response_model=ApiResponse[MarketOverviewResponse],
 )
 def market_overview_api(
+    request: Request,
     force_refresh: bool = Query(default=False),
 ):
+    if force_refresh:
+        force_refresh_limit.hit(_client_ip(request))
     return success(get_market_overview(force_refresh=force_refresh))
 
 
@@ -126,9 +159,10 @@ def market_overview_api(
 )
 def us_macro_api(
     db: DbSession,
-    start: str = Query(default=US_MACRO_START_PERIOD, min_length=7, max_length=7),
+    start: str = Query(default=""),
 ):
-    return success(get_us_macro(db, start=start))
+    period = _require_period(start or US_MACRO_START_PERIOD)
+    return success(get_us_macro(db, start=period))
 
 
 @router.get(
@@ -137,6 +171,7 @@ def us_macro_api(
 )
 def cn_macro_api(
     db: DbSession,
-    start: str = Query(default=CN_MACRO_START_PERIOD, min_length=7, max_length=7),
+    start: str = Query(default=""),
 ):
-    return success(get_cn_macro(db, start=start))
+    period = _require_period(start or cn_macro_start_period())
+    return success(get_cn_macro(db, start=period))

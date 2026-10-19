@@ -109,7 +109,8 @@ export default function useAdminDataRefresh() {
   function closeProgressModal() {
     if (refreshing.value) return;
     progressVisible.value = false;
-    if (progressState.value.overallStatus === 'done') {
+    const overall = progressState.value.overallStatus;
+    if (overall === 'done' || overall === 'partial') {
       emitDataRefresh();
     }
     resetProgressState();

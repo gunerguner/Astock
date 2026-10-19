@@ -64,8 +64,10 @@ def baostock_session():
     global _refcount, _login_result
     if _login_result is None:
         lg = bs.login()
-        if lg.error_code == "0":
-            configure_worker_socket()
+        if lg.error_code != "0":
+            yield lg
+            return
+        configure_worker_socket()
         _login_result = lg
     _refcount += 1
     try:

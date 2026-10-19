@@ -33,6 +33,8 @@ def query_index_closes(
             end_date=end_date,
             frequency="d",
         )
+        if rs is None:
+            raise BaostockQueryError(f"{label}点位查询失败: 空结果")
         if err := query_error(f"{label}点位查询失败", rs):
             raise BaostockQueryError(err)
         rows = collect_rows(rs)
@@ -40,11 +42,17 @@ def query_index_closes(
             return pd.DataFrame(columns=["date", "close"])
         df = pd.DataFrame(rows, columns=rs.fields)
         df["close"] = pd.to_numeric(df["close"], errors="coerce")
-        df = df.dropna(subset=["close"])
+        cleaned = df.dropna(subset=["close"])
+        if not isinstance(cleaned, pd.DataFrame):
+            return pd.DataFrame(columns=["date", "close"])
+        df = cleaned
         if df.empty:
             return pd.DataFrame(columns=["date", "close"])
         df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
-        return df[["date", "close"]]
+        selected = df.loc[:, ["date", "close"]]
+        if not isinstance(selected, pd.DataFrame):
+            return pd.DataFrame(columns=["date", "close"])
+        return selected
 
     return safe_baostock_call(f"{label}点位查询超时/连接异常", _query)
 
@@ -66,6 +74,8 @@ def query_exchange_amount(
             end_date=end_date,
             frequency="d",
         )
+        if rs is None:
+            raise RuntimeError(f"{col_name} 查询失败: 空结果")
         if rs.error_code != "0":
             raise RuntimeError(f"{col_name} 查询失败: {rs.error_msg}")
         rows = collect_rows(rs)
@@ -73,12 +83,18 @@ def query_exchange_amount(
             return None
         df = pd.DataFrame(rows, columns=rs.fields)
         df["amount"] = pd.to_numeric(df["amount"], errors="coerce")
-        df = df.dropna(subset=["amount"])
+        cleaned = df.dropna(subset=["amount"])
+        if not isinstance(cleaned, pd.DataFrame):
+            return None
+        df = cleaned
         if df.empty:
             return None
         df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
         df.rename(columns={"amount": col_name}, inplace=True)
-        return df[["date", col_name]]
+        selected = df.loc[:, ["date", col_name]]
+        if not isinstance(selected, pd.DataFrame):
+            return None
+        return selected
 
     return safe_baostock_call(
         f"{col_name} 查询超时/连接异常",

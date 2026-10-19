@@ -4,7 +4,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from astock.config import ASSET_PRICE_CACHE_TTL, PRICE_LEVEL_CONCLUSIONS, PRICE_LEVEL_DEFAULT
+from astock.config import (
+    ASSET_PRICE_CACHE_TTL,
+    PRICE_LEVEL_CONCLUSIONS,
+    PRICE_LEVEL_DEFAULT,
+    GlobalAssetConfig,
+)
 from astock.core.datetime_utils import MarketCode, filter_settled_closes, market_for_asset_type
 from astock.core.price_utils import anchor_date_excluding_today
 from astock.core.redis_client import redis_gateway
@@ -28,13 +33,13 @@ from astock.services.cache.keys import (
 class AssetFetchRecord:
     """单资产 AkShare 抓取解析结果。"""
 
-    asset: dict[str, str]
+    asset: GlobalAssetConfig
     record: dict[str, Any]
     market: MarketCode
     closes: dict[str, float]
 
 
-def global_asset_markets(assets: list[dict[str, Any]]) -> dict[str, MarketCode]:
+def global_asset_markets(assets: list[GlobalAssetConfig]) -> dict[str, MarketCode]:
     """为全球资产建立 ticker → 结算市场映射。"""
     return {asset["ticker"]: market_for_asset_type(asset["asset_type"]) for asset in assets}
 
@@ -81,7 +86,7 @@ def read_price_cache(ticker: str, *, market: MarketCode) -> dict[str, float]:
 
 
 def parse_asset_fetch_results(
-    assets: list[dict[str, str]],
+    assets: list[GlobalAssetConfig],
     fetch_results: Mapping[str, FetchResult],
     *,
     skip_pending: bool = False,
@@ -107,7 +112,7 @@ def parse_asset_fetch_results(
     return parsed, errors
 
 
-def backfill_from_akshare(assets: list[dict[str, str]]) -> ClosesFetchResult:
+def backfill_from_akshare(assets: list[GlobalAssetConfig]) -> ClosesFetchResult:
     """为缺失资产批量拉取 AkShare 收盘价并写缓存，供 ensure 回填。"""
     errors: list[str] = []
     all_closes: dict[str, dict[str, float]] = {}
@@ -125,7 +130,7 @@ def backfill_from_akshare(assets: list[dict[str, str]]) -> ClosesFetchResult:
     return ClosesFetchResult(all_closes, errors)
 
 
-def pending_item(asset: dict[str, str]) -> PriceLevelPendingItem:
+def pending_item(asset: GlobalAssetConfig) -> PriceLevelPendingItem:
     """构造数据待补齐资产的占位响应项。"""
     return PriceLevelPendingItem(
         ticker=asset["ticker"],

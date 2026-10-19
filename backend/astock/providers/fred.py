@@ -3,38 +3,29 @@
 
 import csv
 import io
-import logging
 
 import httpx
 
 from astock.providers._shared.http import FRED_HTTP_TIMEOUT
 from astock.providers._shared.parsing import parse_iso_date, to_float
-
-logger = logging.getLogger(__name__)
+from astock.providers._shared.retry import retry_call
 
 FRED_DFEDTARU_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DFEDTARU"
 
 
 def fetch_dfedtaru_events() -> list[tuple[str, float]]:
     """返回 [(effective_date YYYY-MM-DD, upper_rate), ...] 升序。"""
-    last_exc: Exception | None = None
-    text = ""
-    for attempt in range(2):
-        try:
-            with httpx.Client(
-                timeout=FRED_HTTP_TIMEOUT,
-                headers={"User-Agent": "Astock/1.0", "Accept": "text/csv,*/*"},
-                http2=False,
-            ) as client:
-                resp = client.get(FRED_DFEDTARU_URL)
-                resp.raise_for_status()
-                text = resp.text
-                break
-        except Exception as exc:  # noqa: BLE001
-            last_exc = exc
-            logger.warning("fred_dfedtaru 第 %s 次失败: %s", attempt + 1, exc)
-    else:
-        raise RuntimeError(f"FRED DFEDTARU: {last_exc}")
+    def _download() -> str:
+        with httpx.Client(
+            timeout=FRED_HTTP_TIMEOUT,
+            headers={"User-Agent": "Astock/1.0", "Accept": "text/csv,*/*"},
+            http2=False,
+        ) as client:
+            resp = client.get(FRED_DFEDTARU_URL)
+            resp.raise_for_status()
+            return resp.text
+
+    text = retry_call("fred_dfedtaru", _download)
 
     reader = csv.DictReader(io.StringIO(text))
     events: list[tuple[str, float]] = []

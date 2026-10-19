@@ -35,6 +35,7 @@ from astock.services.cache.asset_prices import (
     read_price_cache,
     write_price_cache,
 )
+from astock.services.imports.global_assets import persist_higher_close
 from astock.services.cache.closes import (
     ClosesCacheDeps,
     ClosesEnsureOptions,
@@ -45,7 +46,7 @@ from astock.services.cache.closes import (
 from astock.services.cache.keys import LATEST_TRADING_DATE_KEY
 from astock.services.sync.store import get_sync_meta
 
-_PRICE_CACHE_DEPS = ClosesCacheDeps(
+_PRICE_CACHE_DEPS: ClosesCacheDeps[GlobalAssetConfig] = ClosesCacheDeps(
     key_fn=lambda a: a["ticker"],
     market_fn=lambda a: market_for_asset_type(a["asset_type"]),
     read_closes=lambda ticker, market: read_price_cache(ticker, market=market),
@@ -120,11 +121,15 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> PriceLevels
             cache_errors.append(f"{ticker}: 数据库无 ATH 记录，请先刷新导入")
             continue
 
-        all_time_high = float(row.all_time_high)
-        ath_date = row.ath_date
-        if current > all_time_high:
-            all_time_high = current
-            ath_date = sorted_dates(closes)[-1] if closes else ath_date
+        price_date = sorted_dates(closes)[-1] if closes else row.ath_date
+        all_time_high, ath_date = persist_higher_close(
+            db,
+            ticker=ticker,
+            name=row.name,
+            asset_type=row.asset_type,
+            price=current,
+            price_date=price_date,
+        )
 
         percentage_diff = pct_change(current, all_time_high)
         if percentage_diff is None:
@@ -140,7 +145,7 @@ def get_price_levels(db: Session, *, force_refresh: bool = False) -> PriceLevels
                 ticker=ticker,
                 name=row.name,
                 asset_type=row.asset_type,
-                current_price=fields.current_price,
+                current_price=round(current, 4),
                 all_time_high=round(all_time_high, 4),
                 ath_date=ath_date,
                 percentage_diff=round(percentage_diff, 2),

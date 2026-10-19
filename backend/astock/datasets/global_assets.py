@@ -5,8 +5,14 @@ import logging
 
 import pandas as pd
 
-from astock.config import GLOBAL_ASSET_RECENT_DAYS, GLOBAL_ASSETS
-from astock.core.datetime_utils import last_settled_date, market_for_asset_type, normalize_date
+from astock.config import GLOBAL_ASSET_RECENT_DAYS, GLOBAL_ASSETS, GlobalAssetConfig
+from astock.core.datetime_utils import (
+    MarketCode,
+    last_settled_date,
+    market_for_asset_type,
+    normalize_date,
+)
+from astock.providers._shared.parsing import to_float
 from astock.datasets.result import FetchResult
 from astock.providers.akshare.assets import fetch_asset_history
 
@@ -26,22 +32,25 @@ def _extract_ath(df: pd.DataFrame) -> tuple[float, str] | None:
 def _extract_recent_closes(
     df: pd.DataFrame,
     *,
-    market: str = "cn",
+    market: MarketCode = "cn",
 ) -> dict[str, float]:
     if df.empty:
         return {}
     cap = last_settled_date(market)
-    df = df[df["date"] <= cap]
-    if df.empty:
+    window = df.loc[df["date"] <= cap]
+    if not isinstance(window, pd.DataFrame) or window.empty:
         return {}
-    tail = df.tail(GLOBAL_ASSET_RECENT_DAYS)
-    return {
-        normalize_date(row["date"]): float(row["close"])
-        for _, row in tail.iterrows()
-    }
+    tail = window.tail(GLOBAL_ASSET_RECENT_DAYS)
+    closes: dict[str, float] = {}
+    for _, row in tail.iterrows():
+        day = normalize_date(row.get("date"))
+        close = to_float(row.get("close"))
+        if day and close is not None:
+            closes[day] = close
+    return closes
 
 
-def _fetch_one_asset(asset: dict[str, str]) -> tuple[str, FetchResult]:
+def _fetch_one_asset(asset: GlobalAssetConfig) -> tuple[str, FetchResult]:
     ticker = asset["ticker"]
     if asset.get("data_pending"):
         return ticker, FetchResult.failure(f"{ticker}: 待接入数据源")
@@ -73,12 +82,12 @@ def _fetch_one_asset(asset: dict[str, str]) -> tuple[str, FetchResult]:
 
 
 def fetch_all_assets(
-    assets: list[dict[str, str]] | None = None,
+    assets: list[GlobalAssetConfig] | None = None,
 ) -> dict[str, FetchResult]:
-    assets = assets or GLOBAL_ASSETS
+    selected = list(GLOBAL_ASSETS) if assets is None else assets
     results: dict[str, FetchResult] = {}
     # 故意串行：akshare 底层 mini_racer 多线程会在 macOS 上 fatal crash。
-    for asset in assets:
+    for asset in selected:
         ticker, result = _fetch_one_asset(asset)
         results[ticker] = result
     return results

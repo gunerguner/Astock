@@ -4,9 +4,9 @@
 import logging
 
 import baostock as bs
-import pandas as pd
 
 from astock.config import STOCK_CODE_PREFIXES
+from astock.providers._shared.parsing import to_float
 from astock.providers._shared.symbols import parse_baostock_code
 from astock.providers.baostock.client import (
     BaostockQueryError,
@@ -75,10 +75,10 @@ def query_daily_astock_amounts(trade_date: str) -> list[dict[str, float | str]]:
                 code = digits
             else:
                 code = parsed[1]
-            amount = pd.to_numeric(row[amount_idx], errors="coerce")
-            if pd.isna(amount):
+            amount = to_float(row[amount_idx])
+            if amount is None:
                 continue
-            records.append({"code": code, "amount": float(amount)})
+            records.append({"code": code, "amount": amount})
 
         if not records:
             raise BaostockQueryError(f"全市场日K无有效成交额记录({trade_date})")

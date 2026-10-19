@@ -88,6 +88,7 @@
     () =>
       !refreshing.value &&
       (progressState.value.overallStatus === 'done' ||
+        progressState.value.overallStatus === 'partial' ||
         progressState.value.overallStatus === 'error'),
   );
 
@@ -107,6 +108,7 @@
     const { status } = progressState.value.phases[key];
     if (status === 'done') return '✓';
     if (status === 'running') return '⟳';
+    if (status === 'partial_failure') return '!';
     if (status === 'failed') return '✗';
     return '·';
   }
@@ -123,7 +125,8 @@
     if (
       item.imported > 0 ||
       item.status === 'done' ||
-      item.status === 'failed'
+      item.status === 'failed' ||
+      item.status === 'partial_failure'
     ) {
       const unit =
         key === 'market_overview'
@@ -145,6 +148,7 @@
       pending: t('adminRefresh.progress.status.pending'),
       running: t('adminRefresh.progress.status.running'),
       done: t('adminRefresh.progress.status.done'),
+      partial_failure: t('adminRefresh.progress.status.partial'),
       failed: t('adminRefresh.progress.status.failed'),
     };
     return map[status];
@@ -194,6 +198,10 @@
 
     &--failed {
       background: rgb(var(--danger-1));
+    }
+
+    &--partial_failure {
+      background: rgb(var(--warning-1));
     }
 
     &__icon {

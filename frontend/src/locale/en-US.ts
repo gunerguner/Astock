@@ -55,6 +55,7 @@ export default {
   'adminRefresh.progress.status.running': 'Running',
   'adminRefresh.progress.status.done': 'Done',
   'adminRefresh.progress.status.failed': 'Failed',
+  'adminRefresh.progress.status.partial': 'Partial',
 
   'footer.copyright': '{range} Robin Zhang',
 

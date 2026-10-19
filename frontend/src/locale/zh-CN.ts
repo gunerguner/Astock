@@ -55,6 +55,7 @@ export default {
   'adminRefresh.progress.status.running': '抓取中',
   'adminRefresh.progress.status.done': '完成',
   'adminRefresh.progress.status.failed': '失败',
+  'adminRefresh.progress.status.partial': '部分失败',
 
   'footer.copyright': '{range} 溯宁',
 

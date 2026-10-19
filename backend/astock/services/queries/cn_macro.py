@@ -3,7 +3,7 @@
 
 from sqlmodel import Session
 
-from astock.config import CN_MACRO_START_PERIOD
+from astock.config import cn_macro_start_period
 from astock.datasets.macro.types import MacroMetric
 from astock.schemas.analysis import CnMacroPointItem, CnMacroResponse
 from astock.services.queries._common import (
@@ -25,10 +25,10 @@ _CN_METRICS: tuple[MacroMetric, ...] = (
 def get_cn_macro(
     db: Session,
     *,
-    start: str = CN_MACRO_START_PERIOD,
+    start: str = "",
 ) -> CnMacroResponse:
-    """按起始月份查询中国宏观月度序列。"""
-    start_period = (start or CN_MACRO_START_PERIOD).strip()[:7]
+    """按起始月份查询中国宏观月度序列。空起点按上海当前月往前 60 个月。"""
+    start_period = (start or cn_macro_start_period()).strip()
     rows = load_macro_rows(
         db, region="cn", metrics=_CN_METRICS, start_period=start_period
     )

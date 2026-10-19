@@ -199,9 +199,9 @@ class ApiResponse(BaseModel, Generic[T]):
 
 | Query | 类型 | 默认 | 约束 |
 |-------|------|------|------|
-| `start` | str | `CN_MACRO_START_PERIOD` | 长度恰为 7；应传 `YYYY-MM` |
+| `start` | str | 查询时计算 | 空则上海当前月往前 60 个月；传入须为 `YYYY-MM` |
 
-`CN_MACRO_START_PERIOD` 在 `settings.yaml` 留空时，进程启动时动态计算为北京时间当前月份往前 60 个月。
+`cn_macro_start_period` 在 `settings.yaml` 留空时，于查询时按上海当前月往前 60 个月计算。传入的 `start` 须为 `YYYY-MM`。
 
 ```jsonc
 {
@@ -435,7 +435,7 @@ backend 挂载 `${SQLITE_HOST_DIR:-./sqlite-data}:/app/data` + `log_data:/var/lo
 | `START_DATE` | 2005-01-01 | 历史起始 |
 | `US_MACRO_REFRESH_DAY` / `CN_MACRO_REFRESH_DAY` | 15 | 每月含该日后，宏观期望水位从上上月切到上月 |
 | `US_MACRO_START_PERIOD` | `2020-06` | 美国宏观 API/页面默认起始月份 |
-| `CN_MACRO_START_PERIOD` | 动态前推 60 个月 | 中国宏观 API 默认起始月份；可由 YAML 固定 |
+| `cn_macro_start_period()` | 查询时前推 60 个月 | 中国宏观 API 默认起始月份；YAML 写成 `YYYY-MM` 时用配置 |
 | `GUNICORN_WORKERS/TIMEOUT` | — | 生产 worker；后端为 **sync** 路由 + 阻塞 IO，依赖多 worker，不走全量 async |
 
 ### 部署约定

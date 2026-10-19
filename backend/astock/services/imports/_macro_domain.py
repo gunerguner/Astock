@@ -11,14 +11,13 @@ from sqlmodel import Session
 
 from astock.core.datetime_utils import iso_now, today_local_date
 from astock.core.sync_status import SyncStatus
-from astock.datasets.macro.types import MacroRegion
+from astock.datasets.macro.types import MacroMetric, MacroRegion
 from astock.datasets.result import FetchResult
 from astock.models.macro import MacroValue
 from astock.services.sync.results import (
     ImportResult,
     build_result,
     finalize_import_result,
-    resolve_status,
 )
 from astock.services.sync.store import (
     batch_upsert,
@@ -26,6 +25,7 @@ from astock.services.sync.store import (
     get_sync_meta,
     upsert_sync_meta,
 )
+from astock.services.sync.watermark import forward_date
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +80,21 @@ def _latest_cpi_period(records: list[dict[str, Any]]) -> str | None:
     return max(periods) if periods else None
 
 
+def _metric_periods(records: list[dict[str, Any]]) -> dict[str, set[str]]:
+    found: dict[str, set[str]] = {}
+    for row in records:
+        metric = str(row.get("metric") or "")
+        period = str(row.get("period") or "")
+        if metric and period and row.get("value") is not None:
+            found.setdefault(metric, set()).add(period)
+    return found
+
+
+def _metrics_cover(records: list[dict[str, Any]], metrics: tuple[str, ...], period: str) -> bool:
+    found = _metric_periods(records)
+    return all(period in found.get(metric, set()) for metric in metrics)
+
+
 def run_macro_import(
     db: Session,
     *,
@@ -88,6 +103,7 @@ def run_macro_import(
     refresh_day: int,
     fetch_fn: Callable[[], FetchResult],
     log_label: str,
+    required_metrics: tuple[MacroMetric, ...],
 ) -> ImportResult:
     """拉取宏观月度指标并 upsert；尊重月频跳过窗口。"""
     start_ts = time.perf_counter()
@@ -162,18 +178,40 @@ def run_macro_import(
     imported = batch_upsert(db, MacroValue, records, _CONFLICT_COLS)
     latest = _latest_cpi_period(records)
     expected = expected_macro_period(refresh_day=refresh_day)
-    watermark = latest
-    status = resolve_status(fr.ok, imported)
-    if latest and latest < expected and status == SyncStatus.SUCCESS:
+    old_meta = get_sync_meta(db, sync_table)
+    old_date = old_meta.last_synced_date if old_meta else None
+    covered = bool(latest) and _metrics_cover(records, required_metrics, expected)
+    if not latest:
+        fr.errors.append("本次没有有效 CPI，水位保持不变")
+        fr.ok = False
+    elif latest < expected or not covered or not fr.ok:
+        missing = [
+            metric
+            for metric in required_metrics
+            if expected not in _metric_periods(records).get(metric, set())
+        ]
+        if latest < expected:
+            fr.errors.append(f"源端最新 CPI 月份 {latest} 尚未覆盖期望 {expected}")
+        if missing:
+            fr.errors.append(f"期望月份 {expected} 缺少指标: {','.join(missing)}")
+        fr.ok = False
+
+    if fr.ok and covered and latest:
+        status = SyncStatus.SUCCESS
+        watermark = forward_date(old_date, latest)
+    elif imported > 0:
         status = SyncStatus.PARTIAL_FAILURE
-        fr.errors.append(f"源端最新 CPI 月份 {latest} 尚未覆盖期望 {expected}")
+        watermark = old_date
+    else:
+        status = SyncStatus.FAILED
+        watermark = old_date
 
     last_synced_at = upsert_sync_meta(
         db,
         sync_table,
         last_synced_date=watermark,
         status=status,
-        error=fr.error_summary(),
+        error=None if status == SyncStatus.SUCCESS else fr.error_summary(),
     )
     result = build_result(
         imported=imported,

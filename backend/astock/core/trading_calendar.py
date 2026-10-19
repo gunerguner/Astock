@@ -47,10 +47,35 @@ class TradingCalendar:
 
         cal = cls.get(market)
         for _ in range(_MAX_LOOKBACK_DAYS):
-            if cal.is_session(pd.Timestamp(check)):
+            if cal.is_session(check):
                 return check.isoformat()
             check -= timedelta(days=1)
 
         raise RuntimeError(
             f"未找到 {market} 在 {day} 前 {_MAX_LOOKBACK_DAYS} 天内的交易日"
         )
+
+    @classmethod
+    def sessions_on_or_between(
+        cls,
+        start: str,
+        end: str,
+        market: MarketCode = "cn",
+    ) -> list[str]:
+        """返回 [start, end] 闭区间内的交易日（YYYY-MM-DD），两端可落在休市日。"""
+        cal = cls.get(market)
+        start_d = datetime.strptime(str(start)[:10], "%Y-%m-%d").date()
+        end_d = datetime.strptime(str(end)[:10], "%Y-%m-%d").date()
+        if start_d > end_d:
+            return []
+        if not cal.is_session(start_d):
+            nxt = cal.date_to_session(start_d, direction="next")
+            start_d = datetime.strptime(str(pd.Timestamp(nxt))[:10], "%Y-%m-%d").date()
+        if not cal.is_session(end_d):
+            end_d = datetime.strptime(
+                cls.previous_session_on_or_before(end, market),
+                "%Y-%m-%d",
+            ).date()
+        if start_d > end_d:
+            return []
+        return [ts.strftime("%Y-%m-%d") for ts in cal.sessions_in_range(start_d, end_d)]

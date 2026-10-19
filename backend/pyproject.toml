@@ -4,6 +4,6 @@ testpaths = ["tests"]
 addopts = "-q"
 
 [tool.pyright]
-pythonVersion = "3.10"
+pythonVersion = "3.13"
 venvPath = "."
 venv = ".venv"

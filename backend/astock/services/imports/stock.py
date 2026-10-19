@@ -22,7 +22,6 @@ from astock.services.imports.turnover import import_turnover
 from astock.services.sync.results import (
     build_result,
     finalize_import_result,
-    resolve_status,
 )
 from astock.services.sync.store import (
     batch_upsert,
@@ -31,6 +30,7 @@ from astock.services.sync.store import (
     get_sync_meta,
     upsert_sync_meta,
 )
+from astock.services.sync.watermark import forward_date
 from astock.datasets.stocks import (
     baostock_session,
     fetch_all_stock_codes_logged_in,
@@ -82,38 +82,56 @@ def _names_from_fetch(fr) -> dict[str, str]:
     }
 
 
+def _resolve_name(
+    code: str,
+    trade_date: str,
+    names: dict[str, str],
+    day_names: dict[str, dict[str, str]],
+) -> str:
+    """先用截止日名称表，对不上再按该交易日查一次；仍没有则用代码占位。"""
+    name = names.get(code, "")
+    if not is_missing_value(name):
+        return name
+    if trade_date not in day_names:
+        day_names[trade_date] = _names_from_fetch(
+            fetch_all_stock_codes_logged_in(trade_date)
+        )
+    name = day_names[trade_date].get(code, "")
+    if is_missing_value(name):
+        logger.warning("个股 %s@%s 缺少名称，用代码占位", code, trade_date)
+        return code
+    names[code] = name
+    return name
+
+
 def _top_n_records(
     amounts: list[dict[str, Any]],
     *,
     trade_date: str,
     names: dict[str, str],
+    day_names: dict[str, dict[str, str]],
     cached_at: str,
     top_n: int,
-) -> tuple[list[dict[str, Any]], list[str]]:
+) -> list[dict[str, Any]]:
     ranked = sorted(
         amounts,
         key=lambda r: float(r.get("amount") or 0),
         reverse=True,
     )[:top_n]
     records: list[dict[str, Any]] = []
-    errors: list[str] = []
     for row in ranked:
         code = str(row["code"])
         amount = float(row["amount"])
-        name = names.get(code, "")
-        if is_missing_value(name):
-            errors.append(f"个股 {code}@{trade_date}: 缺少股票名称")
-            continue
         records.append(
             {
                 "date": trade_date,
                 "code": code,
-                "name": name,
+                "name": _resolve_name(code, trade_date, names, day_names),
                 "amount": amount,
                 "cached_at": cached_at,
             }
         )
-    return records, errors
+    return records
 
 
 def import_stock_gen(
@@ -137,7 +155,7 @@ def import_stock_gen(
     last_synced = meta.last_synced_date if meta else None
     as_of_date = get_last_date(db, Turnover)
     if as_of_date is None:
-        raise ExternalSourceAppError("无法确定有效交易日：turnover 表为空")
+        raise ExternalSourceAppError(message="无法确定有效交易日：turnover 表为空")
 
     if last_synced and as_of_date <= last_synced:
         result = build_skip_result(
@@ -185,7 +203,7 @@ def import_stock_gen(
 
     with baostock_session() as lg:
         if err := login_error(lg):
-            raise ExternalSourceAppError(err)
+            raise ExternalSourceAppError(message=err)
 
         # 名称按锚点日拉一次，缺口期内复用
         _report(
@@ -198,8 +216,11 @@ def import_stock_gen(
         names = _names_from_fetch(fetch_all_stock_codes_logged_in(as_of_date))
         if not names:
             raise ExternalSourceAppError(
-                f"个股切片导入失败: 名称清单为空 (as_of={as_of_date})"
+                message=f"个股切片导入失败: 名称清单为空 (as_of={as_of_date})"
             )
+        day_names: dict[str, dict[str, str]] = {}
+        last_success = last_synced
+        failed_day: str | None = None
 
         for i, trade_date in enumerate(gap_days, start=1):
             _report(
@@ -216,21 +237,23 @@ def import_stock_gen(
                 msg = amounts_fr.error_summary() or f"{trade_date}: 全市场日K为空"
                 errors.append(msg)
                 logger.warning("个股切片日失败: %s", msg)
-                continue
+                failed_day = trade_date
+                break
 
-            day_records, name_errors = _top_n_records(
+            day_records = _top_n_records(
                 amounts_fr.records,
                 trade_date=trade_date,
                 names=names,
+                day_names=day_names,
                 cached_at=cached_at,
                 top_n=STOCK_SLICE_TOP_N,
             )
-            for msg in name_errors:
-                logger.warning("%s", msg)
             if not day_records:
-                errors.append(f"{trade_date}: Top{STOCK_SLICE_TOP_N} 无有效名称记录")
-                continue
+                errors.append(f"{trade_date}: 没有成交额行")
+                failed_day = trade_date
+                break
             record_buffer.extend(day_records)
+            last_success = trade_date
 
             if len(record_buffer) >= STOCK_UPSERT_FLUSH_SIZE:
                 imported += batch_upsert(
@@ -252,10 +275,18 @@ def import_stock_gen(
             ["date", "code"],
         )
 
-    # 全部成功才推进水位；失败保留旧水位，下次重跑缺口（upsert 幂等）
-    ok = len(errors) == 0
-    status = resolve_status(ok, imported)
-    synced_date = as_of_date if ok else last_synced
+    # 水位停在第一个真正失败日的前一日；成功前缀下次不再重拉
+    advanced = last_success is not None and last_success != last_synced
+    ok = failed_day is None
+    if ok:
+        status = SyncStatus.SUCCESS
+        synced_date = forward_date(forward_date(last_synced, last_success), as_of_date)
+    elif advanced or imported > 0:
+        status = SyncStatus.PARTIAL_FAILURE
+        synced_date = forward_date(last_synced, last_success)
+    else:
+        status = SyncStatus.FAILED
+        synced_date = last_synced
     last_synced_at = upsert_sync_meta(
         db,
         "stock_turnover",
@@ -269,12 +300,13 @@ def import_stock_gen(
         total=count_rows(db, StockTurnover),
         last_date=synced_date or get_last_date(db, StockTurnover),
         ok=ok,
+        status=status,
         source_errors={"stock": "; ".join(errors[:5])} if errors else {},
         last_synced_at=last_synced_at,
     )
     if result.status == SyncStatus.FAILED:
         raise ExternalSourceAppError(
-            f"个股切片导入失败: {result.source_errors.get('stock')}"
+            message=f"个股切片导入失败: {result.source_errors.get('stock')}"
         )
     return finalize_import_result(
         result, start_ts=start_ts, log_label="个股切片导入"

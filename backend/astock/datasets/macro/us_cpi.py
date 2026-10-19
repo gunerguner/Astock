@@ -10,23 +10,6 @@ from astock.providers._shared.parsing import parse_iso_date, parse_period, to_fl
 from astock.providers.akshare import economics as ak_econ
 from astock.providers import bls
 
-# BLS 因 2025 政府停摆未发布 Oct CPI；财政部按 TIPS 应急条款公布 NSA 指数 325.604，
-# 相对 BLS 2024-10 指数 315.664 计算同比，补齐图表断点。
-_CPI_GAP_YOY: dict[str, float] = {
-    "2025-10": round((325.604 / 315.664 - 1.0) * 100.0, 1),
-}
-
-
-def _fill_known_cpi_gaps(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    by_period = {str(r["period"]): r for r in records if r.get("period")}
-    for period, yoy in _CPI_GAP_YOY.items():
-        existing = by_period.get(period)
-        if existing is None or existing.get("value") is None:
-            by_period[period] = macro_record(
-                region="us", period=period, metric="cpi_yoy", value=yoy
-            )
-    return [by_period[k] for k in sorted(by_period)]
-
 
 def _normalize_cpi_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     today = today_local_date().isoformat()
@@ -48,7 +31,7 @@ def _normalize_cpi_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             )
         )
     out.sort(key=lambda r: r["period"])
-    return _fill_known_cpi_gaps(out)
+    return out
 
 
 def fetch_cpi_eastmoney() -> FetchResult:

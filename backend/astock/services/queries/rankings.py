@@ -1,6 +1,6 @@
 """成交额与个股排名查询。"""
 
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from astock.models.stock_turnover import StockTurnover
 from astock.models.turnover import Turnover
@@ -16,7 +16,7 @@ from astock.services.queries._common import get_bull_market_period
 def turnover_ranking(
     db: Session, *, top: int = 20, bull_market: str | None = None
 ) -> TurnoverRankingResponse:
-    query = select(Turnover).order_by(Turnover.turnover.desc())
+    query = select(Turnover).order_by(col(Turnover.turnover).desc())
     period = get_bull_market_period(bull_market)
     if period:
         query = query.where(Turnover.date >= period[0], Turnover.date <= period[1])
@@ -41,7 +41,7 @@ def turnover_ranking(
 def stock_ranking(
     db: Session, *, top: int = 20, bull_market: str | None = None
 ) -> StockRankingResponse:
-    query = select(StockTurnover).order_by(StockTurnover.amount.desc())
+    query = select(StockTurnover).order_by(col(StockTurnover.amount).desc())
     period = get_bull_market_period(bull_market)
     if period:
         query = query.where(

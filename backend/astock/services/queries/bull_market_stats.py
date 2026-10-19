@@ -1,8 +1,9 @@
 """牛市区间统计查询。"""
 
+from typing import Any
+
 from sqlalchemy import func
-from sqlalchemy.orm.attributes import InstrumentedAttribute
-from sqlmodel import Session, SQLModel, select
+from sqlmodel import Session, col, select
 
 from astock.config import BULL_MARKETS, POINT_INDEX_CONFIG
 from astock.core.errors import AppError
@@ -23,8 +24,8 @@ from astock.services.queries._common import (
 
 def build_bull_market_stats(
     db: Session,
-    model: type[SQLModel],
-    value_col: InstrumentedAttribute,
+    model: type[Point] | type[Turnover],
+    value_col: Any,
     threshold: float,
     *,
     extra_where: list | None = None,
@@ -42,8 +43,8 @@ def build_bull_market_stats(
             continue
 
         where_clauses = [
-            model.date >= period["start"],
-            model.date <= period["end"],
+            col(model.date) >= period["start"],
+            col(model.date) <= period["end"],
             value_col > threshold,
             *extra_where,
         ]
@@ -78,7 +79,12 @@ def bull_market_multi_index_point_stats(
     indices: list[IndexPointStats] = []
 
     for index_code, config in POINT_INDEX_CONFIG.items():
-        threshold = thresholds.get(index_code, config["default_threshold"])
+        raw_threshold = thresholds.get(index_code)
+        threshold = (
+            float(config["default_threshold"])
+            if raw_threshold is None
+            else float(raw_threshold)
+        )
         index_name = config["name"]
         available_from = config["available_from"]
         exists = db.exec(
@@ -100,7 +106,7 @@ def bull_market_multi_index_point_stats(
         stats = build_bull_market_stats(
             db,
             Point,
-            Point.close,
+            col(Point.close),
             threshold,
             extra_where=[Point.index_code == index_code],
             available_from=available_from,
@@ -120,4 +126,4 @@ def bull_market_multi_index_point_stats(
 
 def bull_market_turnover_stats(db: Session, threshold: float) -> BullMarketStatsResponse:
     require_rows(db, Turnover, "成交额数据为空，请先导入数据")
-    return build_bull_market_stats(db, Turnover, Turnover.turnover, threshold)
+    return build_bull_market_stats(db, Turnover, col(Turnover.turnover), threshold)

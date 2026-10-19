@@ -28,13 +28,12 @@ def fetch_us_index_sina(symbol: str) -> pd.DataFrame | None:
     )
 
 
-def fetch_usd_index_hist_em() -> pd.DataFrame | None:
-    """东财全球指数历史：美元指数。"""
-    try:
-        df = ak.index_global_hist_em(symbol="美元指数")
-    except Exception as e:
-        logger.warning("美元指数 akshare 历史失败: %s", e)
-        return None
+def fetch_usd_index_hist_em() -> pd.DataFrame:
+    """东财全球指数历史：美元指数。失败抛出原始异常，由调用方记入 errors。"""
+    df = retry_call(
+        "index_global_hist_em:美元指数",
+        lambda: ak.index_global_hist_em(symbol="美元指数"),
+    )
     if df is None or df.empty or "日期" not in df.columns or "收盘" not in df.columns:
-        return None
+        raise RuntimeError("美元指数 akshare 历史为空或缺少日期/收盘列")
     return df

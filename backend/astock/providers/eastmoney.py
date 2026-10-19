@@ -3,9 +3,9 @@
 
 from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
-import pandas as pd
 
 from astock.config import (
     EM_DELAY_HOST,
@@ -15,6 +15,10 @@ from astock.config import (
     USD_SPOT_TIMEOUT,
 )
 from astock.core.datetime_utils import normalize_date, now_local
+from astock.providers._shared.parsing import to_float
+from astock.providers._shared.retry import retry_call
+
+_SHANGHAI = ZoneInfo("Asia/Shanghai")
 
 
 def em_udi_headers() -> dict[str, str]:
@@ -32,14 +36,18 @@ def parse_em_kline_lines(klines: list[str]) -> list[tuple[str, float]]:
         if len(parts) < 3:
             continue
         d = normalize_date(parts[0])
-        close = pd.to_numeric(parts[2], errors="coerce")
-        if d and pd.notna(close):
-            pairs.append((d, float(close)))
+        close = to_float(parts[2])
+        if d and close is not None:
+            pairs.append((d, close))
     return pairs
 
 
 def fetch_udi_spot() -> dict[str, Any] | None:
-    """返回 {quote_date, current, prev}；失败返回 None。"""
+    """返回未缩放的 {quote_date, current, prev}。f2/f18 是否百分之一由调用方对照 K 线决定。"""
+    return retry_call("eastmoney_udi_spot", _fetch_udi_spot_once)
+
+
+def _fetch_udi_spot_once() -> dict[str, Any] | None:
     params = {
         "np": "2",
         "fltt": "1",
@@ -69,26 +77,30 @@ def fetch_udi_spot() -> dict[str, Any] | None:
         if not row or row.get("f12") != "UDI":
             return None
 
-        current = pd.to_numeric(row.get("f2"), errors="coerce")
-        prev = pd.to_numeric(row.get("f18"), errors="coerce")
-        if pd.isna(current):
+        current = to_float(row.get("f2"))
+        prev = to_float(row.get("f18"))
+        if current is None:
             return None
 
         ts_raw = row.get("f124")
         today = (
-            datetime.fromtimestamp(int(ts_raw)).strftime("%Y-%m-%d")
+            datetime.fromtimestamp(int(ts_raw), _SHANGHAI).strftime("%Y-%m-%d")
             if ts_raw
             else now_local().strftime("%Y-%m-%d")
         )
         return {
             "quote_date": today,
-            "current": float(current) * 0.01,
-            "prev": float(prev) * 0.01 if pd.notna(prev) else None,
+            "current": current,
+            "prev": prev,
         }
 
 
 def fetch_udi_history(host: str, n: int) -> list[tuple[str, float]]:
-    """东财 push2his K 线 → [(date, close), ...]。"""
+    """东财 push2his K 线 → [(date, close), ...]。收盘不缩放。"""
+    return retry_call(f"eastmoney_udi_history:{host}", lambda: _fetch_udi_history_once(host, n))
+
+
+def _fetch_udi_history_once(host: str, n: int) -> list[tuple[str, float]]:
     params = {
         "secid": "100.UDI",
         "klt": "101",

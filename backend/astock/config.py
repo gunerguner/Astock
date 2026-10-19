@@ -154,8 +154,14 @@ def _default_cn_macro_start_period() -> str:
     return f"{year:04d}-{month:02d}"
 
 
-_cn_start = str(_business.get("cn_macro_start_period") or "").strip()
-CN_MACRO_START_PERIOD = _cn_start[:7] if len(_cn_start) >= 7 else _default_cn_macro_start_period()
+def cn_macro_start_period() -> str:
+    """YAML 写了合法 YYYY-MM 时用配置；留空则按本次请求的上海当前月往前 60 个月。"""
+    configured = str(_business.get("cn_macro_start_period") or "").strip()
+    if len(configured) == 7 and configured[4] == "-" and configured[:4].isdigit():
+        month = configured[5:]
+        if month.isdigit() and 1 <= int(month) <= 12:
+            return configured
+    return _default_cn_macro_start_period()
 
 # batch
 DEFAULT_UPSERT_BATCH_SIZE = int(_batch.get("default_upsert_batch_size", 500))
@@ -254,14 +260,26 @@ def _load_bull_markets() -> dict[str, BullMarketPeriod]:
 
 @lru_cache
 def _load_global_assets() -> list[GlobalAssetConfig]:
-    raw: dict[str, dict[str, str]] = yaml.safe_load(
+    raw: dict[str, dict] = yaml.safe_load(
         (_CONFIG_DIR / "global_assets.yaml").read_text(encoding="utf-8")
     )
-    return [
-        {"ticker": ticker, "name": name, "asset_type": asset_type}
-        for asset_type, items in raw.items()
-        for name, ticker in items.items()
-    ]
+    assets: list[GlobalAssetConfig] = []
+    for asset_type, items in raw.items():
+        for name, spec in items.items():
+            if isinstance(spec, str):
+                assets.append(
+                    {"ticker": spec, "name": name, "asset_type": asset_type}
+                )
+                continue
+            entry: GlobalAssetConfig = {
+                "ticker": str(spec["ticker"]),
+                "name": name,
+                "asset_type": asset_type,
+            }
+            if spec.get("data_pending"):
+                entry["data_pending"] = True
+            assets.append(entry)
+    return assets
 
 
 @lru_cache

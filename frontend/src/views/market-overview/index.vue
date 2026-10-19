@@ -3,6 +3,7 @@
     <a-card :title="$t('pages.marketOverview.title')" class="section-card">
       <template #extra>
         <span v-if="metaText" class="meta-text">{{ metaText }}</span>
+        <span v-if="errorSummary" class="meta-text">{{ errorSummary }}</span>
       </template>
       <a-table
         :columns="columns"
@@ -60,6 +61,9 @@
   const metaText = computed(() =>
     formatLatestDateMeta(overview.value?.latest_trading_date),
   );
+  const errorSummary = computed(() =>
+    (overview.value?.errors ?? []).slice(0, 3).join('；'),
+  );
 
   const formatPeriod = (start: string | null, end: string | null) => {
     if (!start || !end) return '';
@@ -111,7 +115,7 @@
       return null;
     }
     if (isMarketOverviewError(row)) {
-      return 'error' as const;
+      return row;
     }
     return row;
   };
@@ -140,8 +144,8 @@
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row) return null;
-        if (row === 'error') {
-          return t('pages.marketOverview.fetchError');
+        if (isMarketOverviewError(row)) {
+          return row.error;
         }
         return renderPriceCell(row.current_price, priceDigitsForRow(row.key));
       },
@@ -151,7 +155,7 @@
       align: 'right',
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
-        if (!row || row === 'error') return null;
+        if (!row || isMarketOverviewError(row)) return null;
         return renderPercentCell(row.daily_change);
       },
     },
@@ -160,7 +164,7 @@
       align: 'right',
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
-        if (!row || row === 'error') return null;
+        if (!row || isMarketOverviewError(row)) return null;
         return renderPercentCell(row.weekly_change);
       },
     },

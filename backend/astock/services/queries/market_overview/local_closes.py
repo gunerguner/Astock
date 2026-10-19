@@ -3,12 +3,18 @@
 
 import logging
 from collections import defaultdict
+from datetime import timedelta
 
 from sqlmodel import Session, col, select
 
 from astock.config import MARKET_OVERVIEW_RECENT_DAYS, MarketOverviewItemConfig
 from astock.core.database import engine
-from astock.core.datetime_utils import MarketCode, filter_settled_closes, market_for_source
+from astock.core.datetime_utils import (
+    MarketCode,
+    filter_settled_closes,
+    market_for_source,
+    today_local_date,
+)
 from astock.core.price_utils import closes_cover_settled, has_sufficient_baseline_points
 from astock.models.point import Point
 from astock.services.cache.asset_prices import read_price_cache
@@ -45,10 +51,12 @@ def _read_point_closes_batch(
     if not index_codes:
         return {}
     limit = max(MARKET_OVERVIEW_RECENT_DAYS, 20)
-    # 每个 code 取最近 limit 条：先按 code/date 倒序拉出后在内存截断
+    # 日期下界让主键 (date, index_code) 能缩小扫描；余量覆盖休市与周涨跌
+    earliest = (today_local_date() - timedelta(days=limit * 3)).isoformat()
     with Session(engine) as db:
         rows = db.exec(
             select(Point.index_code, Point.date, Point.close)
+            .where(col(Point.date) >= earliest)
             .where(col(Point.index_code).in_(index_codes))
             .order_by(col(Point.index_code), col(Point.date).desc())
         ).all()

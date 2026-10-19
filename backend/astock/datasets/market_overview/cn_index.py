@@ -1,34 +1,38 @@
 """A 股指数近期收盘价。"""
 
 
-import logging
-
 import pandas as pd
 
 from astock.datasets.market_overview.common import cn_index_cutoff, tail_closes
 from astock.providers._shared.symbols import cn_index_sina_symbol
+from astock.providers._shared.parsing import to_float
 from astock.providers.akshare.market import fetch_cn_index_daily
-
-logger = logging.getLogger(__name__)
 
 
 def fetch_cn_index(code: str, n: int) -> dict[str, float]:
     sina_symbol = cn_index_sina_symbol(code)
     cutoff = cn_index_cutoff()
-    try:
-        raw = fetch_cn_index_daily(sina_symbol)
-    except Exception as e:
-        logger.warning("A股指数 %s 抓取失败: %s", code, e)
-        return {}
+    raw = fetch_cn_index_daily(sina_symbol)
     if raw is None or raw.empty:
         return {}
     df = raw.rename(columns={"date": "Date", "close": "Close"})
     if "Date" not in df.columns or "Close" not in df.columns:
         return {}
     df["Date"] = pd.to_datetime(df["Date"])
-    df = df.set_index("Date").sort_index()
-    df["Close"] = pd.to_numeric(df["Close"], errors="coerce")
-    df = df[df["Close"].notna()]
-    df = df[df.index >= pd.Timestamp(cutoff.date())]
-    pairs = [(d.strftime("%Y-%m-%d"), float(row["Close"])) for d, row in df.iterrows()]
+    indexed = df.set_index("Date").sort_index()
+    if not isinstance(indexed, pd.DataFrame):
+        return {}
+    indexed["Close"] = pd.to_numeric(indexed["Close"], errors="coerce")
+    filtered = indexed.loc[indexed["Close"].notna()]
+    if not isinstance(filtered, pd.DataFrame):
+        return {}
+    window = filtered.loc[filtered.index >= pd.Timestamp(cutoff.date())]
+    if not isinstance(window, pd.DataFrame):
+        return {}
+    pairs: list[tuple[str, float]] = []
+    for ts, row in window.iterrows():
+        close = to_float(row["Close"])
+        if close is None:
+            continue
+        pairs.append((str(ts)[:10], close))
     return tail_closes(pairs, n, market="cn")

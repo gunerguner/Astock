@@ -1,5 +1,6 @@
 """导入器公共工具（记录校验与跳过结果）。"""
 
+import math
 import time
 from typing import Any
 
@@ -20,6 +21,8 @@ _REQUIRED_FIELDS: dict[str, list[str]] = {
 
 def is_missing_value(value: Any) -> bool:
     if value is None:
+        return True
+    if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
         return True
     return isinstance(value, str) and not value.strip()
 

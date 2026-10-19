@@ -3,7 +3,7 @@ from sqlalchemy import Index
 
 
 class StockTurnover(SQLModel, table=True):
-    __tablename__ = "stock_turnover"
+    __tablename__ = "stock_turnover"  # type: ignore[assignment]
     __table_args__ = (
         Index("idx_stock_turnover_amount", "amount"),
     )

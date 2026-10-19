@@ -7,8 +7,10 @@ from dataclasses import dataclass
 
 from sqlmodel import Session, SQLModel
 
+from astock.core.datetime_utils import last_settled_date
 from astock.core.errors import ExternalSourceAppError
 from astock.core.sync_status import SyncStatus
+from astock.core.trading_calendar import TradingCalendar
 from astock.datasets.result import FetchResult
 from astock.services.imports._common import (
     build_skip_result,
@@ -19,16 +21,17 @@ from astock.services.sync.results import (
     aggregate_status,
     build_result,
     finalize_import_result,
-    resolve_status,
 )
 from astock.services.sync.store import (
     batch_upsert,
     count_rows,
     get_last_date,
+    get_sync_meta,
     get_sync_start_date,
     should_skip_daily_sync,
     upsert_sync_meta,
 )
+from astock.services.sync.watermark import forward_date, prefix_before_gap
 
 logger = logging.getLogger(__name__)
 
@@ -90,28 +93,49 @@ def run_daily_import(
         spec.conflict_cols,
     )
 
-    last_date = last_date_fn(db)
-    status = resolve_status(fr.ok, imported)
+    old_meta = get_sync_meta(db, spec.table_name)
+    old_date = old_meta.last_synced_date if old_meta else None
+    end = last_settled_date("cn")
+    expected = TradingCalendar.sessions_on_or_between(start_date, end, "cn")
+    present = {str(row.get("date") or "")[:10] for row in records}
+    covered, complete = prefix_before_gap(expected, present)
+    source_ok = fr.ok
+    if not complete:
+        fr.errors.append("区间内存在未覆盖的交易日")
+        fr.ok = False
+
+    if source_ok and complete:
+        status = SyncStatus.SUCCESS
+        watermark = forward_date(old_date, covered) if covered else old_date
+    elif covered:
+        status = SyncStatus.PARTIAL_FAILURE
+        watermark = forward_date(old_date, covered)
+    else:
+        status = SyncStatus.FAILED if not records else SyncStatus.PARTIAL_FAILURE
+        watermark = old_date
+
     last_synced_at = upsert_sync_meta(
         db,
         spec.table_name,
-        last_synced_date=last_date,
+        last_synced_date=watermark,
         status=status,
-        error=fr.error_summary() if not fr.ok else None,
+        error=None if status == SyncStatus.SUCCESS else fr.error_summary(),
     )
+    last_date = watermark
 
     result = build_result(
         imported=imported,
         total=count_rows(db, spec.model),
         last_date=last_date,
-        ok=fr.ok,
+        ok=status == SyncStatus.SUCCESS,
         source_errors=fr.to_error_map(spec.source_key),
         last_synced_at=last_synced_at,
+        status=status,
     )
 
     if raise_on_failed and result.status == SyncStatus.FAILED:
         raise ExternalSourceAppError(
-            f"{spec.failure_message}: {result.source_errors.get(spec.source_key)}"
+            message=f"{spec.failure_message}: {result.source_errors.get(spec.source_key)}"
         )
 
     return finalize_import_result(result, start_ts=start_ts, log_label=f"{spec.log_label}导入")
@@ -162,7 +186,7 @@ def run_multi_daily_import(
 
     if result.status == SyncStatus.FAILED:
         raise ExternalSourceAppError(
-            f"{aggregate_failure_message}: {'; '.join(all_errors[:5])}"
+            message=f"{aggregate_failure_message}: {'; '.join(all_errors[:5])}"
         )
 
     return finalize_import_result(result, start_ts=start_ts, log_label=log_label)

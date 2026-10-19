@@ -1,10 +1,10 @@
 """价格与日期相关的纯函数（无 Redis / 无外部 IO）。"""
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
 
 from astock.config import WEEKLY_BASELINE_OFFSET
-from astock.core.datetime_utils import MarketCode, last_settled_date
+from astock.core.datetime_utils import MarketCode, add_calendar_days, last_settled_date
+from astock.core.trading_calendar import TradingCalendar
 
 __all__ = [
     "BaselinePrices",
@@ -69,10 +69,9 @@ def closes_cover_settled(
     closes: dict[str, float],
     market: MarketCode = "cn",
 ) -> bool:
-    """缓存是否已覆盖该市场最近可结算日（「最近一个收盘日」口径）。
+    """缓存是否已覆盖该市场最近可结算日。
 
-    无交易日历：若缓存最新日已达结算日，或二者之间仅隔周末，视为已覆盖；
-    中间若缺工作日（如停在周二而结算日已是周四）则未覆盖，需回填。
+    最新价已达结算日，或二者之间没有交易所交易日（仅周末或休市）时视为已覆盖。
     """
     if not closes:
         return False
@@ -80,13 +79,15 @@ def closes_cover_settled(
     latest = max(closes)
     if latest >= cap:
         return True
-    cursor = datetime.strptime(latest, "%Y-%m-%d").date() + timedelta(days=1)
-    end = datetime.strptime(cap, "%Y-%m-%d").date()
-    while cursor <= end:
-        if cursor.weekday() < 5:
-            return False
-        cursor += timedelta(days=1)
-    return True
+    try:
+        missing = TradingCalendar.sessions_on_or_between(
+            add_calendar_days(latest, 1),
+            cap,
+            market,
+        )
+    except (ValueError, RuntimeError):
+        return False
+    return not missing
 
 
 def anchor_date_excluding_today(

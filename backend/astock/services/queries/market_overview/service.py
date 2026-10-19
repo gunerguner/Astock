@@ -11,7 +11,7 @@ from astock.config import (
     MARKET_OVERVIEW_ITEMS,
     MarketOverviewItemConfig,
 )
-from astock.core.datetime_utils import iso_now, last_settled_date, market_for_source
+from astock.core.datetime_utils import MarketCode, iso_now, last_settled_date, market_for_source
 from astock.core.price_utils import (
     anchor_date_for_closes,
     resolve_latest_trading_date,
@@ -45,10 +45,10 @@ _read_closes, _write_closes = redis_closes_io(
     market_overview_recent_key, ttl=ASSET_PRICE_CACHE_TTL
 )
 
-_ITEM_MARKETS = {
+_ITEM_MARKETS: dict[str, MarketCode] = {
     item["key"]: market_for_source(item["source"]) for item in MARKET_OVERVIEW_ITEMS
 }
-_OVERVIEW_CACHE_DEPS = ClosesCacheDeps(
+_OVERVIEW_CACHE_DEPS: ClosesCacheDeps[MarketOverviewItemConfig] = ClosesCacheDeps(
     key_fn=lambda item: item["key"],
     market_fn=lambda item: _ITEM_MARKETS[item["key"]],
     read_closes=_read_closes,

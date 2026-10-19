@@ -6,10 +6,11 @@ import re
 from typing import Any
 
 import httpx
-import pandas as pd
 
 from astock.config import EM_USER_AGENT, USD_HISTORY_TIMEOUT, USD_SPOT_TIMEOUT
 from astock.core.datetime_utils import normalize_date
+from astock.providers._shared.parsing import to_float
+from astock.providers._shared.retry import retry_call
 
 _SINA_DINIW_REFERER = "https://finance.sina.com.cn/money/forex/hq/DINIW.shtml"
 _SINA_DINIW_DAY_K_URL = (
@@ -19,7 +20,11 @@ _SINA_DINIW_DAY_K_URL = (
 
 
 def fetch_diniw_spot() -> dict[str, Any] | None:
-    """返回 {quote_date, current, prev}；失败返回 None。"""
+    """返回 {quote_date, current, prev}；空行情返回 None，网络失败抛出。"""
+    return retry_call("sina_diniw_spot", _fetch_diniw_spot_once)
+
+
+def _fetch_diniw_spot_once() -> dict[str, Any] | None:
     headers = {"User-Agent": EM_USER_AGENT, "Referer": _SINA_DINIW_REFERER}
     with httpx.Client(timeout=USD_SPOT_TIMEOUT, headers=headers, http2=False) as client:
         resp = client.get("https://hq.sinajs.cn/", params={"list": "DINIW"}, headers=headers)
@@ -32,20 +37,24 @@ def fetch_diniw_spot() -> dict[str, Any] | None:
     if len(parts) < 11:
         return None
 
-    current = pd.to_numeric(parts[1], errors="coerce")
-    prev = pd.to_numeric(parts[8], errors="coerce")
+    current = to_float(parts[1])
+    prev = to_float(parts[8])
     quote_date = normalize_date(parts[10])
-    if pd.isna(current) or not quote_date:
+    if current is None or not quote_date:
         return None
     return {
         "quote_date": quote_date,
-        "current": float(current),
-        "prev": float(prev) if pd.notna(prev) else None,
+        "current": current,
+        "prev": prev,
     }
 
 
 def fetch_diniw_day_k() -> list[tuple[str, float]]:
     """新浪 DINIW 日线 → [(date, close), ...]。"""
+    return retry_call("sina_diniw_day_k", _fetch_diniw_day_k_once)
+
+
+def _fetch_diniw_day_k_once() -> list[tuple[str, float]]:
     headers = {"User-Agent": EM_USER_AGENT, "Referer": _SINA_DINIW_REFERER}
     with httpx.Client(timeout=USD_HISTORY_TIMEOUT, headers=headers, http2=False) as client:
         resp = client.get(_SINA_DINIW_DAY_K_URL)
@@ -63,7 +72,7 @@ def fetch_diniw_day_k() -> list[tuple[str, float]]:
         if len(parts) < 5:
             continue
         d = normalize_date(parts[0])
-        close = pd.to_numeric(parts[4], errors="coerce")
-        if d and pd.notna(close):
-            pairs.append((d, float(close)))
+        close = to_float(parts[4])
+        if d and close is not None:
+            pairs.append((d, close))
     return pairs

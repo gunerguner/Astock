@@ -6,7 +6,7 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from astock.config import MARKET_OVERVIEW_RECENT_DAYS
+from astock.config import MARKET_OVERVIEW_RECENT_DAYS, MarketOverviewItemConfig
 from astock.datasets.market_overview.boc_forex import fetch_boc_forex
 from astock.datasets.market_overview.cn_index import fetch_cn_index
 from astock.datasets.market_overview.foreign_futures import fetch_foreign_futures
@@ -19,7 +19,7 @@ _PARALLEL_MAX_WORKERS = 4
 
 
 def fetch_item_closes(
-    item: dict[str, str], n: int = MARKET_OVERVIEW_RECENT_DAYS
+    item: MarketOverviewItemConfig, n: int = MARKET_OVERVIEW_RECENT_DAYS
 ) -> dict[str, float]:
     source = item["source"]
     code = item["code"]
@@ -36,7 +36,7 @@ def fetch_item_closes(
 
 
 def _fetch_one_other(
-    item: dict[str, str], n: int
+    item: MarketOverviewItemConfig, n: int
 ) -> tuple[str, dict[str, float] | None, str | None]:
     key = item["key"]
     started = time.perf_counter()
@@ -72,7 +72,7 @@ def _fetch_one_other(
 
 
 def _fetch_other_items_serial(
-    other_items: list[dict[str, str]],
+    other_items: list[MarketOverviewItemConfig],
     n: int,
 ) -> tuple[dict[str, dict[str, float]], list[str]]:
     all_closes: dict[str, dict[str, float]] = {}
@@ -87,7 +87,7 @@ def _fetch_other_items_serial(
 
 
 def _fetch_other_items_parallel(
-    other_items: list[dict[str, str]],
+    other_items: list[MarketOverviewItemConfig],
     n: int,
 ) -> tuple[dict[str, dict[str, float]], list[str]]:
     all_closes: dict[str, dict[str, float]] = {}
@@ -105,7 +105,7 @@ def _fetch_other_items_parallel(
 
 
 def fetch_all_items(
-    items: list[dict[str, str]],
+    items: list[MarketOverviewItemConfig],
     n: int = MARKET_OVERVIEW_RECENT_DAYS,
 ) -> tuple[dict[str, dict[str, float]], list[str]]:
     """抓取全部资产：美债一次批量，其余按平台串行或并行。
@@ -116,8 +116,9 @@ def fetch_all_items(
     errors: list[str] = []
     batch_started = time.perf_counter()
 
-    us_bond_items = [it for it in items if it["source"] == "us_bond"]
-    other_items = [it for it in items if it["source"] != "us_bond"]
+    bond_sources = {"us_bond", "cn_bond"}
+    us_bond_items = [it for it in items if it["source"] in bond_sources]
+    other_items = [it for it in items if it["source"] not in bond_sources]
 
     if us_bond_items:
         bond_started = time.perf_counter()

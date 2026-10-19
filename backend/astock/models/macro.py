@@ -6,7 +6,7 @@ from sqlmodel import Field, SQLModel
 class MacroValue(SQLModel, table=True):
     """全球宏观月度指标长表：按 region + period + metric 存储。"""
 
-    __tablename__ = "macro_value"
+    __tablename__ = "macro_value"  # type: ignore[assignment]
 
     region: str = Field(
         description="区域 cn / us",

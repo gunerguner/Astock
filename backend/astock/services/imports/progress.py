@@ -95,7 +95,13 @@ class ProgressReporter:
             {
                 "phase": key,
                 "label": PHASE_LABELS.get(key, key),
-                "status": "failed" if result.status == SyncStatus.FAILED else "done",
+                "status": (
+                    "failed"
+                    if result.status == SyncStatus.FAILED
+                    else "partial_failure"
+                    if result.status == SyncStatus.PARTIAL_FAILURE
+                    else "done"
+                ),
                 "current": result.total,
                 "total": max(result.total, 1),
                 "imported": result.imported,

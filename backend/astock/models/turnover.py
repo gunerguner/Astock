@@ -3,7 +3,7 @@ from sqlmodel import Field, SQLModel
 
 
 class Turnover(SQLModel, table=True):
-    __tablename__ = "turnover"
+    __tablename__ = "turnover"  # type: ignore[assignment]
     __table_args__ = (Index("idx_turnover_turnover", "turnover"),)
 
     date: str = Field(primary_key=True)

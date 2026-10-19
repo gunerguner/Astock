@@ -40,7 +40,10 @@ class RedisGateway:
         if client is None:
             return None
         try:
-            return client.get(key)
+            raw = client.get(key)
+            if isinstance(raw, bytes):
+                return raw.decode()
+            return raw
         except Exception as e:
             logger.warning("Redis GET 失败 key=%s: %s", key, e)
             return None

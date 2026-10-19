@@ -9,7 +9,13 @@ def test_sync_status_empty_db_returns_envelope(client):
     assert body["message"] == "success"
     data = body["data"]
     assert set(data.keys()) == {
-        "turnover", "point", "stock", "global_assets", "us_macro", "cn_macro",
+            "turnover",
+            "point",
+            "stock",
+            "global_assets",
+            "us_macro",
+            "cn_macro",
+            "market_overview",
     }
     for dataset_status in data.values():
         assert dataset_status == {

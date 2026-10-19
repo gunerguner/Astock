@@ -2,7 +2,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 from astock.core.datetime_utils import MarketCode, filter_settled_closes
 from astock.core.price_utils import (
@@ -18,7 +18,7 @@ from astock.core.redis_client import redis_gateway
 
 ReadClosesFn = Callable[[str, MarketCode], dict[str, float]]
 WriteClosesFn = Callable[[str, dict[str, float], MarketCode], None]
-FetchMissingFn = Callable[[list[dict[str, str]]], "ClosesFetchResult"]
+T = TypeVar("T")
 
 
 @dataclass(frozen=True)
@@ -30,14 +30,14 @@ class ClosesFetchResult:
 
 
 @dataclass(frozen=True)
-class ClosesCacheDeps:
+class ClosesCacheDeps(Generic[T]):
     """ensure_closes 所需的 Redis 读写与回填依赖。"""
 
-    key_fn: Callable[[dict[str, str]], str]
-    market_fn: Callable[[dict[str, str]], MarketCode]
+    key_fn: Callable[[T], str]
+    market_fn: Callable[[T], MarketCode]
     read_closes: ReadClosesFn
     write_closes: WriteClosesFn
-    fetch_missing: FetchMissingFn
+    fetch_missing: Callable[[list[T]], ClosesFetchResult]
     latest_date_key: str
     latest_ttl: int
 
@@ -166,8 +166,8 @@ def cache_latest_trading_date(key: str, latest: str | None, *, ttl: int) -> None
 
 
 def ensure_closes(
-    items: list[dict[str, str]],
-    deps: ClosesCacheDeps,
+    items: list[T],
+    deps: ClosesCacheDeps[T],
     options: ClosesEnsureOptions | None = None,
 ) -> ClosesFetchResult:
     """读缓存 → 判缺失 → 回填 → 更新 latest 锚点。
@@ -183,7 +183,7 @@ def ensure_closes(
     clear_failure = opts.clear_failure
 
     all_closes: dict[str, dict[str, float]] = {}
-    missing: list[dict[str, str]] = []
+    missing: list[T] = []
     markets: dict[str, MarketCode] = {}
 
     for item in items:

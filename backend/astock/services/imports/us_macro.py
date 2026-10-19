@@ -5,10 +5,12 @@ from sqlmodel import Session
 
 from astock.config import US_MACRO_REFRESH_DAY
 from astock.datasets.macro import fetch_us_macro
+from astock.datasets.macro.types import MacroMetric
 from astock.services.imports._macro_domain import run_macro_import
 from astock.services.sync.results import ImportResult
 
 _SYNC_TABLE = "us_macro"
+_US_METRICS: tuple[MacroMetric, ...] = ("cpi_yoy", "fed_rate_upper")
 
 
 def import_us_macro(db: Session) -> ImportResult:
@@ -20,4 +22,5 @@ def import_us_macro(db: Session) -> ImportResult:
         refresh_day=US_MACRO_REFRESH_DAY,
         fetch_fn=fetch_us_macro,
         log_label="美国宏观",
+        required_metrics=_US_METRICS,
     )

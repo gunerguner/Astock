@@ -2,7 +2,9 @@
 
 
 import logging
+import threading
 from collections.abc import Callable, Iterator
+from typing import TypeVar
 
 from sqlmodel import Session
 
@@ -18,6 +20,10 @@ from astock.services.imports import (
 )
 from astock.services.imports.stock import import_stock_gen
 from astock.services.queries.market_overview import warmup_market_overview
+from astock.core.datetime_utils import last_settled_date
+from astock.core.sync_status import SyncStatus
+from astock.services.sync.store import get_sync_meta, upsert_sync_meta
+from astock.services.sync.watermark import forward_date
 from astock.services.sync.results import (
     ImportBatchResult,
     ImportResult,
@@ -26,6 +32,48 @@ from astock.services.sync.results import (
 )
 
 logger = logging.getLogger(__name__)
+
+_IMPORT_LOCK = threading.Lock()
+_HEARTBEAT_SECONDS = 15
+_T = TypeVar("_T")
+
+
+def try_begin_import() -> bool:
+    """占住导入锁。已有导入在跑时返回 False。"""
+    return _IMPORT_LOCK.acquire(blocking=False)
+
+
+def end_import() -> None:
+    """释放导入锁。未持有时忽略。"""
+    if _IMPORT_LOCK.locked():
+        _IMPORT_LOCK.release()
+
+
+def _call_with_heartbeat(
+    fn: Callable[[], _T],
+    reporter: ProgressReporter,
+    bridge: SSEBridge,
+) -> Iterator[str]:
+    """在独立线程执行阻塞拉取，生成器按固定间隔送出 ping。"""
+    box: dict[str, _T] = {}
+    errors: list[BaseException] = []
+
+    def run() -> None:
+        try:
+            box["result"] = fn()
+        except BaseException as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    worker = threading.Thread(target=run, name="astock-import-phase", daemon=True)
+    worker.start()
+    while worker.is_alive():
+        worker.join(_HEARTBEAT_SECONDS)
+        if worker.is_alive():
+            reporter.ping()
+            yield from bridge.drain()
+    if errors:
+        raise errors[0]
+    return box["result"]
 
 
 def _stream_run_phase(
@@ -37,7 +85,7 @@ def _stream_run_phase(
 ) -> Iterator[str]:
     reporter.phase_start(key)
     yield from bridge.drain()
-    result = fn(db)
+    result = yield from _call_with_heartbeat(lambda: fn(db), reporter, bridge)
     reporter.phase_done(key, result)
     yield from bridge.drain()
     return result
@@ -89,7 +137,7 @@ def _stream_all_phases(
     reporter.phase_start("market_overview")
     yield from bridge.drain()
     try:
-        fetched = warmup_market_overview()
+        fetched = yield from _call_with_heartbeat(warmup_market_overview, reporter, bridge)
         market_overview_result = build_result(
             imported=len(fetched.closes),
             total=max(len(fetched.closes), 1),
@@ -112,6 +160,20 @@ def _stream_all_phases(
         )
     reporter.phase_done("market_overview", market_overview_result)
     yield from bridge.drain()
+    previous = get_sync_meta(db, "market_overview")
+    previous_date = previous.last_synced_date if previous else None
+    overview_date = (
+        forward_date(previous_date, last_settled_date("cn"))
+        if market_overview_result.status == SyncStatus.SUCCESS
+        else previous_date
+    )
+    upsert_sync_meta(
+        db,
+        "market_overview",
+        last_synced_date=overview_date,
+        status=market_overview_result.status,
+        error=market_overview_result.source_errors.get("market_overview"),
+    )
 
     phases = {
         "turnover": turnover_result,

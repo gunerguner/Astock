@@ -28,7 +28,32 @@ def get_db():
         yield session
 
 
+def _apply_schema_migrations() -> None:
+    """幂等轻量迁移。新列只在此追加步骤，不引入 Alembic。"""
+    steps: list[tuple[str, str]] = [
+        ("20261019_baseline", "SELECT 1"),
+    ]
+    with engine.begin() as conn:
+        conn.exec_driver_sql(
+            "CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY)"
+        )
+        applied = {
+            row[0]
+            for row in conn.exec_driver_sql("SELECT version FROM schema_migrations")
+        }
+        for version, sql in steps:
+            if version in applied:
+                continue
+            conn.exec_driver_sql(sql)
+            conn.exec_driver_sql(
+                "INSERT INTO schema_migrations (version) VALUES (?)",
+                (version,),
+            )
+            logger.info("已应用 schema 迁移 %s", version)
+
+
 def init_db():
     Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     SQLModel.metadata.create_all(engine)
+    _apply_schema_migrations()
     logger.info("数据库表结构同步完成")

@@ -28,18 +28,21 @@ def _normalize_history_df(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def fetch_us_stock_daily(ticker: str) -> pd.DataFrame:
-    """美股日线；新股无复权因子时回退未复权。"""
-    try:
-        df = ak.stock_us_daily(symbol=ticker, adjust="qfq")
-    except ValueError as e:
-        if "read-only" not in str(e):
-            raise
-        logger.warning(
-            "%s 前复权计算失败(akshare 已知缺陷,新股无复权因子)，回退未复权数据",
-            ticker,
-        )
-        df = ak.stock_us_daily(symbol=ticker, adjust="")
-    return _normalize_history_df(df)
+    """美股日线；新股无复权因子时回退未复权。网络失败按统一重试。"""
+
+    def _load() -> pd.DataFrame:
+        try:
+            return ak.stock_us_daily(symbol=ticker, adjust="qfq")
+        except ValueError as e:
+            if "read-only" not in str(e):
+                raise
+            logger.warning(
+                "%s 前复权计算失败(akshare 已知缺陷,新股无复权因子)，回退未复权数据",
+                ticker,
+            )
+            return ak.stock_us_daily(symbol=ticker, adjust="")
+
+    return _normalize_history_df(retry_call(f"stock_us_daily:{ticker}", _load))
 
 
 def fetch_commodity_history(code: str) -> pd.DataFrame:

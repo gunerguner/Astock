@@ -213,7 +213,7 @@ declare namespace API {
   type ImportProgressEvent = {
     phase: ImportPhaseKey;
     label: string;
-    status: 'running' | 'done' | 'failed';
+    status: 'running' | 'done' | 'failed' | 'partial_failure';
     current: number;
     total: number;
     imported: number;
@@ -247,5 +247,6 @@ declare namespace API {
     global_assets: SyncStatusItem;
     us_macro: SyncStatusItem;
     cn_macro: SyncStatusItem;
+    market_overview: SyncStatusItem;
   };
 }

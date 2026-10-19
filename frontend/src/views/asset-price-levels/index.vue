@@ -64,7 +64,17 @@
   ]);
 
   type DividerRow = BaseDividerRow;
-  type TableRow = (API.PriceLevelRow & { key: string }) | DividerRow;
+  type ErrorRow = {
+    key: string;
+    rowKind: 'error';
+    ticker: string;
+    name: string;
+    message: string;
+  };
+  type TableRow = (API.PriceLevelRow & { key: string }) | DividerRow | ErrorRow;
+
+  const isErrorRow = (row: TableRow): row is ErrorRow =>
+    'rowKind' in row && row.rowKind === 'error';
 
   const {
     loading,
@@ -109,7 +119,21 @@
     const normalStocks = settled.filter((item) => item.asset_type !== 'metal');
     const metalItems = settled.filter((item) => item.asset_type === 'metal');
 
+    const errorRows: ErrorRow[] = (levels.value?.cache_errors ?? []).map(
+      (message) => {
+        const ticker = message.split(':')[0]?.trim() || message;
+        return {
+          key: `error-${ticker}`,
+          rowKind: 'error',
+          ticker,
+          name: ticker,
+          message,
+        };
+      },
+    );
+
     const stocks = [
+      ...errorRows,
       ...pendingStocks,
       ...normalStocks.sort(sortByPercentageDiff).map((item) => ({
         ...item,
@@ -156,6 +180,9 @@
     if (isDividerRow(row)) {
       return null;
     }
+    if (isErrorRow(row)) {
+      return 'error' as const;
+    }
     if (isPriceLevelPending(row)) {
       return 'pending' as const;
     }
@@ -170,6 +197,9 @@
         if (isDividerRow(row)) {
           return h('span', { class: 'section-divider-label' }, row.label);
         }
+        if (isErrorRow(row)) {
+          return renderAssetNameWithTooltip(row.name, row.message);
+        }
         return renderAssetCell(row);
       },
     },
@@ -179,7 +209,7 @@
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row) return null;
-        if (row === 'pending') return renderPendingDash();
+        if (row === 'pending' || row === 'error') return renderPendingDash();
         return renderPriceCell(row.current_price);
       },
     },
@@ -189,7 +219,7 @@
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row) return null;
-        if (row === 'pending') return renderPendingDash();
+        if (row === 'pending' || row === 'error') return renderPendingDash();
         return renderPlainPriceCell(row.all_time_high);
       },
     },
@@ -199,7 +229,7 @@
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row) return null;
-        if (row === 'pending') return renderPendingDash();
+        if (row === 'pending' || row === 'error') return renderPendingDash();
         return renderPercentCell(row.percentage_diff);
       },
     },
@@ -209,7 +239,7 @@
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row) return null;
-        if (row === 'pending') return renderPendingDash();
+        if (row === 'pending' || row === 'error') return renderPendingDash();
         return renderNumCell(String(row.ath_days));
       },
     },
@@ -218,7 +248,8 @@
       align: 'right',
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
-        if (!row || row === 'pending') return null;
+        if (!row || row === 'pending' || row === 'error')
+          return renderPendingDash();
         return renderPercentCell(row.daily_change);
       },
     },
@@ -227,15 +258,23 @@
       align: 'right',
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
-        if (!row || row === 'pending') return null;
+        if (!row || row === 'pending' || row === 'error')
+          return renderPendingDash();
         return renderPercentCell(row.weekly_change);
       },
     },
     {
       title: t('pages.assetPriceLevels.columns.conclusion'),
       render: ({ record }: { record: TableData }) => {
+        const raw = toTableRow<TableRow>(record);
+        if (isErrorRow(raw)) return raw.message;
         const row = guardDataRow(record);
-        if (!row || row === 'pending') return null;
+        if (!row || row === 'error') return null;
+        if (row === 'pending') {
+          return h(Tag, { color: 'gray' }, () =>
+            t('pages.assetPriceLevels.conclusion.pending'),
+          );
+        }
         const conclusionKey = CONCLUSION_I18N_KEYS[row.conclusion];
         const label = conclusionKey ? t(conclusionKey) : row.conclusion;
         return h(Tag, { color: conclusionColor(row.conclusion) }, () => label);

@@ -2,7 +2,7 @@ from sqlmodel import Field, SQLModel
 
 
 class AssetHigh(SQLModel, table=True):
-    __tablename__ = "asset_high"
+    __tablename__ = "asset_high"  # type: ignore[assignment]
 
     ticker: str = Field(primary_key=True)
     name: str

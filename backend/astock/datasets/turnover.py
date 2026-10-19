@@ -44,20 +44,37 @@ def fetch_turnover(start_date: str | None = None) -> FetchResult:
                 if result is not None:
                     all_records.append(result)
 
-            if not all_records:
+            if errors or len(all_records) < len(index_codes):
+                if not errors:
+                    errors.append("成交额一侧结果为空")
+                return FetchResult(records=[], ok=False, errors=errors)
+
+            grouped = (
+                pd.concat(all_records, axis=0)
+                .groupby("date", as_index=False)
+                .sum(min_count=1)
+            )
+            if not isinstance(grouped, pd.DataFrame):
+                return FetchResult.failure("成交额汇总结果异常")
+            merged = grouped
+            amount_cols = list(index_codes.keys())
+            missing_cols = [col for col in amount_cols if col not in merged.columns]
+            if missing_cols:
+                errors.append(f"成交额缺少列: {','.join(missing_cols)}")
+                return FetchResult(records=[], ok=False, errors=errors)
+
+            complete = merged.dropna(subset=amount_cols)
+            dropped = len(merged) - len(complete)
+            if dropped:
+                errors.append(f"成交额 {dropped} 个交易日两市不齐，已丢弃")
+            if complete.empty:
                 if errors:
                     return FetchResult(records=[], ok=False, errors=errors)
                 logger.info("成交额无新增数据: %s → %s", start, end)
                 return FetchResult.empty()
 
-            merged = pd.concat(all_records, axis=0).groupby("date", as_index=False).sum()
-            for col in index_codes:
-                if col not in merged.columns:
-                    merged[col] = 0.0
-
-            merged["turnover"] = merged[list(index_codes.keys())].sum(axis=1)
-            merged = merged.sort_values("date")
-
+            complete = complete.sort_values("date")
+            complete["turnover"] = complete[amount_cols].sum(axis=1)
             cached_at = iso_now()
             records = [
                 {
@@ -67,7 +84,7 @@ def fetch_turnover(start_date: str | None = None) -> FetchResult:
                     "turnover": row["turnover"],
                     "cached_at": cached_at,
                 }
-                for row in merged.to_dict("records")
+                for row in complete.to_dict("records")
             ]
             logger.info("成交额拉取完成: %s 条 (%s → %s)", len(records), start, end)
             return FetchResult(records=records, ok=len(errors) == 0, errors=errors)

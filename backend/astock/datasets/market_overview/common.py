@@ -7,6 +7,7 @@ import pandas as pd
 
 from astock.config import CN_INDEX_LOOKBACK_DAYS
 from astock.core.datetime_utils import MarketCode, last_settled_date, normalize_date, now_local
+from astock.providers._shared.parsing import to_float
 
 
 def tail_closes(
@@ -39,9 +40,9 @@ def df_to_tail_closes(
     pairs: list[tuple[str, float]] = []
     for _, row in df.iterrows():
         d = normalize_date(row.get(date_col))
-        val = pd.to_numeric(row.get(value_col), errors="coerce")
-        if d and pd.notna(val):
-            pairs.append((d, float(val) * scale))
+        val = to_float(row.get(value_col))
+        if d and val is not None:
+            pairs.append((d, val * scale))
     return tail_closes(pairs, n, market=market)
 
 

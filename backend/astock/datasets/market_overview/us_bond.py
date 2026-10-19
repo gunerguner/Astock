@@ -14,8 +14,13 @@ def fetch_us_bond_rates() -> dict[str, dict[str, float]]:
 
     result: dict[str, dict[str, float]] = {}
     for code, col in US_BOND_COLUMNS.items():
+        market = "us" if str(code).startswith("us_") else "cn"
         closes = df_to_tail_closes(
-            df, MARKET_OVERVIEW_RECENT_DAYS, date_col="日期", value_col=col
+            df,
+            MARKET_OVERVIEW_RECENT_DAYS,
+            date_col="日期",
+            value_col=col,
+            market=market,
         )
         if closes:
             result[code] = closes

@@ -19,7 +19,8 @@ _MARKET_CLOSE_HOUR: dict[MarketCode, int] = {
 _MARKET_SOURCE: dict[str, MarketCode] = {
     "cn_index": "cn",
     "boc_forex": "cn",
-    "us_bond": "cn",
+    "us_bond": "us",
+    "cn_bond": "cn",
     "global_index": "us",
     "foreign_futures": "us",
 }
