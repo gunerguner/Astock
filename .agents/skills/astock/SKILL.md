@@ -11,8 +11,8 @@ description: Astock A股、全球资产与中美宏观数据平台的开发约�
 
 * 响应信封：所有 API 统一返回 `{ code, message, data }`，`code === 0` 为成功；见下文「API 契约」，字段级详见 [reference.md — API 契约（字段级）](.agents/skills/astock/references/reference.md)。
 * 外部数据：`providers/`（供应商适配）→ `datasets/`（稳定数据契约），统一返回 `FetchResult`；见 [external-data.md](.agents/skills/astock/references/external-data.md)。
-* 增量同步：`sync_meta` 表记录水位，`services/sync/store.batch_upsert` 用 `ON CONFLICT DO UPDATE`；见 [reference.md — 增量同步与缓存](.agents/skills/astock/references/reference.md)。
-* 宏观数据：中美月度指标统一写入 `macro_value(region, period, metric)` 长表；水位按最新 CPI 月份推进，发布日期窗口由 `settings.yaml` 控制。
+* 增量同步：`sync_meta` 表记录水位；水位只进不退、只推进到连续覆盖前缀的最后一日（`services/sync/watermark.py`）；`services/sync/store.batch_upsert` 用 `ON CONFLICT DO UPDATE`；见 [reference.md — 增量同步与缓存](.agents/skills/astock/references/reference.md)。
+* 宏观数据：中美月度指标统一写入 `macro_value(region, period, metric)` 长表；水位须全部必需指标覆盖期望月才推进，发布日期窗口由 `settings.yaml` 控制。
 * 前端：`baseURL=/api/v1` 硬编码，`request.ts` 拦截器把信封直接解包为业务 `data`；API 函数返回值不再带 AxiosResponse。
 * 部署：`docker/` 下三服务（redis/backend/frontend）+ nginx 反代；见 [reference.md — 部署与 Docker](.agents/skills/astock/references/reference.md)。
 
@@ -111,7 +111,7 @@ description: Astock A股、全球资产与中美宏观数据平台的开发约�
 | 中国宏观 | `datasets/macro/china.py` + `imports/cn_macro.py` + `queries/cn_macro.py` | CPI/PPI 同比、制造业/非制造业 PMI、消费者信心（月频） |
 | 美国宏观 | `datasets/macro/{common,us_cpi,us_rates}.py` + `imports/us_macro.py` | CPI 同比、联邦基金目标利率上限（月频；`common.with_fallback` 主备源） |
 | 数据导入 | `services/imports/`（`pipeline` + `stock` + `global_assets`）+ `import_orchestrator` + `sync/` | 增量 upsert + sync_meta；结果类型 `services.sync.results.ImportResult` / `ImportBatchResult` |
-| 管理刷新 | 前端 `admin-refresh-button` + SSE | 7 阶段刷新（含市场概览预热）；导入接口校验请求头 `X-Admin-Password`，密码为后端环境变量 `ADMIN_REFRESH_PASSWORD` |
+| 管理刷新 | 前端 `admin-refresh-button` + SSE | 7 阶段刷新（含市场概览预热）；导入接口校验请求头 `X-Admin-Password`（密码为后端环境变量 `ADMIN_REFRESH_PASSWORD`），并有导入互斥（409）、密码试错锁定（429）与 `force_refresh` 限流（`core/rate_limit.py`） |
 
 ## 配置驱动
 

@@ -3,7 +3,7 @@
 import pytest
 from fastapi import status
 
-from astock.core.errors import ErrorCode
+from astock.core.errors import AppError, ErrorCode
 from astock.models.stock_turnover import StockTurnover
 from astock.models.turnover import Turnover
 from astock.services.queries.rankings import stock_ranking, turnover_ranking
@@ -69,7 +69,7 @@ def test_stock_ranking_orders_desc(db_session):
 
 
 def test_unknown_bull_market_raises_validation_error(db_session):
-    with pytest.raises(Exception) as exc_info:
+    with pytest.raises(AppError) as exc_info:
         turnover_ranking(db_session, bull_market="nope")
     err = exc_info.value
     assert err.code == ErrorCode.VALIDATION_ERROR

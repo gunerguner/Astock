@@ -42,17 +42,11 @@ def query_index_closes(
             return pd.DataFrame(columns=["date", "close"])
         df = pd.DataFrame(rows, columns=rs.fields)
         df["close"] = pd.to_numeric(df["close"], errors="coerce")
-        cleaned = df.dropna(subset=["close"])
-        if not isinstance(cleaned, pd.DataFrame):
-            return pd.DataFrame(columns=["date", "close"])
-        df = cleaned
+        df = df.dropna(subset=["close"])
         if df.empty:
             return pd.DataFrame(columns=["date", "close"])
         df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
-        selected = df.loc[:, ["date", "close"]]
-        if not isinstance(selected, pd.DataFrame):
-            return pd.DataFrame(columns=["date", "close"])
-        return selected
+        return df.loc[:, ["date", "close"]]
 
     return safe_baostock_call(f"{label}点位查询超时/连接异常", _query)
 
@@ -83,18 +77,12 @@ def query_exchange_amount(
             return None
         df = pd.DataFrame(rows, columns=rs.fields)
         df["amount"] = pd.to_numeric(df["amount"], errors="coerce")
-        cleaned = df.dropna(subset=["amount"])
-        if not isinstance(cleaned, pd.DataFrame):
-            return None
-        df = cleaned
+        df = df.dropna(subset=["amount"])
         if df.empty:
             return None
         df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
         df.rename(columns={"amount": col_name}, inplace=True)
-        selected = df.loc[:, ["date", col_name]]
-        if not isinstance(selected, pd.DataFrame):
-            return None
-        return selected
+        return df.loc[:, ["date", col_name]]
 
     return safe_baostock_call(
         f"{col_name} 查询超时/连接异常",

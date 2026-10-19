@@ -44,9 +44,11 @@ def try_begin_import() -> bool:
 
 
 def end_import() -> None:
-    """释放导入锁。未持有时忽略。"""
-    if _IMPORT_LOCK.locked():
+    """释放导入锁。仅由 try_begin_import 成功的请求在 finally 中调用。"""
+    try:
         _IMPORT_LOCK.release()
+    except RuntimeError:
+        logger.warning("导入锁释放时未被持有，忽略")
 
 
 def _call_with_heartbeat(
@@ -109,6 +111,24 @@ def _stream_stock_phase(
     return stock_result
 
 
+def _sync_market_overview_meta(db: Session, result: ImportResult) -> None:
+    """市场概览无独立 importer，水位在此随预热结果落库：仅成功推进到最近结算日，只进不退。"""
+    previous = get_sync_meta(db, "market_overview")
+    previous_date = previous.last_synced_date if previous else None
+    overview_date = (
+        forward_date(previous_date, last_settled_date("cn"))
+        if result.status == SyncStatus.SUCCESS
+        else previous_date
+    )
+    upsert_sync_meta(
+        db,
+        "market_overview",
+        last_synced_date=overview_date,
+        status=result.status,
+        error=result.source_errors.get("market_overview"),
+    )
+
+
 def _stream_all_phases(
     db: Session,
     reporter: ProgressReporter,
@@ -160,20 +180,7 @@ def _stream_all_phases(
         )
     reporter.phase_done("market_overview", market_overview_result)
     yield from bridge.drain()
-    previous = get_sync_meta(db, "market_overview")
-    previous_date = previous.last_synced_date if previous else None
-    overview_date = (
-        forward_date(previous_date, last_settled_date("cn"))
-        if market_overview_result.status == SyncStatus.SUCCESS
-        else previous_date
-    )
-    upsert_sync_meta(
-        db,
-        "market_overview",
-        last_synced_date=overview_date,
-        status=market_overview_result.status,
-        error=market_overview_result.source_errors.get("market_overview"),
-    )
+    _sync_market_overview_meta(db, market_overview_result)
 
     phases = {
         "turnover": turnover_result,

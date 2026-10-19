@@ -68,6 +68,7 @@ def test_upsert_sync_meta_creates_then_updates(db_session):
     )
     assert synced_at
     meta = get_sync_meta(db_session, "turnover")
+    assert meta is not None
     assert meta.last_synced_date == "2026-10-04"
     assert meta.last_status == SyncStatus.SUCCESS
 
@@ -75,6 +76,7 @@ def test_upsert_sync_meta_creates_then_updates(db_session):
         db_session, "turnover", last_synced_date="2026-10-05", status=SyncStatus.PARTIAL_FAILURE
     )
     meta = get_sync_meta(db_session, "turnover")
+    assert meta is not None
     assert meta.last_synced_date == "2026-10-05"
     assert meta.last_status == SyncStatus.PARTIAL_FAILURE
     assert count_rows(db_session, SyncMeta) == 1

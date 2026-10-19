@@ -1,11 +1,9 @@
-"""水位、成交额残缺行、宏观跳过与价格覆盖的回归。"""
+"""同步水位语义：日频缺口、宏观指标覆盖、水位只进不退。"""
 
 from contextlib import contextmanager
 
-import pandas as pd
 import pytest
 
-from astock.core.price_utils import closes_cover_settled
 from astock.core.sync_status import SyncStatus
 from astock.datasets.result import FetchResult
 from astock.models.point import Point
@@ -22,54 +20,6 @@ def _drain(gen):
             next(gen)
     except StopIteration as stop:
         return stop.value
-
-
-def test_turnover_one_sided_failure_does_not_zero_fill(monkeypatch):
-    import astock.datasets.turnover as mod
-    from astock.providers.baostock.client import BaostockQueryError
-
-    monkeypatch.setattr(mod, "last_settled_date", lambda market="cn": "2026-01-08")
-
-    @contextmanager
-    def session():
-        yield object()
-
-    monkeypatch.setattr(mod, "baostock_session", session)
-    monkeypatch.setattr(mod, "login_error", lambda _lg: None)
-
-    def query(code, **_kwargs):
-        if str(code).startswith("sh"):
-            raise BaostockQueryError("上证失败")
-        return pd.DataFrame({"date": ["2026-01-08"], "szse_amount": [10.0]})
-
-    monkeypatch.setattr(mod.bs_market, "query_exchange_amount", query)
-    fr = mod.fetch_turnover("2026-01-08")
-    assert fr.ok is False
-    assert fr.records == []
-
-
-def test_turnover_silent_empty_side_is_not_success(monkeypatch):
-    import astock.datasets.turnover as mod
-
-    monkeypatch.setattr(mod, "last_settled_date", lambda market="cn": "2026-01-08")
-
-    @contextmanager
-    def session():
-        yield object()
-
-    monkeypatch.setattr(mod, "baostock_session", session)
-    monkeypatch.setattr(mod, "login_error", lambda _lg: None)
-
-    def query(code, **_kwargs):
-        if str(code).startswith("sh"):
-            return pd.DataFrame({"date": ["2026-01-08"], "sse_amount": [10.0]})
-        return None
-
-    monkeypatch.setattr(mod.bs_market, "query_exchange_amount", query)
-    fr = mod.fetch_turnover("2026-01-08")
-    assert fr.ok is False
-    assert fr.records == []
-    assert any("为空" in err for err in fr.errors)
 
 
 def test_daily_gap_stops_watermark_before_hole(db_session, monkeypatch):
@@ -114,7 +64,9 @@ def test_daily_gap_stops_watermark_before_hole(db_session, monkeypatch):
     )
     result = run_daily_import(db_session, spec, raise_on_failed=False)
     assert result.status == SyncStatus.PARTIAL_FAILURE
-    assert get_sync_meta(db_session, "point").last_synced_date == "2026-01-06"
+    meta = get_sync_meta(db_session, "point")
+    assert meta is not None
+    assert meta.last_synced_date == "2026-01-06"
 
     def fetch_again(start: str) -> FetchResult:
         starts.append(start)
@@ -158,6 +110,7 @@ def test_macro_without_cpi_keeps_watermark_and_does_not_skip(db_session):
         required_metrics=("cpi_yoy", "fed_rate_upper"),
     )
     meta = get_sync_meta(db_session, "us_macro")
+    assert meta is not None
     assert result.status == SyncStatus.PARTIAL_FAILURE
     assert meta.last_synced_date == "2026-08"
     skip, _ = should_skip_macro(
@@ -193,6 +146,7 @@ def test_macro_missing_expected_metric_does_not_advance(db_session):
         required_metrics=("cpi_yoy", "fed_rate_upper"),
     )
     meta = get_sync_meta(db_session, "us_macro")
+    assert meta is not None
     assert result.status == SyncStatus.PARTIAL_FAILURE
     assert meta.last_synced_date == "2026-08"
     skip, _ = should_skip_macro(
@@ -213,6 +167,7 @@ def test_global_asset_partial_failure_keeps_old_watermark(db_session, monkeypatc
     monkeypatch.setattr(ga, "fetch_all_assets", lambda assets: {})
     result = ga.refresh_asset_highs(db_session)
     meta = get_sync_meta(db_session, "asset_high")
+    assert meta is not None
     assert result.status != SyncStatus.SUCCESS
     assert meta.last_synced_date == "2026-01-02"
 
@@ -256,7 +211,9 @@ def test_stock_success_prefix_is_not_refetched(db_session, monkeypatch):
     reporter = ProgressReporter(bridge.emit)
     result = _drain(stock.import_stock_gen(db_session, on_progress=reporter, bridge=bridge))
     assert result.status == SyncStatus.PARTIAL_FAILURE
-    assert get_sync_meta(db_session, "stock_turnover").last_synced_date == "2026-01-05"
+    meta = get_sync_meta(db_session, "stock_turnover")
+    assert meta is not None
+    assert meta.last_synced_date == "2026-01-05"
     assert db_session.get(StockTurnover, ("2026-01-05", "600000")) is not None
 
     asked.clear()
@@ -264,45 +221,3 @@ def test_stock_success_prefix_is_not_refetched(db_session, monkeypatch):
         _drain(stock.import_stock_gen(db_session, on_progress=reporter, bridge=bridge))
     assert "2026-01-05" not in asked
     assert asked[0] == "2026-01-06"
-
-
-def test_closes_cover_settled_ignores_exchange_holiday(monkeypatch):
-    import astock.core.price_utils as price_utils
-
-    monkeypatch.setattr(price_utils, "last_settled_date", lambda market="cn": "2025-10-07")
-    assert closes_cover_settled({"2025-09-30": 3200.0}, "cn") is True
-
-    monkeypatch.setattr(price_utils, "last_settled_date", lambda market="cn": "2025-10-09")
-    assert closes_cover_settled({"2025-09-30": 3200.0}, "cn") is False
-
-
-def test_usd_spot_scale_rejects_order_of_magnitude_gap():
-    from astock.datasets.market_overview.usd_index import _align_spot_quote
-
-    history = {"2026-01-08": 100.0}
-    closes, err = _align_spot_quote(
-        {"quote_date": "2026-01-08", "current": 30000.0, "prev": None},
-        history,
-        hundredths=True,
-    )
-    assert closes == {}
-    assert err
-    scaled, scale_err = _align_spot_quote(
-        {"quote_date": "2026-01-08", "current": 10000.0, "prev": None},
-        history,
-        hundredths=True,
-    )
-    assert scale_err is None
-    assert scaled["2026-01-08"] == pytest.approx(100.0)
-
-
-def test_import_password_lockout():
-    from astock.core.errors import AppError
-    from astock.core.rate_limit import FailureLockout
-
-    lock = FailureLockout(max_failures=5, lock_seconds=900)
-    for _ in range(5):
-        lock.fail("10.0.0.1")
-    with pytest.raises(AppError) as caught:
-        lock.check("10.0.0.1")
-    assert caught.value.status_code == 429

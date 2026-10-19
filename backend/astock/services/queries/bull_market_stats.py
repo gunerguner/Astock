@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlmodel import Session, col, select
 
 from astock.config import BULL_MARKETS, POINT_INDEX_CONFIG
@@ -42,14 +42,14 @@ def build_bull_market_stats(
             )
             continue
 
-        where_clauses = [
-            col(model.date) >= period["start"],
-            col(model.date) <= period["end"],
-            value_col > threshold,
-            *extra_where,
-        ]
+        # 达标天数仍严格大于阈值；极值取整个牛市区间，低于阈值也保留。
+        qualified = case((value_col > threshold, 1))
         count, max_value = db.exec(
-            select(func.count(), func.max(value_col)).where(*where_clauses)
+            select(func.count(qualified), func.max(value_col)).where(
+                col(model.date) >= period["start"],
+                col(model.date) <= period["end"],
+                *extra_where,
+            )
         ).one()
         days = int(count or 0)
         total_days += days

@@ -38,7 +38,7 @@ def _extract_recent_closes(
         return {}
     cap = last_settled_date(market)
     window = df.loc[df["date"] <= cap]
-    if not isinstance(window, pd.DataFrame) or window.empty:
+    if window.empty:
         return {}
     tail = window.tail(GLOBAL_ASSET_RECENT_DAYS)
     closes: dict[str, float] = {}

@@ -31,7 +31,7 @@
 | 市场概览·贵金属 | ①主·本地 | 全球资产 Redis | `local_closes`（读 `global_asset:recent`） | GC/SI 与全球资产共用；导入后可复用 | 同上 | 本地够用则跳过外网 | — |
 | ↳ | ②备·外网 / 原油 | akshare `futures_foreign_hist` | `datasets.market_overview.foreign_futures` | WTI(CL) 无全球资产缓存；GC/SI 本地不足时回退 | 同上 | 同上 | 同非美债批次 |
 | 市场概览·人民币汇率 | — | akshare `currency_boc_sina` | `datasets.market_overview.boc_forex` | 央行中间价日频，÷100 后展示 | 同上 | 同上 | 同非美债批次 |
-| 市场概览·美债/中债 | — | akshare `bond_zh_us_rate` | `datasets.market_overview.us_bond` | **一次**批量出美债+中债 2y/10y/30y | 同上 | 同上 | **单独批量**（不进线程池） |
+| 市场概览·美债/中债 | — | akshare `bond_zh_us_rate` | `datasets.market_overview.us_bond` | **一次**批量出美债+中债 2y/10y/30y；`us_bond`/`cn_bond` 两个 source 共用批量，按代码分市场结算 | 同上 | 同上 | **单独批量**（不进线程池） |
 | 市场概览·美元指数历史 | ①主 | 新浪 DINIW 日线 | `usd_index`（经 `global_index`） | 生产机东财/akshare 常不可达，新浪日线最稳 | 同上 | 同上 | 同非美债批次 |
 | ↳ | ②备 | akshare `index_global_hist_em` | 同上 | 新浪失败时的日线兜底 | 同上 | 同上 | 同上 |
 | ↳ | ③备 | 东财 push2his（多 host） | 同上 | akshare 也失败时再试东财 K 线 | 同上 | 同上 | 同上 |
@@ -115,7 +115,7 @@ class FetchResult:
 |-------------|------|
 | `today_local()` / `today_local_date()` | 上海时区当前日历日（字符串 / `date`）。宏观滞后判断、`expected_macro_period`、中国宏观默认起点等统一走这里，勿再自建 `ZoneInfo("Asia/Shanghai")` 或用 `date.today()` |
 | `last_settled_date(market)` | 各市场本地时区下「最近一个已收盘**交易日**」。`cn`：**20:00 前** → 昨日、**20:00 后** → 当日为候选上界（避开 A 股日线源收盘后空窗）；`us`：美东 **16:00** 前后同理。候选日经 `exchange_calendars`（`XSHG` / `XNYS`，见 `core/trading_calendar.py`）回退到最近 session，跳过周末与休市 |
-| `market` | `"cn"`：`Asia/Shanghai`（A 股导入、在岸指数、央行汇率、美债）；`"us"`：`America/New_York`（美股、外盘期货、美元指数等） |
+| `market` | `"cn"`：`Asia/Shanghai`（A 股导入、在岸指数、央行汇率、中债）；`"us"`：`America/New_York`（美股、外盘期货、美元指数、美债） |
 | `market_for_source(source)` | 概览项 `source` → `cn`/`us`，见 `datetime_utils._MARKET_SOURCE` |
 | `market_for_asset_type(type)` | 全球资产 `stock`/`metal` → `us` |
 | `filter_settled_closes(closes, market)` | 写入/读取 Redis 与展示前剔除 `date > last_settled_date(market)` |
@@ -210,6 +210,7 @@ class FetchResult:
 | import 聚合 | `aggregate_status`：`success` / `partial_failure` / `failed`；不同 importer 决定是抛异常还是返回失败结果 |
 | 宏观单个子源失败 | 其它成功子源仍写 `macro_value`；整体 `partial_failure`，错误进入 `source_errors` |
 | 宏观 CPI 水位滞后 | 即使抓取本身成功，最新 CPI 早于期望月份也改为 `partial_failure`，避免错误跳过下次刷新 |
+| 宏观必需指标缺失 | 期望月份缺任一 `required_metrics`（us: CPI+利率；cn: 五指标）时不推进水位，记 `partial_failure`；水位经 `forward_date` 只进不退 |
 | 宏观全无有效记录 | 保留旧表和旧水位，`sync_meta` 记 `failed`；不会用空抓取覆盖历史 |
 | 市场概览单项 | 记入 item `error` 字段 + Redis 失败标记（`MARKET_OVERVIEW_FAILURE_TTL=300s`） |
 | 全球资产单项 | 记入 `cache_errors`；配置了 `data_pending` 的资产返回占位项 |
@@ -415,7 +416,8 @@ flowchart TD
 |--------|--------|--------|
 | `cn_index` | `cn` | 上证、沪深300、创业板、科创板 |
 | `boc_forex` | `cn` | 美元/人民币 |
-| `us_bond` | `cn` | 美债/中债 2y/10y/30y（在岸数据源日频） |
+| `us_bond` | `us` | 美债 2y/10y/30y |
+| `cn_bond` | `cn` | 中债 2y/10y/30y（与美债同一 `bond_zh_us_rate` 批量，按代码前缀分市场结算） |
 | `global_index` | `us` | 道琼斯、标普、纳斯达克、美元指数 |
 | `foreign_futures` | `us` | 黄金、白银、WTI |
 
@@ -449,7 +451,6 @@ flowchart TD
 | 主备源模板 | CPI / 利率共用 `datasets.macro.common.with_fallback`；滞后月数用 `months_behind(period)`（相对 `today_local_date`），阈值分别为 3 / 4 |
 | CPI 主源 | `ak.macro_usa_cpi_yoy`（东财），过滤尚未到发布日期的记录 |
 | CPI 备源 | BLS Public API v1，series `CUUR0000SA0`；按最多 10 年窗口拉 NSA 指数，再与上年同月计算同比 |
-| 已知断点 | `datasets/macro/us_cpi.py` 对 `2025-10` 使用财政部 TIPS 应急指数补值；这是显式代码常量，不应扩散到 provider |
 | 利率主源 | FRED CSV `DFEDTARU`；事件日期/上限按每月月末最后有效值前向展开 |
 | 利率备源 | Fed 官网 `target-funds-2014-2024.csv`；为静态历史备源，修改时注意其覆盖上限 |
 | 子源合并 | `merge_domain_sources`（同文件）把 CPI + 利率拼成长表后再 upsert |
@@ -504,7 +505,7 @@ flowchart TD
 北京时间 day <  refresh_day：期望上上月
 ```
 
-默认 `refresh_day=15`。只有 `sync_meta.last_status=success`、对应 region 的 `macro_value` 非空、CPI 水位已覆盖期望月时才跳过。拉取有数据但 CPI 未到期望月会强制 `partial_failure`，从而允许下一次管理员刷新继续尝试。
+默认 `refresh_day=15`。只有 `sync_meta.last_status=success`、对应 region 的 `macro_value` 非空、且期望月已被全部 `required_metrics` 覆盖（CPI 水位达标只是其中之一）时才跳过。拉取有数据但 CPI 未到期望月或缺必需指标会强制 `partial_failure`，从而允许下一次管理员刷新继续尝试。
 
 宏观每次调用会抓取源端可提供的整段历史，再按 `(region, period, metric)` upsert；它利用月频水位做**请求跳过**，不是向供应商传起止月份的增量抓取。
 
@@ -514,8 +515,8 @@ flowchart TD
 
 | 指标 | API | 数据表 | 逻辑摘要 |
 |------|-----|--------|----------|
-| 牛市成交额达标天数/极值 | `GET /analysis/bull-markets/turnover` | `turnover` | 按 `bull_markets.yaml` 区间统计 `turnover > threshold` |
-| 牛市多指数点位达标 | `GET /analysis/bull-markets/point` | `point` | 每指数独立阈值；`available_from` 控制历史区间是否可用 |
+| 牛市成交额达标天数/极值 | `GET /analysis/bull-markets/turnover` | `turnover` | 天数按 `turnover > threshold`；`max_value` 为区间最高成交额，可低于阈值 |
+| 牛市多指数点位达标 | `GET /analysis/bull-markets/point` | `point` | 天数按各指数阈值；`max_value` 为区间最高点，可低于阈值。`available_from` 之后才有的指数，更早牛市仍 `not_available` |
 | 大盘成交额 TopN | `GET /analysis/turnover/ranking` | `turnover` | 可按牛市区间过滤 |
 | 个股成交额 TopN | `GET /analysis/stock/ranking` | `stock_turnover` | 高水位切片排名 |
 | 美国宏观序列 | `GET /analysis/us-macro` | `macro_value` | `region=us` 长表 pivot，尾部截到最新 CPI 月份 |
@@ -553,5 +554,5 @@ SSE 进度按固定顺序上报：`turnover` → `point` → `stock` → `global
 | turnover / point | `is_synced_through_settled(last_synced_date, "cn")` 且 `last_status=success` | 不请求 baostock/akshare，`imported=0`；拉取 `end_date=last_settled_date("cn")` |
 | stock | `max(turnover.date) <= stock_turnover.last_synced_date` | 不请求 baostock 日更，`imported=0` |
 | global_assets | `is_multi_market_synced(last_synced_date)` 且 `last_status=success` 且表非空 | 不请求 akshare，`imported=0` |
-| us_macro / cn_macro | `last_status=success`、region 长表非空且最新 CPI 水位 ≥ `expected_macro_period(refresh_day)` | 不请求宏观各源，`imported=0`；否则重新抓整段历史并 upsert |
+| us_macro / cn_macro | `last_status=success`、region 长表非空且期望月被全部 `required_metrics` 覆盖（`_metrics_cover`） | 不请求宏观各源，`imported=0`；否则重新抓整段历史并 upsert |
 | market_overview | 各项已 `closes_cover_settled` 且基准点足够；失败冷却期内落后缓存可暂复用；回填时 A 股/`GC`/`SI` 优先本地 | 否则本地不足再外网；`force_refresh` 全部重拉 |

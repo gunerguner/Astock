@@ -60,7 +60,7 @@ class ApiResponse(BaseModel, Generic[T]):
 
 #### GET `/bull-markets/point`
 
-多指数阈值，各 Query 默认取自 `point_indices.yaml`：
+阈值 Query 按 `point_indices.yaml` 已配置指数动态生成（`threshold_{index_code}`），缺省取 YAML 默认值；未知参数忽略。非法值（非数字或 ≤0）返回 400（`code=1001`）。
 
 | Query | 类型 | 默认 | 约束 |
 |-------|------|------|------|
@@ -86,7 +86,7 @@ class ApiResponse(BaseModel, Generic[T]):
   ]
 }
 ```
-`items` 按 `end` 倒序；指数历史不足时 `not_available=true`。
+`items` 按 `end` 倒序。`days` 为区间内严格大于阈值的天数；`max_value` 为该牛市区间内的最高值，低于阈值也返回。指数在该区间尚未发布时 `not_available=true` 且 `max_value` 为 null；区间内没有数据时 `max_value` 同样为 null。
 
 #### GET `/bull-markets/turnover`
 
@@ -94,7 +94,7 @@ class ApiResponse(BaseModel, Generic[T]):
 |-------|------|------|------|
 | `threshold` | float | 2e12 | `> 0` |
 
-结构与 point 相同；`max_value` 为区间最大合计成交额（元）。
+结构与 point 相同；`max_value` 为该牛市区间内的最高合计成交额（元），可以低于阈值。无成交数据的区间为 null。
 
 #### GET `/turnover/ranking`
 
@@ -174,7 +174,7 @@ class ApiResponse(BaseModel, Generic[T]):
 
 | Query | 类型 | 默认 | 约束 |
 |-------|------|------|------|
-| `start` | str | `US_MACRO_START_PERIOD`（默认 `2020-06`） | 长度恰为 7；应传 `YYYY-MM` |
+| `start` | str | `US_MACRO_START_PERIOD`（默认 `2020-06`） | 传入须为 `YYYY-MM`，非法返回 400（`code=1001`） |
 
 ```jsonc
 {
@@ -253,7 +253,8 @@ class ApiResponse(BaseModel, Generic[T]):
   "stock":     { ... },
   "global_assets": { ... },
   "us_macro":  { ... },
-  "cn_macro":  { ... }
+  "cn_macro":  { ... },
+  "market_overview": { ... }
 }
 ```
 
@@ -273,22 +274,26 @@ class ApiResponse(BaseModel, Generic[T]):
 
 ### sync_meta 水位表
 
-主键 `table_name`，记录每个数据集同步水位：
+主键 `table_name`，记录每个数据集同步水位（水位推进语义见 `services/sync/watermark.py`）：
 
 | 字段 | 说明 |
 |------|------|
-| `last_synced_date` | 数据集水位；日频为最后交易日，宏观为最新 CPI 月份 |
+| `last_synced_date` | 数据集水位；日频为连续覆盖前缀的最后一日，宏观为最新 CPI 月份；只保持或向前（`forward_date`），不回退 |
 | `last_synced_at` | 最近同步时间戳 |
 | `last_status` | `success` / `partial_failure` / `failed` |
 | `last_error` | 最近错误信息 |
 
-日频增量起点 `get_sync_start_date`：读 `sync_meta.last_synced_date` 的**次日**（`+1` 日历日，避免重复 upsert 已同步日）；缺省 `START_DATE="2005-01-01"`。`should_skip_daily_sync` 仅在上次状态为 `success` 且水位已覆盖 `last_settled_date("cn")` 时跳过。
+日频水位用 `watermark.prefix_before_gap` 判定：期望交易日序列中第一个缺失日之前的连续前缀才算覆盖，水位停在缺口前一日，缺口下次重拉。增量起点 `get_sync_start_date`：读 `sync_meta.last_synced_date` 的**次日**（`+1` 日历日，避免重复 upsert 已同步日）；缺省 `START_DATE="2005-01-01"`。`should_skip_daily_sync` 仅在上次状态为 `success` 且水位已覆盖 `last_settled_date("cn")` 时跳过。
 
 ### 批量 upsert
 
 `services/sync/store.batch_upsert`：SQLite `ON CONFLICT DO UPDATE`，默认按 `DEFAULT_UPSERT_BATCH_SIZE=500` 分批执行，全部批次完成后统一 commit，异常时 rollback。
 
 `turnover` / 单指数 `point` 走 `imports/pipeline.run_daily_import`；`point` 外层按 `point_indices.yaml` 循环多指数（baostock + akshare 科创50）。
+
+### schema 迁移
+
+`core/database._apply_schema_migrations` 在 `init_db` 的 `create_all` 之后执行：`schema_migrations` 表记录已应用版本，`steps` 列表按序追加新列等轻量 DDL，幂等。新列只在此追加步骤，不引入 Alembic。
 
 ### stock 数据集
 
@@ -297,11 +302,11 @@ class ApiResponse(BaseModel, Generic[T]):
 1. 以 turnover 表最新日期为 `as_of_date`；缺口日取 turnover 中 `(last_synced, as_of]`
 2. 缺口整段共用一次 `baostock_session`；`query_all_stock(as_of)` 名称拉一次复用
 3. 逐日 `query_daily_history_k_AStock`（≥0.9.3）→ 当日 amount TopN（`STOCK_SLICE_TOP_N`，默认 20）→ upsert
-4. 全部缺口日成功才推进 `sync_meta`；SSE 按日上报进度
+4. 遇第一个失败日即中断；水位推进到连续成功前缀的最后一日（成功时为 `as_of_date`），失败前缀下次重拉；SSE 按日上报进度
 
 ### global_assets 数据集
 
-`services/imports/global_assets.py`：`refresh_asset_highs` 在上次状态成功、`asset_high` 非空且水位同时覆盖中美最近结算日时跳过；否则 akshare 串行拉 ATH → upsert `asset_high` → 写 Redis（`services/cache/asset_prices`）。
+`services/imports/global_assets.py`：`refresh_asset_highs` 在上次状态成功、`asset_high` 非空且水位同时覆盖中美最近结算日时跳过；否则对「无 ATH 记录或近期收盘未覆盖结算日」的资产（`_needs_asset_fetch`）经 akshare 串行拉 ATH → upsert `asset_high` → 写 Redis（`services/cache/asset_prices`）。水位经 `forward_date` 只进不退；有资产拉取失败时保留旧水位并记 `partial_failure`/`failed`。
 
 ### macro 月频数据集
 
@@ -310,11 +315,12 @@ class ApiResponse(BaseModel, Generic[T]):
 | 项 | 说明 |
 |----|------|
 | 主键 | `(region, period, metric)`；`region=cn/us`，`period=YYYY-MM` |
-| 水位 | `sync_meta.cn_macro` / `sync_meta.us_macro`，`last_synced_date` 存最新有效 CPI 月份（`WATERMARK_METRIC="cpi_yoy"`） |
+| 水位 | `sync_meta.cn_macro` / `sync_meta.us_macro`，`last_synced_date` 存最新有效 CPI 月份（`WATERMARK_METRIC="cpi_yoy"`）；经 `forward_date` 只进不退 |
 | 发布时间窗 | `expected_macro_period` 按北京时间计算：每月 `refresh_day` 之前期望上上月，含当日之后期望上月 |
 | 默认刷新日 | `settings.yaml` 的 `cn_macro_refresh_day` / `us_macro_refresh_day`，均默认 15 |
 | 跳过 | 上次状态为 `success`、对应 region 已有数据且水位覆盖期望月份 |
 | 写入 | 全量抓取后 SQLite upsert；不是按水位裁剪的增量请求，主键保证幂等 |
+| 指标覆盖 | 各 dataset 声明 `required_metrics`（us: CPI+利率，cn: 五指标）；期望月缺任一必需指标时不推进水位、记 `partial_failure` |
 | 水位不足 | 抓取有数据但最新 CPI 早于期望月份时，状态强制为 `partial_failure` 并保留源端滞后错误 |
 | 无有效记录 | 不清空旧表、不推进旧水位；写 `failed` 与错误摘要 |
 | 返回类型 | `run_macro_import` → `ImportResult`（与日频 `run_daily_import` 一致） |
@@ -392,9 +398,11 @@ class ApiResponse(BaseModel, Generic[T]):
 ### 管理刷新
 
 - 导航栏 `admin-refresh-button` 收集密码，经请求头 `X-Admin-Password` 交给 `POST /admin/data/import/stream`
-- 密码只存在后端环境变量 `ADMIN_REFRESH_PASSWORD`。未配置时导入接口返回 503；缺失或不匹配返回 401。`GET /admin/data/sync-status` 保持公开
+- 密码只存在后端环境变量 `ADMIN_REFRESH_PASSWORD`。未配置时导入接口返回 503；缺失或不匹配返回 401；连续 5 次错误锁 15 分钟返回 429；已有导入在跑返回 409。`GET /admin/data/sync-status` 保持公开
+- 限流在 `core/rate_limit.py`（进程内）：`import_password_lock`（密码试错）与 `force_refresh_limit`（`asset-price-levels` / `market-overview` 的 `force_refresh=true` 每 IP 60 秒 2 次，超出返回 429）
 - 修改密码后重启 backend 即可，不必重建 frontend
-- `useAdminDataRefresh` + `refresh-progress-modal`：SSE 七阶段进度弹窗；完成并关闭后 `emitDataRefresh` 通知各页 reload
+- `useAdminDataRefresh` + `refresh-progress-modal`：SSE 七阶段进度弹窗；阶段新增 `partial_failure` 状态（整体 `partial`，关闭后同样 `emitDataRefresh`）；完成并关闭后 `emitDataRefresh` 通知各页 reload
+- SSE 每阶段阻塞拉取跑在独立线程，主流程每 15 秒送一次 ping 心跳（`import_orchestrator._call_with_heartbeat`），防代理断流
 
 ### 环境变量
 
@@ -436,7 +444,7 @@ backend 挂载 `${SQLITE_HOST_DIR:-./sqlite-data}:/app/data` + `log_data:/var/lo
 | `US_MACRO_REFRESH_DAY` / `CN_MACRO_REFRESH_DAY` | 15 | 每月含该日后，宏观期望水位从上上月切到上月 |
 | `US_MACRO_START_PERIOD` | `2020-06` | 美国宏观 API/页面默认起始月份 |
 | `cn_macro_start_period()` | 查询时前推 60 个月 | 中国宏观 API 默认起始月份；YAML 写成 `YYYY-MM` 时用配置 |
-| `GUNICORN_WORKERS/TIMEOUT` | — | 生产 worker；后端为 **sync** 路由 + 阻塞 IO，依赖多 worker，不走全量 async |
+| `GUNICORN_WORKERS/TIMEOUT` | 1 / 300 | 生产 **单 worker**（SQLite 写入串行，多 worker 会并发写同一库）；`preload_app=False` |
 
 ### 部署约定
 

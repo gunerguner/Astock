@@ -54,17 +54,17 @@ def fetch_turnover(start_date: str | None = None) -> FetchResult:
                 .groupby("date", as_index=False)
                 .sum(min_count=1)
             )
+            # groupby.sum 的标注是标量 / Series / DataFrame 联合类型，收窄后 dropna 才对得上。
             if not isinstance(grouped, pd.DataFrame):
-                return FetchResult.failure("成交额汇总结果异常")
-            merged = grouped
+                return FetchResult.failure("成交额汇总结果不是表格")
             amount_cols = list(index_codes.keys())
-            missing_cols = [col for col in amount_cols if col not in merged.columns]
+            missing_cols = [col for col in amount_cols if col not in grouped.columns]
             if missing_cols:
                 errors.append(f"成交额缺少列: {','.join(missing_cols)}")
                 return FetchResult(records=[], ok=False, errors=errors)
 
-            complete = merged.dropna(subset=amount_cols)
-            dropped = len(merged) - len(complete)
+            complete = grouped.dropna(subset=amount_cols)
+            dropped = len(grouped) - len(complete)
             if dropped:
                 errors.append(f"成交额 {dropped} 个交易日两市不齐，已丢弃")
             if complete.empty:

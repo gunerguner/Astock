@@ -6,22 +6,13 @@ from fastapi.responses import StreamingResponse
 from astock.config import settings
 from astock.core.deps import DbSession
 from astock.core.errors import AppError, ErrorCode
-from astock.core.rate_limit import import_password_lock
+from astock.core.rate_limit import client_ip, import_password_lock
 from astock.schemas.imports import ImportDataset
 from astock.schemas.response import success
 from astock.services.import_orchestrator import end_import, import_dataset_stream, try_begin_import
 from astock.services.sync.status import get_sync_status
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
-
-
-def _client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for", "")
-    if forwarded.strip():
-        return forwarded.split(",")[0].strip()
-    if request.client is None:
-        return "unknown"
-    return request.client.host
 
 
 def _require_admin_password(provided: str, client: str) -> None:
@@ -50,7 +41,7 @@ def trigger_import_stream(
     dataset: ImportDataset = ImportDataset.all,
     x_admin_password: str = Header(default="", alias="X-Admin-Password"),
 ):
-    _require_admin_password(x_admin_password, _client_ip(request))
+    _require_admin_password(x_admin_password, client_ip(request))
     if not try_begin_import():
         raise AppError(
             message="已有导入任务在执行",

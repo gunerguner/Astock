@@ -4,9 +4,19 @@ import time
 from collections import defaultdict
 from threading import Lock
 
-from fastapi import status
+from fastapi import Request, status
 
 from astock.core.errors import AppError, ErrorCode
+
+
+def client_ip(request: Request) -> str:
+    """限流键：优先取反向代理转发的首个 IP。"""
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded.strip():
+        return forwarded.split(",")[0].strip()
+    if request.client is None:
+        return "unknown"
+    return request.client.host
 
 
 class FailureLockout:

@@ -65,19 +65,14 @@ def _align_spot_quote(
     ref_date = quote["quote_date"] if quote["quote_date"] in history else max(history)
     ref = history[ref_date]
     scale = 1.0
-    if hundredths:
-        if _same_magnitude(current, ref):
-            scale = 1.0
-        elif _same_magnitude(current * 0.01, ref):
+    if not _same_magnitude(current, ref):
+        # em 现货按百分之一发布：缩放后数量级对得上才补点，否则放弃
+        if hundredths and _same_magnitude(current * 0.01, ref):
             scale = 0.01
         else:
             return {}, (
                 f"美元指数现货 {current} 与 K 线 {ref_date} 收盘 {ref} 数量级不一致，未补最新点"
             )
-    elif not _same_magnitude(current, ref):
-        return {}, (
-            f"美元指数现货 {current} 与 K 线 {ref_date} 收盘 {ref} 数量级不一致，未补最新点"
-        )
     scaled_prev = prev_f * scale if prev_f is not None else None
     return _spot_pairs_to_closes(quote["quote_date"], current * scale, scaled_prev), None
 
@@ -141,6 +136,7 @@ def _fetch_usd_index_history(n: int) -> tuple[dict[str, float], list[str]]:
             if closes:
                 return closes, errors
             errors.append(f"{label}: 数据为空")
+            logger.warning("美元指数历史(%s)数据为空", label)
         except Exception as e:
             errors.append(f"{label}: {e}")
             logger.warning("美元指数历史(%s)失败: %s", label, e)
@@ -152,6 +148,7 @@ def _fetch_usd_index_history(n: int) -> tuple[dict[str, float], list[str]]:
                 logger.info("美元指数历史来自东财 %s: %s 点", host, len(closes))
                 return closes, errors
             errors.append(f"{host}: 数据为空")
+            logger.warning("美元指数历史(%s)数据为空", host)
         except Exception as e:
             errors.append(f"{host}: {e}")
             logger.warning("美元指数历史(%s)失败: %s", host, e)

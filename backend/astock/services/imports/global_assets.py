@@ -5,7 +5,7 @@ import time
 
 from sqlmodel import Session, select
 
-from astock.config import ASSET_PRICE_CACHE_TTL, GLOBAL_ASSETS
+from astock.config import ASSET_PRICE_CACHE_TTL, GLOBAL_ASSETS, GlobalAssetConfig
 from astock.core.datetime_utils import is_multi_market_synced, iso_now, market_for_asset_type
 from astock.core.price_utils import anchor_date_excluding_today, closes_cover_settled
 from astock.core.sync_status import SyncStatus
@@ -76,7 +76,7 @@ def persist_higher_close(
     return price, price_date
 
 
-def _needs_asset_fetch(db: Session, asset: dict) -> bool:
+def _needs_asset_fetch(db: Session, asset: GlobalAssetConfig) -> bool:
     """无 ATH 或近期收盘未覆盖结算日时才打外网。待接入资产不拉取。"""
     if asset.get("data_pending"):
         return False
@@ -165,7 +165,7 @@ def refresh_asset_highs(db: Session) -> ImportResult:
         latest is not None or not to_fetch
     )
     if ok:
-        status = resolve_status(True, imported if to_fetch else 1)
+        status = SyncStatus.SUCCESS
         watermark = forward_date(old_date, latest) if latest else old_date
     else:
         status = resolve_status(False, imported)
@@ -177,12 +177,11 @@ def refresh_asset_highs(db: Session) -> ImportResult:
         status=status,
         error="; ".join(errors[:5]) if errors else None,
     )
-    latest = watermark
 
     result = build_result(
         imported=imported,
         total=len(records),
-        last_date=latest,
+        last_date=watermark,
         ok=ok,
         source_errors=(
             {"global_assets": "; ".join(errors[:5])} if errors else {}

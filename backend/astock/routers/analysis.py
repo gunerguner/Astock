@@ -1,5 +1,3 @@
-import re
-
 from fastapi import APIRouter, Query, Request, status
 
 from astock.config import (
@@ -9,8 +7,9 @@ from astock.config import (
     cn_macro_start_period,
 )
 from astock.core.deps import DbSession
+from astock.core.datetime_utils import is_valid_period
 from astock.core.errors import AppError, ErrorCode
-from astock.core.rate_limit import force_refresh_limit
+from astock.core.rate_limit import client_ip, force_refresh_limit
 from astock.schemas.analysis import (
     BullMarketStatsResponse,
     CnMacroResponse,
@@ -35,20 +34,9 @@ from astock.services.queries import (
 
 router = APIRouter(prefix="/api/v1/analysis", tags=["analysis"])
 
-_PERIOD_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
-
-
-def _client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for", "")
-    if forwarded.strip():
-        return forwarded.split(",")[0].strip()
-    if request.client is None:
-        return "unknown"
-    return request.client.host
-
 
 def _require_period(start: str) -> str:
-    if not _PERIOD_RE.fullmatch(start):
+    if not is_valid_period(start):
         raise AppError(
             message="start 须为 YYYY-MM",
             code=ErrorCode.VALIDATION_ERROR,
@@ -149,7 +137,7 @@ def market_overview_api(
     force_refresh: bool = Query(default=False),
 ):
     if force_refresh:
-        force_refresh_limit.hit(_client_ip(request))
+        force_refresh_limit.hit(client_ip(request))
     return success(get_market_overview(force_refresh=force_refresh))
 
 

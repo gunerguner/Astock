@@ -55,6 +55,21 @@ def test_available_from_marks_early_periods_not_available(db_session):
     assert by_market["2024"].not_available is False
 
 
+def test_max_value_kept_when_all_days_below_threshold(db_session):
+    _seed_turnovers(
+        db_session,
+        [
+            ("2015-01-05", 0.4e12, 0.3e12),  # 0.7e12
+            ("2015-02-06", 0.6e12, 0.5e12),  # 1.1e12，仍低于默认阈值
+        ],
+    )
+    resp = _build(db_session)
+    by_market = {item.market: item for item in resp.items}
+    assert by_market["2015"].days == 0
+    assert by_market["2015"].max_value == 1.1e12
+    assert by_market["2007-2009"].max_value is None
+
+
 def test_boundary_dates_inclusive(db_session):
     # 起止日当天均应计入
     _seed_turnovers(
@@ -81,3 +96,4 @@ def test_threshold_strictness(db_session, threshold, amount, expected):
     resp = _build(db_session, threshold)
     by_market = {item.market: item for item in resp.items}
     assert by_market["2015"].days == expected
+    assert by_market["2015"].max_value == amount

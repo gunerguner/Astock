@@ -67,6 +67,7 @@ class TestBullMarketPoint:
         resp = client.get("/api/v1/analysis/bull-markets/point?threshold_000001=5500")
         items = _items_by_market(resp.json()["data"], "000001")
         assert items["2015"]["days"] == 0
+        assert items["2015"]["max_value"] == 5000.0
 
 
 class TestBullMarketTurnover:
@@ -106,3 +107,6 @@ class TestBullMarketTurnover:
         data = resp.json()["data"]
         assert data["threshold"] == 3e12
         assert data["total_days"] == 0
+        items = {item["market"]: item for item in data["items"]}
+        assert items["2015"]["days"] == 0
+        assert items["2015"]["max_value"] == 2.2e12

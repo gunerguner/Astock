@@ -20,15 +20,9 @@ def fetch_cn_index(code: str, n: int) -> dict[str, float]:
         return {}
     df["Date"] = pd.to_datetime(df["Date"])
     indexed = df.set_index("Date").sort_index()
-    if not isinstance(indexed, pd.DataFrame):
-        return {}
     indexed["Close"] = pd.to_numeric(indexed["Close"], errors="coerce")
     filtered = indexed.loc[indexed["Close"].notna()]
-    if not isinstance(filtered, pd.DataFrame):
-        return {}
     window = filtered.loc[filtered.index >= pd.Timestamp(cutoff.date())]
-    if not isinstance(window, pd.DataFrame):
-        return {}
     pairs: list[tuple[str, float]] = []
     for ts, row in window.iterrows():
         close = to_float(row["Close"])

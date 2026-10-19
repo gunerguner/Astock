@@ -189,6 +189,10 @@
     return row;
   };
 
+  const isPlaceholderRow = (
+    row: ReturnType<typeof guardDataRow>,
+  ): row is 'pending' | 'error' => row === 'pending' || row === 'error';
+
   const columns = computed<TableColumnData[]>(() => [
     {
       title: t('pages.assetPriceLevels.columns.asset'),
@@ -208,8 +212,7 @@
       align: 'right',
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
-        if (!row) return null;
-        if (row === 'pending' || row === 'error') return renderPendingDash();
+        if (!row || isPlaceholderRow(row)) return renderPendingDash();
         return renderPriceCell(row.current_price);
       },
     },
@@ -218,8 +221,7 @@
       align: 'right',
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
-        if (!row) return null;
-        if (row === 'pending' || row === 'error') return renderPendingDash();
+        if (!row || isPlaceholderRow(row)) return renderPendingDash();
         return renderPlainPriceCell(row.all_time_high);
       },
     },
@@ -228,8 +230,7 @@
       align: 'right',
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
-        if (!row) return null;
-        if (row === 'pending' || row === 'error') return renderPendingDash();
+        if (!row || isPlaceholderRow(row)) return renderPendingDash();
         return renderPercentCell(row.percentage_diff);
       },
     },
@@ -238,8 +239,7 @@
       align: 'right',
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
-        if (!row) return null;
-        if (row === 'pending' || row === 'error') return renderPendingDash();
+        if (!row || isPlaceholderRow(row)) return renderPendingDash();
         return renderNumCell(String(row.ath_days));
       },
     },
@@ -248,8 +248,7 @@
       align: 'right',
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
-        if (!row || row === 'pending' || row === 'error')
-          return renderPendingDash();
+        if (!row || isPlaceholderRow(row)) return renderPendingDash();
         return renderPercentCell(row.daily_change);
       },
     },
@@ -258,8 +257,7 @@
       align: 'right',
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
-        if (!row || row === 'pending' || row === 'error')
-          return renderPendingDash();
+        if (!row || isPlaceholderRow(row)) return renderPendingDash();
         return renderPercentCell(row.weekly_change);
       },
     },
@@ -269,8 +267,8 @@
         const raw = toTableRow<TableRow>(record);
         if (isErrorRow(raw)) return raw.message;
         const row = guardDataRow(record);
-        if (!row || row === 'error') return null;
-        if (row === 'pending') {
+        if (!row || isPlaceholderRow(row)) {
+          // error 行已在上方经 isErrorRow 提前返回，这里实际只剩 pending
           return h(Tag, { color: 'gray' }, () =>
             t('pages.assetPriceLevels.conclusion.pending'),
           );

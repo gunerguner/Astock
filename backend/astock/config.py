@@ -9,7 +9,10 @@ import yaml
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from astock.core.datetime_utils import today_local_date as _today_local_date
+from astock.core.datetime_utils import (
+    is_valid_period,
+    today_local_date as _today_local_date,
+)
 
 _CONFIG_DIR = Path(__file__).resolve().parent / "config"
 
@@ -157,10 +160,8 @@ def _default_cn_macro_start_period() -> str:
 def cn_macro_start_period() -> str:
     """YAML 写了合法 YYYY-MM 时用配置；留空则按本次请求的上海当前月往前 60 个月。"""
     configured = str(_business.get("cn_macro_start_period") or "").strip()
-    if len(configured) == 7 and configured[4] == "-" and configured[:4].isdigit():
-        month = configured[5:]
-        if month.isdigit() and 1 <= int(month) <= 12:
-            return configured
+    if is_valid_period(configured):
+        return configured
     return _default_cn_macro_start_period()
 
 # batch

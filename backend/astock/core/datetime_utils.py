@@ -1,5 +1,6 @@
 """日期时间工具：统一 UTC ISO 串与各市场本地结算日。"""
 
+import re
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -29,6 +30,14 @@ _MARKET_SOURCE: dict[str, MarketCode] = {
 def iso_now() -> str:
     """返回当前 UTC 时间的 ISO 秒级字符串。"""
     return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+PERIOD_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+
+
+def is_valid_period(value: str) -> bool:
+    """是否为合法 YYYY-MM 月度周期（宏观 period / start 参数共用）。"""
+    return bool(PERIOD_RE.fullmatch(value))
 
 
 def now_local() -> datetime:

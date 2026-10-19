@@ -33,10 +33,8 @@ def _records_from_closes(
     out["date"] = pd.to_datetime(out["date"]).dt.strftime("%Y-%m-%d")
     out["close"] = pd.to_numeric(out["close"], errors="coerce")
     cleaned = out.dropna(subset=["close"])
-    if not isinstance(cleaned, pd.DataFrame):
-        return []
     window = cleaned.loc[(cleaned["date"] >= start) & (cleaned["date"] <= end)]
-    if not isinstance(window, pd.DataFrame) or window.empty:
+    if window.empty:
         return []
     cached_at = iso_now()
     return [
