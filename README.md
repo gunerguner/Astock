@@ -19,6 +19,22 @@ Astock 是一个 **A 股历史行情 + 全球资产水位 + 中美宏观** 分�
 
 数据首次为空；本地跑起来后需在页面上触发一次「刷新全部数据」（见下文）。
 
+![pnylxG6.png](https://s41.ax1x.com/2026/10/29/pnylxG6.png)
+
+![pny19MD.png](https://s41.ax1x.com/2026/10/29/pny19MD.png)
+
+![pnylzRK.png](https://s41.ax1x.com/2026/10/29/pnylzRK.png)
+
+![pnylvPx.png](https://s41.ax1x.com/2026/10/29/pnylvPx.png)
+
+![pn69WBF.png](https://s41.ax1x.com/2026/10/30/pn69WBF.png)
+
+![pn69RnU.png](https://s41.ax1x.com/2026/10/30/pn69RnU.png)
+
+![pny1SxO.png](https://s41.ax1x.com/2026/10/29/pny1SxO.png)
+
+
+
 ## 技术方案
 
 
