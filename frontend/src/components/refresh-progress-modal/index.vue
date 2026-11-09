@@ -28,7 +28,10 @@
       >
         <span class="phase-row__icon">{{ phaseIcon(phaseKey) }}</span>
         <span class="phase-row__name">
-          {{ progressState.phases[phaseKey].label }}
+          <span>{{ progressState.phases[phaseKey].label }}</span>
+          <span v-if="phaseDetail(phaseKey)" class="phase-row__detail">
+            {{ phaseDetail(phaseKey) }}
+          </span>
         </span>
         <span class="phase-row__metric">
           {{ phaseMetric(phaseKey) }}
@@ -123,6 +126,15 @@
       )}`;
     }
     if (
+      key === 'market_overview' &&
+      item.status === 'running' &&
+      item.total > 0
+    ) {
+      return `${item.current}/${item.total.toLocaleString()} ${t(
+        'adminRefresh.progress.items',
+      )}`;
+    }
+    if (
       item.imported > 0 ||
       item.status === 'done' ||
       item.status === 'failed' ||
@@ -140,6 +152,11 @@
   function formatElapsed(elapsed?: number): string {
     if (elapsed == null) return '—';
     return `${elapsed.toFixed(1)}s`;
+  }
+
+  function phaseDetail(key: PhaseKey): string {
+    const item = progressState.value.phases[key];
+    return item.status === 'running' ? (item.detail ?? '') : '';
   }
 
   function phaseStatusText(key: PhaseKey): string {
@@ -183,9 +200,10 @@
 
   .phase-row {
     display: grid;
-    grid-template-columns: 24px 1fr 120px 56px 72px;
+    grid-template-columns: 24px minmax(0, 1fr) 88px 56px 72px;
     gap: 8px;
     align-items: center;
+    overflow: hidden;
     padding: 8px 10px;
     border-radius: 6px;
     background: var(--color-fill-1);
@@ -210,7 +228,19 @@
     }
 
     &__name {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
       color: var(--color-text-1);
+    }
+
+    &__detail {
+      overflow: hidden;
+      color: var(--color-text-3);
+      font-size: 12px;
+      line-height: 1.4;
+      white-space: nowrap;
+      text-overflow: ellipsis;
     }
 
     &__metric,

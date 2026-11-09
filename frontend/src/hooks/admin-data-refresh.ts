@@ -8,6 +8,7 @@ import {
   applyStreamError,
   createInitialProgressState,
   PHASE_ORDER,
+  tickPhaseElapsed,
   type PhaseKey,
   type RefreshProgressState,
 } from '@/hooks/admin-data-refresh.types';
@@ -19,6 +20,25 @@ const progressVisible = ref(false);
 const progressState = ref<RefreshProgressState>(createInitialProgressState());
 
 let abortController: AbortController | null = null;
+let elapsedTimer: ReturnType<typeof setInterval> | null = null;
+
+function stopElapsedTimer() {
+  if (elapsedTimer != null) {
+    clearInterval(elapsedTimer);
+    elapsedTimer = null;
+  }
+}
+
+function startElapsedTimer() {
+  stopElapsedTimer();
+  elapsedTimer = setInterval(() => {
+    if (!refreshing.value) return;
+    progressState.value = tickPhaseElapsed(
+      progressState.value,
+      performance.now(),
+    );
+  }, 1000);
+}
 
 function getDatasetLabels(): Record<PhaseKey, string> {
   return {
@@ -70,7 +90,9 @@ export default function useAdminDataRefresh() {
 
       abortController?.abort();
       resetProgressState();
+      stopElapsedTimer();
       refreshing.value = true;
+      startElapsedTimer();
 
       abortController = refreshAllDataStream(
         {
@@ -86,11 +108,13 @@ export default function useAdminDataRefresh() {
             progressState.value = applyStreamDone(progressState.value, result);
             refreshing.value = false;
             abortController = null;
+            stopElapsedTimer();
           },
           onError: (error: API.ImportStreamError) => {
             if (!accepted && isAuthRejection(error)) {
               refreshing.value = false;
               abortController = null;
+              stopElapsedTimer();
               resetProgressState();
               resolve({ accepted: false, message: error.message });
               return;
@@ -99,6 +123,7 @@ export default function useAdminDataRefresh() {
             progressState.value = applyStreamError(progressState.value, error);
             refreshing.value = false;
             abortController = null;
+            stopElapsedTimer();
           },
         },
         password,

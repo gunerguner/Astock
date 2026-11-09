@@ -24,6 +24,8 @@ export interface RefreshProgressState {
   totalPhases: number;
   overallStatus: RefreshOverallStatus;
   errorMessage: string | null;
+  /** 当前阶段开始时刻（performance.now 基准），用于在服务端无事件时本地计秒 */
+  activePhaseStartedAt: number | null;
 }
 
 export const PHASE_ORDER: PhaseKey[] = [
@@ -69,6 +71,7 @@ export function createInitialProgressState(): RefreshProgressState {
     totalPhases: PHASE_ORDER.length,
     overallStatus: 'idle',
     errorMessage: null,
+    activePhaseStartedAt: null,
   };
 }
 
@@ -119,11 +122,42 @@ export function applyProgressEvent(
     );
   }).length;
 
+  // 阶段进入 running 时锚定起始时刻；结束事件保留服务端耗时，清空锚点
+  let { activePhaseStartedAt } = state;
+  if (nextStatus === 'running') {
+    if (activePhaseStartedAt == null) {
+      activePhaseStartedAt = performance.now() - (event.elapsed ?? 0) * 1000;
+    }
+  } else {
+    activePhaseStartedAt = null;
+  }
+
   return {
     ...state,
     phases: nextPhases,
     completedCount,
     overallStatus: 'running',
+    activePhaseStartedAt,
+  };
+}
+
+/** 服务端一段时间无事件时，按本地时钟刷新进行中阶段的耗时。没有变化时返回原对象。 */
+export function tickPhaseElapsed(
+  state: RefreshProgressState,
+  now: number,
+): RefreshProgressState {
+  const startedAt = state.activePhaseStartedAt;
+  if (startedAt == null) return state;
+  const elapsed = Math.round(((now - startedAt) / 1000) * 10) / 10;
+  const active = PHASE_ORDER.find(
+    (key) => state.phases[key].status === 'running',
+  );
+  if (!active) return state;
+  const phase = state.phases[active];
+  if (phase.elapsed === elapsed) return state;
+  return {
+    ...state,
+    phases: { ...state.phases, [active]: { ...phase, elapsed } },
   };
 }
 
