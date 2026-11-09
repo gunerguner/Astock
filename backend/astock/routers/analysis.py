@@ -124,7 +124,7 @@ def asset_price_levels_api(
     force_refresh: bool = Query(default=False),
 ):
     if force_refresh:
-        force_refresh_limit.hit(_client_ip(request))
+        force_refresh_limit.hit(client_ip(request))
     return success(get_price_levels(db, force_refresh=force_refresh))
 
 

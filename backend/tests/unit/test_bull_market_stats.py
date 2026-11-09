@@ -3,8 +3,12 @@
 import pytest
 
 from astock.config import BULL_MARKETS
+from astock.models.point import Point
 from astock.models.turnover import Turnover
-from astock.services.queries.bull_market_stats import build_bull_market_stats
+from astock.services.queries.bull_market_stats import (
+    build_bull_market_stats,
+    bull_market_multi_index_point_stats,
+)
 
 _2015 = BULL_MARKETS["2015"]
 
@@ -97,3 +101,60 @@ def test_threshold_strictness(db_session, threshold, amount, expected):
     by_market = {item.market: item for item in resp.items}
     assert by_market["2015"].days == expected
     assert by_market["2015"].max_value == amount
+
+
+def _seed_points(db, rows):  # noqa: ANN001
+    db.add_all(
+        Point(date=d, index_code=code, close=close, cached_at="2026-01-01T00:00:00+00:00")
+        for d, code, close in rows
+    )
+    db.commit()
+
+
+def _index_items(resp, index_code: str) -> dict:
+    stats = next(i for i in resp.indices if i.index_code == index_code)
+    return stats, {item.market: item for item in stats.items}
+
+
+def test_multi_index_empty_index_uses_skeleton(db_session):
+    resp = bull_market_multi_index_point_stats(db_session, {})
+    stats, items = _index_items(resp, "000688")
+    assert stats.total_days == 0
+    assert stats.threshold == 1200
+    assert items["2007-2009"].not_available is True
+    assert items["2015"].not_available is True
+    assert items["2021"].not_available is False
+    assert items["2024"].days == 0
+    assert items["2024"].max_value is None
+    ends = [item.end for item in stats.items]
+    assert ends == sorted(ends, reverse=True)
+
+
+def test_multi_index_keeps_period_extreme_below_threshold(db_session):
+    _seed_points(
+        db_session,
+        [
+            ("2015-01-05", "000001", 3500.0),  # 全部低于默认阈值 4000
+            ("2015-02-06", "000001", 3800.0),
+            ("2013-01-04", "000001", 9000.0),  # 区间外，不计入极值
+            ("2019-01-04", "000001", 4000.0),  # 等于阈值，天数不计
+            ("2019-06-01", "000001", 4000.0001),  # 严格大于
+            ("2015-01-05", "000300", 5000.0),
+        ],
+    )
+    resp = bull_market_multi_index_point_stats(db_session, {})
+    stats, items = _index_items(resp, "000001")
+    assert items["2015"].days == 0
+    assert items["2015"].max_value == 3800.0
+    assert items["2021"].days == 1
+    assert items["2021"].max_value == 4000.0001
+    assert items["2007-2009"].days == 0
+    assert items["2007-2009"].max_value is None
+    assert stats.total_days == 1
+
+    other, other_items = _index_items(resp, "000300")
+    assert other_items["2015"].days == 1
+    assert other.total_days == 1
+
+    empty, _ = _index_items(resp, "399006")
+    assert empty.total_days == 0

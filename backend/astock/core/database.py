@@ -32,6 +32,10 @@ def _apply_schema_migrations() -> None:
     """幂等轻量迁移。新列只在此追加步骤，不引入 Alembic。"""
     steps: list[tuple[str, str]] = [
         ("20261019_baseline", "SELECT 1"),
+        (
+            "20261109_point_index_date",
+            "CREATE INDEX IF NOT EXISTS idx_point_index_date ON point (index_code, date)",
+        ),
     ]
     with engine.begin() as conn:
         conn.exec_driver_sql(

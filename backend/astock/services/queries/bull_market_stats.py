@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from sqlalchemy import case, func
+from sqlalchemy import and_, case, func
 from sqlmodel import Session, col, select
 
 from astock.config import BULL_MARKETS, POINT_INDEX_CONFIG
@@ -73,6 +73,32 @@ def build_bull_market_stats(
     )
 
 
+def _period_aggregate_columns(
+    threshold: float, available_from: str | None
+) -> tuple[list, list[str]]:
+    """每个可统计区间一对达标天数 / 区间极值列，外加全指数行数。"""
+    columns: list = [func.count().label("row_count")]
+    queried: list[str] = []
+    for market_name, period in BULL_MARKETS.items():
+        if available_from and available_from > period["end"]:
+            continue
+        in_period = and_(
+            col(Point.date) >= period["start"],
+            col(Point.date) <= period["end"],
+        )
+        slug = market_name.replace("-", "_")
+        columns.append(
+            func.count(
+                case((and_(in_period, col(Point.close) > threshold), 1))
+            ).label(f"days_{slug}")
+        )
+        columns.append(
+            func.max(case((in_period, col(Point.close)))).label(f"max_{slug}")
+        )
+        queried.append(market_name)
+    return columns, queried
+
+
 def bull_market_multi_index_point_stats(
     db: Session, thresholds: dict[str, float]
 ) -> MultiIndexPointStatsResponse:
@@ -87,37 +113,59 @@ def bull_market_multi_index_point_stats(
         )
         index_name = config["name"]
         available_from = config["available_from"]
-        exists = db.exec(
-            select(Point).where(Point.index_code == index_code).limit(1)
-        ).first()
-        if exists is None:
-            items = empty_index_items(available_from)
+        columns, queried = _period_aggregate_columns(threshold, available_from)
+        row = db.exec(
+            select(*columns).where(Point.index_code == index_code)
+        ).one()
+        values = row._mapping
+        if int(values["row_count"] or 0) == 0:
             indices.append(
                 IndexPointStats(
                     index_code=index_code,
                     index_name=index_name,
                     threshold=threshold,
-                    items=items,
+                    items=empty_index_items(available_from),
                     total_days=0,
                 )
             )
             continue
 
-        stats = build_bull_market_stats(
-            db,
-            Point,
-            col(Point.close),
-            threshold,
-            extra_where=[Point.index_code == index_code],
-            available_from=available_from,
-        )
+        items: list[BullMarketItem] = []
+        total_days = 0
+        for market_name in BULL_MARKETS:
+            if market_name not in queried:
+                items.append(
+                    bull_market_item_skeleton(
+                        market_name, available_from=available_from
+                    )
+                )
+                continue
+            slug = market_name.replace("-", "_")
+            days = int(values[f"days_{slug}"] or 0)
+            max_raw = values[f"max_{slug}"]
+            max_val = float(max_raw) if max_raw is not None else None
+            if days > 0 and max_val is None:
+                raise AppError(
+                    message=f"牛市区间 {market_name} 存在达标天数但缺少极值，请重新导入数据"
+                )
+            total_days += days
+            items.append(
+                bull_market_item_skeleton(
+                    market_name,
+                    available_from=available_from,
+                    days=days,
+                    max_value=max_val,
+                )
+            )
+
+        items.sort(key=lambda x: x.end, reverse=True)
         indices.append(
             IndexPointStats(
                 index_code=index_code,
                 index_name=index_name,
                 threshold=threshold,
-                items=stats.items,
-                total_days=stats.total_days,
+                items=items,
+                total_days=total_days,
             )
         )
 
