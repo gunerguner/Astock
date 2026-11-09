@@ -1,5 +1,6 @@
 import {
   nextTick,
+  onActivated,
   onBeforeUnmount,
   onMounted,
   watch,
@@ -152,6 +153,10 @@ export function useMacroLineChart(
 
   onMounted(() => {
     render();
+  });
+
+  onActivated(() => {
+    chart?.resize();
   });
 
   onBeforeUnmount(() => {
