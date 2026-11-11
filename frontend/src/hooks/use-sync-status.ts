@@ -1,12 +1,10 @@
 import { computed, ref } from 'vue';
-import { useI18n } from 'vue-i18n';
 import { fetchSyncStatusApi } from '@/api/admin';
 import formatSyncMeta from '@/utils/sync-meta';
 
 export default function useSyncStatus(
   ...metaKeys: Array<keyof API.SyncStatus | undefined>
 ) {
-  const { t } = useI18n();
   const syncStatus = ref<API.SyncStatus | null>(null);
   const loadFailed = ref(false);
 
@@ -21,10 +19,7 @@ export default function useSyncStatus(
   };
 
   const metaText = computed(() => {
-    if (loadFailed.value) {
-      return t('common.loadFailed');
-    }
-    if (metaKeys.length === 0) {
+    if (loadFailed.value || metaKeys.length === 0) {
       return '';
     }
     const items: Array<API.SyncStatusItem | undefined> = metaKeys.map((key) =>
@@ -38,6 +33,7 @@ export default function useSyncStatus(
 
   return {
     syncStatus,
+    loadFailed,
     loadSyncStatus,
     metaText,
     panelMetaText,

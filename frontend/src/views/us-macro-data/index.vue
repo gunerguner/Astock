@@ -4,15 +4,17 @@
       <template #extra>
         <span v-if="metaText" class="meta-text">{{ metaText }}</span>
       </template>
-      <a-spin :loading="loading" class="chart-spin">
-        <div v-if="!loading && loadError" class="chart-empty">
-          {{ $t('common.loadFailed') }}
-        </div>
-        <div v-else-if="!loading && !hasData" class="chart-empty">
-          {{ $t('pages.usMacroData.noData') }}
-        </div>
-        <div v-else ref="chartRef" class="chart-canvas" />
-      </a-spin>
+      <AsyncState
+        :loading="loading"
+        :error="loadError"
+        :has-data="hasData"
+        :empty-text="$t('pages.usMacroData.noData')"
+        :min-height="'var(--chart-height)'"
+        :rows="9"
+        @retry="loadMacro()"
+      >
+        <div ref="chartRef" class="chart-canvas" />
+      </AsyncState>
     </a-card>
   </div>
 </template>
@@ -20,6 +22,7 @@
 <script lang="ts" setup>
   import { computed, ref } from 'vue';
   import { fetchUsMacroData } from '@/api/analysis';
+  import AsyncState from '@/components/async-state/index.vue';
   import useAsyncRequest from '@/hooks/async-request';
   import usePageRefresh from '@/hooks/use-page-refresh';
   import { formatLatestDateMeta } from '@/utils/sync-meta';
@@ -54,23 +57,18 @@
 </script>
 
 <style scoped lang="less">
-  .chart-spin {
-    display: block;
-    width: 100%;
-    min-height: 420px;
+  .page-container {
+    --chart-height: 420px;
   }
 
   .chart-canvas {
     width: 100%;
-    height: 420px;
+    height: var(--chart-height);
   }
 
-  .chart-empty {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 420px;
-    color: var(--color-text-3);
-    font-size: var(--fs-body);
+  @media (max-width: @screen-mobile-max) {
+    .page-container {
+      --chart-height: 320px;
+    }
   }
 </style>

@@ -18,6 +18,7 @@
     :ok-text="$t('adminRefresh.okText')"
     :cancel-text="$t('adminRefresh.cancelText')"
     :ok-button-props="{ status: 'danger' }"
+    width="min(480px, 92vw)"
     :on-before-ok="handleConfirm"
     @cancel="handleClose"
     @open="focusPasswordInput"

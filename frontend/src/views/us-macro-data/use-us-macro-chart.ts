@@ -21,7 +21,13 @@ export default function useUsMacroChart(
 
   const hasData = computed(() => points.value.length > 0);
 
-  function buildOption({ isDark }: { isDark: boolean }) {
+  function buildOption({
+    isDark,
+    isMobile,
+  }: {
+    isDark: boolean;
+    isMobile: boolean;
+  }) {
     const cpiName = t('pages.usMacroData.series.cpi');
     const fedName = t('pages.usMacroData.series.fedRate');
     const cpiColor = readCssVar('--up-color', '#e0463e');
@@ -29,6 +35,7 @@ export default function useUsMacroChart(
 
     return macroLineOption({
       isDark,
+      isMobile,
       colors: [cpiColor, fedColor],
       categories: points.value.map((p) => p.period),
       legend: [cpiName, fedName],

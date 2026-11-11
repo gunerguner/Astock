@@ -1,12 +1,19 @@
 import { computed, reactive } from 'vue';
+import { Message } from '@arco-design/web-vue';
 import { useI18n } from 'vue-i18n';
 import {
-  DEFAULT_POINT_THRESHOLDS,
   fetchBullMarketPointStats,
   fetchBullMarketTurnoverStats,
   POINT_INDEX_CODES,
 } from '@/api/analysis';
 import useAsyncRequest from '@/hooks/async-request';
+import { useIsMobile } from '@/hooks/responsive';
+import {
+  resolveBullMarketFilters,
+  snapshotBullMarketFilters,
+  writeStoredBullMarketFilters,
+  type BullMarketFilters,
+} from '@/utils/bull-market-filters';
 import buildMergedColumns from './columns';
 
 export const indexConfigs = [
@@ -56,16 +63,27 @@ interface BullStatsPair {
 
 export default function useBullMarket() {
   const { t } = useI18n();
+  const isMobile = useIsMobile();
+  const initialFilters = resolveBullMarketFilters(localStorage);
 
   const filterForm = reactive({
-    pointThresholds: { ...DEFAULT_POINT_THRESHOLDS },
-    turnoverThresholdTrillion: 2,
+    pointThresholds: { ...initialFilters.pointThresholds },
+    turnoverThresholdTrillion: initialFilters.turnoverThresholdTrillion,
   });
+
+  function persistFilters(filters: BullMarketFilters) {
+    try {
+      writeStoredBullMarketFilters(localStorage, filters);
+    } catch {
+      // 隐私模式等写不了本地存储时，本次查询仍使用当前表单。
+    }
+  }
 
   const {
     loading,
     data: statsData,
-    run: loadStats,
+    error,
+    run: loadStatsRequest,
   } = useAsyncRequest(async (): Promise<BullStatsPair> => {
     const [point, turnover] = await Promise.all([
       fetchBullMarketPointStats(filterForm.pointThresholds),
@@ -74,6 +92,17 @@ export default function useBullMarket() {
     return { point, turnover };
   });
 
+  async function loadStats() {
+    const snapshot = snapshotBullMarketFilters(filterForm);
+    if (!snapshot) {
+      Message.warning(t('pages.bullMarket.invalidFilter'));
+      return;
+    }
+    persistFilters(snapshot);
+    await loadStatsRequest();
+  }
+
+  const hasStats = computed(() => statsData.value !== null);
   const pointStats = computed(() => statsData.value?.point ?? null);
   const turnoverStats = computed(() => statsData.value?.turnover ?? null);
 
@@ -125,12 +154,18 @@ export default function useBullMarket() {
     });
   });
 
-  const mergedColumns = computed(() => buildMergedColumns(t, indexConfigs));
+  const mergedColumns = computed(() =>
+    buildMergedColumns(t, indexConfigs, {
+      fixedFirstColumn: isMobile.value,
+    }),
+  );
 
   return {
     indexConfigs,
     filterForm,
     loading,
+    error,
+    hasStats,
     loadStats,
     turnoverStats,
     mergedRows,

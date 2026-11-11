@@ -28,7 +28,7 @@
       "eslint --fix"
     ],
     "*.{less,css}": [
-      "stylelint --fix",
+      "stylelint",
       "prettier --write"
     ]
   },
@@ -65,6 +65,7 @@
     "less": "^4.8.1",
     "lint-staged": "^17.3.0",
     "postcss-html": "^1.8.1",
+    "postcss-less": "^6.0.0",
     "prettier": "^3.9.6",
     "rollup-plugin-visualizer": "^7.0.1",
     "stylelint": "^14.16.1",

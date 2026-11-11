@@ -378,13 +378,15 @@ class ApiResponse(BaseModel, Generic[T]):
 
 ### 页面写法
 
-行情页主要使用 Arco `a-table`；宏观页使用 ECharts 6 折线图。通用：卡片 extra 通过 `formatSyncMeta` 或 `formatLatestDateMeta` 显示最新数据月份；管理员刷新完成并关闭进度弹窗后，经 `data-refresh` 事件触发当前页面 reload。
+行情页主要使用 Arco `a-table`；宏观页使用 ECharts 6 折线图。通用：卡片 extra 通过 `sync-meta-badge`（内部用 `formatSyncMeta` / `formatLatestDateMeta`）显示最新数据月份，同步状态接口失败时该组件展示「加载失败 + 重试」；管理员刷新完成并关闭进度弹窗后，经 `data-refresh` 事件触发当前页面 reload。
+
+数据加载统一用 `useAsyncRequest` + `usePageRefresh`，展示态交给 `components/async-state`：无数据时出骨架屏，首次失败出错误占位，已有旧数据后再失败则在旧数据上方出失败横幅（不清空 `data`）。部分数据源失败用 `components/partial-error-alert` 汇总，不再挤在卡片 extra。
 
 - **bull-market**：四指数独立阈值，合并单表展示；`data-refresh` 事件触发 reload
 - **turnover-rank**：两列并排大盘/个股排名，`DEFAULT_TOP=20`
 - **asset-price-levels**：贵金属分隔行；`FOCUSED_TICKERS` 打 Tag；按 `percentage_diff` 排序
 - **market-overview**：类目分隔行 + 聚合 periodText；失败项「数据获取失败」
-- **cn-macro-data**：一张 CPI/PPI 同比主图 + PMI、消费者信心两张并排子图；PMI 含 50 荣枯线，720px 以下改为纵向
+- **cn-macro-data**：一张 CPI/PPI 同比主图 + PMI、消费者信心两张并排子图；PMI 含 50 荣枯线，手机断点（`@screen-mobile-max`）以下改为纵向
 - **us-macro-data**：CPI 同比 + 联邦基金目标利率上限单图；利率为 `step: end` 阶梯线
 
 ### 宏观 ECharts 约定
@@ -394,6 +396,14 @@ class ApiResponse(BaseModel, Generic[T]):
 - 数据序列保留 `null`，一般 `connectNulls=false`，不伪造缺失宏观数据；美国利率因政策利率离散调整允许 `connectNulls=true`。
 - 图表必须跟随 `locale` 和 `body[arco-theme]` 重建 option；无有效指标时销毁实例并展示空态。
 - 页面请求统一使用 `useAsyncRequest` + `usePageRefresh`，既负责首次加载，也响应管理员全量刷新后的事件。
+- 窄屏（`useIsMobile()`）下 `macroLineOption` 会收到 `isMobile`：边距收窄、图例改 `scroll`、坐标轴字号 11；图表高度由页面 CSS 变量（如 `--chart-height`）控制，CSS 媒体查询与 `async-state` 的 `min-height` 共用同一变量，避免两处数字漂移。
+
+### 响应式与移动端
+
+- 断点只有两档，定义在 `src/assets/style/breakpoint.less`（`@screen-mobile-max: 767px`、`@screen-compact-max: 991px`）与 `src/hooks/responsive.ts`（`MOBILE_QUERY` / `COMPACT_QUERY`），两者数值必须一致。
+- Vite 在 `vite.config.base.ts` 用 `additionalData` 把 `breakpoint.less` 自动注入所有项目内 less（含 SFC `scoped` 样式，`node_modules` 除外），页面里直接写 `@media (max-width: @screen-mobile-max)`，不要再写裸 px。
+- 手机档：顶栏换汉堡按钮 + 左侧 `a-drawer` 垂直菜单（`menu` 组件 `mode="vertical"`）；弹窗宽度用 `min(原宽, 92vw)`；牛市筛选表单换行、输入框全宽。
+- 手机档表格列用 `mobileColumn(isMobile.value, width, 'left')` 补宽度并按需冻结首列；不补宽度时 Arco 会把列压成竖排文字。分组行整行合并时 sticky 会失效，`global.less` 已对 `.section-divider-row` 的固定列取消 `position: sticky`。
 
 ### 管理刷新
 
@@ -475,7 +485,7 @@ backend 挂载 `${SQLITE_HOST_DIR:-./sqlite-data}:/app/data` + `log_data:/var/lo
 | `models/macro.py` 指标常量 | `datasets/macro/` 标准化、查询 pivot、Pydantic/TS 字段、ECharts series |
 | 宏观 `refresh_day` / 起始月 | `settings.yaml` → `config.py` → importer/API/前端默认参数 |
 | 新增 API | `routers/` → `schemas/` → `frontend/src/api/` → `views/` |
-| 新增前端页 | `router/routes/modules/main.ts` + locale |
+| 新增前端页 | `router/routes/modules/main.ts` + locale；页面用 `useAsyncRequest`+`usePageRefresh`+`async-state` |
 | 新增导入阶段 | `ImportDataset`、orchestrator、sync status、前端阶段类型/顺序/文案 |
 | `docker/nginx.conf` | frontend 重建、proxy 超时（SSE 长连接） |
 

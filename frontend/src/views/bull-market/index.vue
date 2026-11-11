@@ -2,7 +2,11 @@
   <div class="page-container">
     <a-card :title="$t('pages.bullMarket.title')" class="section-card">
       <template #extra>
-        <span v-if="metaText" class="meta-text">{{ metaText }}</span>
+        <SyncMetaBadge
+          :failed="syncFailed"
+          :text="metaText"
+          @retry="loadSyncStatus"
+        />
         <span
           v-for="index in indexConfigs"
           :key="index.code"
@@ -39,7 +43,7 @@
             :min="1"
             :step="100"
             :precision="0"
-            :style="{ width: '120px' }"
+            :style="pointInputStyle"
           />
         </a-form-item>
         <a-form-item
@@ -51,7 +55,7 @@
             :min="0.01"
             :step="0.1"
             :precision="2"
-            :style="{ width: '140px' }"
+            :style="turnoverInputStyle"
           />
         </a-form-item>
         <a-form-item class="filter-submit">
@@ -61,22 +65,34 @@
         </a-form-item>
       </a-form>
       <div class="table-wrap">
-        <a-table
-          class="result-table"
-          :columns="mergedColumns"
-          :data="mergedRows"
+        <AsyncState
           :loading="loading"
-          :pagination="false"
-          :scroll="tableScroll"
-          row-key="market"
-        />
+          :error="error"
+          :has-data="hasStats"
+          :rows="6"
+          @retry="loadStats"
+        >
+          <a-table
+            class="result-table"
+            :columns="mergedColumns"
+            :data="mergedRows"
+            :loading="loading && hasStats"
+            :pagination="false"
+            :scroll="tableScroll"
+            row-key="market"
+          />
+        </AsyncState>
       </div>
     </a-card>
   </div>
 </template>
 
 <script lang="ts" setup>
+  import { computed } from 'vue';
+  import AsyncState from '@/components/async-state/index.vue';
+  import SyncMetaBadge from '@/components/sync-meta-badge/index.vue';
   import usePageRefresh from '@/hooks/use-page-refresh';
+  import { useIsCompact } from '@/hooks/responsive';
   import useSyncStatus from '@/hooks/use-sync-status';
   import useTableScroll from '@/hooks/use-table-scroll';
   import useBullMarket from './use-bull-market';
@@ -86,11 +102,24 @@
   });
 
   const tableScroll = useTableScroll();
-  const { metaText, loadSyncStatus } = useSyncStatus('point', 'turnover');
+  const isCompact = useIsCompact();
+  const pointInputStyle = computed(() => ({
+    width: isCompact.value ? '100%' : '120px',
+  }));
+  const turnoverInputStyle = computed(() => ({
+    width: isCompact.value ? '100%' : '140px',
+  }));
+  const {
+    metaText,
+    loadFailed: syncFailed,
+    loadSyncStatus,
+  } = useSyncStatus('point', 'turnover');
   const {
     indexConfigs,
     filterForm,
     loading,
+    error,
+    hasStats,
     loadStats,
     turnoverStats,
     mergedRows,
@@ -153,6 +182,22 @@
       margin-bottom: 0;
       margin-right: 12px;
       flex-shrink: 0;
+    }
+
+    @media (max-width: @screen-compact-max) {
+      flex-wrap: wrap;
+
+      :deep(.arco-form-item) {
+        flex: 1 1 100%;
+        width: 100%;
+        margin-right: 0;
+        margin-bottom: 12px;
+      }
+
+      :deep(.arco-form-item-content) {
+        flex: 1;
+        min-width: 0;
+      }
     }
 
     :deep(.arco-form-item-label) {

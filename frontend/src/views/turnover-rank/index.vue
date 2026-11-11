@@ -4,18 +4,27 @@
       <a-col v-for="panel in panels" :key="panel.key" :xs="24" :md="12">
         <a-card :title="panel.title" class="section-card section-card--fill">
           <template #extra>
-            <span v-if="panelMetaText(panel.syncKey)" class="meta-text">
-              {{ panelMetaText(panel.syncKey) }}
-            </span>
+            <SyncMetaBadge
+              :failed="syncFailed"
+              :text="panelMetaText(panel.syncKey)"
+              @retry="loadSyncStatus"
+            />
           </template>
-          <a-table
-            :columns="panel.columns"
-            :data="getPanelItems(panel)"
-            :loading="isPanelLoading(panel)"
-            :pagination="false"
-            :scroll="tableScroll"
-            row-key="rank"
-          />
+          <AsyncState
+            :loading="panel.loading.value"
+            :error="panel.error.value"
+            :has-data="panel.data.value !== null"
+            @retry="panel.run()"
+          >
+            <a-table
+              :columns="panel.columns"
+              :data="getPanelItems(panel)"
+              :loading="panel.loading.value && panel.data.value !== null"
+              :pagination="false"
+              :scroll="tableScroll"
+              row-key="rank"
+            />
+          </AsyncState>
         </a-card>
       </a-col>
     </a-row>
@@ -27,15 +36,19 @@
   import { useI18n } from 'vue-i18n';
   import type { TableColumnData, TableData } from '@arco-design/web-vue';
   import { fetchStockRanking, fetchTurnoverRanking } from '@/api/analysis';
+  import AsyncState from '@/components/async-state/index.vue';
+  import SyncMetaBadge from '@/components/sync-meta-badge/index.vue';
   import useAsyncRequest from '@/hooks/async-request';
   import usePageRefresh from '@/hooks/use-page-refresh';
+  import { useIsMobile, mobileColumn } from '@/hooks/responsive';
   import useSyncStatus from '@/hooks/use-sync-status';
+  import useTableScroll from '@/hooks/use-table-scroll';
   import { toTableRow } from '@/hooks/grouped-table';
   import { formatAmount } from '@/utils/format';
   import { renderNumCell } from '@/utils/table-cells';
-  import useTableScroll from '@/hooks/use-table-scroll';
 
   const { t } = useI18n();
+  const isMobile = useIsMobile();
   const tableScroll = useTableScroll();
 
   defineOptions({
@@ -64,11 +77,17 @@
       dataIndex: 'rank',
       width: 72,
       align: 'right',
+      ...mobileColumn(isMobile.value, 72, 'left'),
     },
-    { title: t('pages.turnoverRank.columns.date'), dataIndex: 'date' },
+    {
+      title: t('pages.turnoverRank.columns.date'),
+      dataIndex: 'date',
+      width: 118,
+    },
     {
       title: t('pages.turnoverRank.columns.sh'),
       align: 'right',
+      width: 110,
       render: ({ record }: { record: TableData }) => {
         const row = toTableRow<API.TurnoverRankingItem>(record);
         return renderNumCell(formatAmount(row.sse_amount));
@@ -77,6 +96,7 @@
     {
       title: t('pages.turnoverRank.columns.sz'),
       align: 'right',
+      width: 110,
       render: ({ record }: { record: TableData }) => {
         const row = toTableRow<API.TurnoverRankingItem>(record);
         return renderNumCell(formatAmount(row.szse_amount));
@@ -85,6 +105,7 @@
     {
       title: t('pages.turnoverRank.columns.total'),
       align: 'right',
+      width: 120,
       render: ({ record }: { record: TableData }) => {
         const row = toTableRow<API.TurnoverRankingItem>(record);
         return renderNumCell(formatAmount(row.turnover));
@@ -98,11 +119,17 @@
       dataIndex: 'rank',
       width: 72,
       align: 'right',
+      ...mobileColumn(isMobile.value, 72, 'left'),
     },
-    { title: t('pages.turnoverRank.columns.date'), dataIndex: 'date' },
+    {
+      title: t('pages.turnoverRank.columns.date'),
+      dataIndex: 'date',
+      width: 118,
+    },
     {
       title: t('pages.turnoverRank.columns.stockName'),
       dataIndex: 'name',
+      width: 120,
     },
     {
       title: t('pages.turnoverRank.columns.stockCode'),
@@ -112,6 +139,7 @@
     {
       title: t('pages.turnoverRank.columns.turnover'),
       align: 'right',
+      width: 120,
       render: ({ record }: { record: TableData }) => {
         const row = toTableRow<API.StockRankingItem>(record);
         return renderNumCell(formatAmount(row.amount));
@@ -139,11 +167,13 @@
     },
   ]);
 
-  const { panelMetaText, loadSyncStatus } = useSyncStatus();
+  const {
+    panelMetaText,
+    loadFailed: syncFailed,
+    loadSyncStatus,
+  } = useSyncStatus();
 
   const getPanelItems = (panel: RankingPanel) => panel.data.value?.items ?? [];
-
-  const isPanelLoading = (panel: RankingPanel) => panel.loading.value;
 
   usePageRefresh(() => {
     Promise.all([

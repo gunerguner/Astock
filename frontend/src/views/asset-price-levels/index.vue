@@ -4,16 +4,26 @@
       <template #extra>
         <span v-if="metaText" class="meta-text">{{ metaText }}</span>
       </template>
-      <a-table
-        :columns="columns"
-        :data="tableRows"
+      <AsyncState
         :loading="loading"
-        :pagination="false"
-        :scroll="tableScroll"
-        :span-method="spanMethod"
-        :row-class="rowClass"
-        row-key="key"
-      />
+        :error="loadError"
+        :has-data="levels !== null"
+        :rows="10"
+        :min-height="360"
+        @retry="loadLevels()"
+      >
+        <PartialErrorAlert :errors="levels?.cache_errors ?? []" />
+        <a-table
+          :columns="columns"
+          :data="tableRows"
+          :loading="loading && levels !== null"
+          :pagination="false"
+          :scroll="tableScroll"
+          :span-method="spanMethod"
+          :row-class="rowClass"
+          row-key="key"
+        />
+      </AsyncState>
     </a-card>
   </div>
 </template>
@@ -24,8 +34,12 @@
   import { Tag } from '@arco-design/web-vue';
   import type { TableColumnData, TableData } from '@arco-design/web-vue';
   import { fetchAssetPriceLevels, isPriceLevelPending } from '@/api/analysis';
+  import AsyncState from '@/components/async-state/index.vue';
+  import PartialErrorAlert from '@/components/partial-error-alert/index.vue';
   import useAsyncRequest from '@/hooks/async-request';
   import usePageRefresh from '@/hooks/use-page-refresh';
+  import { useIsMobile, mobileColumn } from '@/hooks/responsive';
+  import useTableScroll from '@/hooks/use-table-scroll';
   import {
     isDividerRow,
     toTableRow,
@@ -42,9 +56,9 @@
     renderPriceCell,
   } from '@/utils/table-cells';
   import { formatLatestDateMeta } from '@/utils/sync-meta';
-  import useTableScroll from '@/hooks/use-table-scroll';
 
   const { t } = useI18n();
+  const isMobile = useIsMobile();
   const tableScroll = useTableScroll();
 
   defineOptions({
@@ -79,6 +93,7 @@
   const {
     loading,
     data: levels,
+    error: loadError,
     run: loadLevels,
   } = useAsyncRequest((forceRefresh?: boolean) =>
     fetchAssetPriceLevels(forceRefresh ?? false),
@@ -196,6 +211,7 @@
   const columns = computed<TableColumnData[]>(() => [
     {
       title: t('pages.assetPriceLevels.columns.asset'),
+      ...mobileColumn(isMobile.value, 132, 'left'),
       render: ({ record }: { record: TableData }) => {
         const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) {
@@ -210,6 +226,7 @@
     {
       title: t('pages.assetPriceLevels.columns.currentPrice'),
       align: 'right',
+      ...mobileColumn(isMobile.value, 104),
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row || isPlaceholderRow(row)) return renderPendingDash();
@@ -219,6 +236,7 @@
     {
       title: t('pages.assetPriceLevels.columns.athPrice'),
       align: 'right',
+      ...mobileColumn(isMobile.value, 104),
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row || isPlaceholderRow(row)) return renderPendingDash();
@@ -228,6 +246,7 @@
     {
       title: t('pages.assetPriceLevels.columns.athDiff'),
       align: 'right',
+      ...mobileColumn(isMobile.value, 96),
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row || isPlaceholderRow(row)) return renderPendingDash();
@@ -237,6 +256,7 @@
     {
       title: t('pages.assetPriceLevels.columns.athDays'),
       align: 'right',
+      ...mobileColumn(isMobile.value, 104),
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row || isPlaceholderRow(row)) return renderPendingDash();
@@ -246,6 +266,7 @@
     {
       title: t('pages.assetPriceLevels.columns.dailyChange'),
       align: 'right',
+      ...mobileColumn(isMobile.value, 88),
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row || isPlaceholderRow(row)) return renderPendingDash();
@@ -255,6 +276,7 @@
     {
       title: t('pages.assetPriceLevels.columns.weeklyChange'),
       align: 'right',
+      ...mobileColumn(isMobile.value, 88),
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row || isPlaceholderRow(row)) return renderPendingDash();
@@ -263,6 +285,7 @@
     },
     {
       title: t('pages.assetPriceLevels.columns.conclusion'),
+      ...mobileColumn(isMobile.value, 96),
       render: ({ record }: { record: TableData }) => {
         const raw = toTableRow<TableRow>(record);
         if (isErrorRow(raw)) return raw.message;

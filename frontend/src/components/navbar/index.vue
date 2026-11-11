@@ -1,6 +1,17 @@
 <template>
   <div class="navbar">
     <div class="left-side">
+      <a-button
+        v-if="isMobile"
+        class="nav-btn-ghost"
+        type="text"
+        :aria-label="$t('navbar.action.openMenu')"
+        @click="drawerVisible = true"
+      >
+        <template #icon>
+          <icon-menu />
+        </template>
+      </a-button>
       <a-space :size="12">
         <icon-public class="brand-icon" />
         <div class="brand-group">
@@ -10,7 +21,7 @@
         </div>
       </a-space>
     </div>
-    <div class="center-side">
+    <div v-if="!isMobile" class="center-side">
       <Menu />
     </div>
     <ul class="right-side">
@@ -47,16 +58,46 @@
         </a-tooltip>
       </li>
     </ul>
+    <a-drawer
+      v-model:visible="drawerVisible"
+      placement="left"
+      :width="260"
+      :footer="false"
+      :title="$t('navbar.brand.title')"
+      :body-style="{ padding: '8px 12px' }"
+      unmount-on-close
+    >
+      <Menu mode="vertical" @navigate="drawerVisible = false" />
+    </a-drawer>
   </div>
 </template>
 
 <script lang="ts" setup>
-  import { computed } from 'vue';
+  import { computed, ref, watch } from 'vue';
+  import { useRoute } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import { useDark, useToggle } from '@vueuse/core';
   import useLocale from '@/hooks/locale';
+  import { useIsMobile } from '@/hooks/responsive';
   import Menu from '@/components/menu/index.vue';
   import AdminRefreshButton from '@/components/admin-refresh-button/index.vue';
+
+  const route = useRoute();
+  const isMobile = useIsMobile();
+  const drawerVisible = ref(false);
+
+  // 浏览器前进/后退切换页面时收起抽屉
+  watch(
+    () => route.fullPath,
+    () => {
+      drawerVisible.value = false;
+    },
+  );
+
+  // 视口变宽切回横向菜单时收起抽屉
+  watch(isMobile, (mobile) => {
+    if (!mobile) drawerVisible.value = false;
+  });
 
   const { t } = useI18n();
   const { currentLocale, toggleLocale } = useLocale();
@@ -138,6 +179,42 @@
       display: flex;
       align-items: center;
       padding: 0 6px;
+    }
+  }
+
+  @media (max-width: @screen-mobile-max) {
+    .navbar {
+      gap: 8px;
+    }
+
+    .left-side {
+      flex: 1;
+      min-width: 0;
+      padding-left: 8px;
+    }
+
+    .left-side :deep(.arco-space) {
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    .brand-group {
+      min-width: 0;
+    }
+
+    .brand-title {
+      overflow: hidden;
+      font-size: var(--fs-title) !important;
+      line-height: var(--lh-title) !important;
+      text-overflow: ellipsis;
+    }
+
+    .right-side {
+      padding-right: 8px;
+
+      li {
+        padding: 0 2px;
+      }
     }
   }
 </style>

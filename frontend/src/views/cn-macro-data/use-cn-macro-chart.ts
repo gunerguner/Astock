@@ -37,7 +37,13 @@ export default function useCnMacroChart(
     return points.value[macroTooltipDataIndex(params)];
   }
 
-  function buildOption({ isDark }: { isDark: boolean }) {
+  function buildOption({
+    isDark,
+    isMobile,
+  }: {
+    isDark: boolean;
+    isMobile: boolean;
+  }) {
     const colorA = CN_MACRO_COLORS.primary;
     const colorB = CN_MACRO_COLORS.secondary;
     const categories = points.value.map((p) => p.period);
@@ -47,6 +53,7 @@ export default function useCnMacroChart(
       const ppiName = t('pages.cnMacroData.series.ppi');
       return macroLineOption({
         isDark,
+        isMobile,
         colors: [colorB, colorA],
         categories,
         legend: [cpiName, ppiName],
@@ -95,6 +102,7 @@ export default function useCnMacroChart(
       const boomBust = t('pages.cnMacroData.series.boomBust');
       return macroLineOption({
         isDark,
+        isMobile,
         colors: [colorA, colorB],
         categories,
         legend: [mfgName, nonMfgName],
@@ -158,6 +166,7 @@ export default function useCnMacroChart(
     const consumerName = t('pages.cnMacroData.series.consumer');
     return macroLineOption({
       isDark,
+      isMobile,
       colors: [colorA],
       categories,
       legend: [consumerName],

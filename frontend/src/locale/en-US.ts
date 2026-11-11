@@ -8,6 +8,7 @@ export default {
   'navbar.action.locale': 'Switch language successfully',
   'navbar.action.switchToEn': 'Switch to English',
   'navbar.action.switchToZh': 'Switch to Chinese',
+  'navbar.action.openMenu': 'Open navigation menu',
   'navbar.brand.title': 'Global Investment Info Platform',
   'settings.navbar.theme.toLight': 'Click to use light mode',
   'settings.navbar.theme.toDark': 'Click to use dark mode',
@@ -20,6 +21,8 @@ export default {
   'common.requestFailed': 'Request failed',
   'common.networkFailed': 'Network request failed',
   'common.loadFailed': 'Failed to load',
+  'common.retry': 'Retry',
+  'common.partialLoadFailed': '{count} items could not be loaded',
   'sse.timeout': 'Connection timed out',
   'sse.httpFailed': 'Request failed ({status})',
   'sse.noBody': 'Unable to read the response stream',
@@ -66,6 +69,8 @@ export default {
   'pages.bullMarket.filterCYB': 'ChiNext',
   'pages.bullMarket.filterKCB50': 'STAR50',
   'pages.bullMarket.query': 'Query',
+  'pages.bullMarket.invalidFilter':
+    'Invalid filters. Check the values and try again.',
   'pages.bullMarket.indexStandardDays': '{name} qualified: ',
   'pages.bullMarket.turnoverStandardDays': 'Turnover-qualified days: ',
   'pages.bullMarket.unitDays': 'days',
@@ -111,7 +116,6 @@ export default {
   'pages.assetPriceLevels.conclusion.deepPullback': 'Deep Pullback',
 
   'pages.marketOverview.title': 'Global Market Overview',
-  'pages.marketOverview.fetchError': 'Failed to fetch data',
   'pages.marketOverview.columns.asset': 'Asset',
   'pages.marketOverview.columns.currentPrice': 'Latest Price',
   'pages.marketOverview.columns.dailyChange': 'Daily Change',

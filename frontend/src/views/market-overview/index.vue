@@ -3,18 +3,27 @@
     <a-card :title="$t('pages.marketOverview.title')" class="section-card">
       <template #extra>
         <span v-if="metaText" class="meta-text">{{ metaText }}</span>
-        <span v-if="errorSummary" class="meta-text">{{ errorSummary }}</span>
       </template>
-      <a-table
-        :columns="columns"
-        :data="tableRows"
+      <AsyncState
         :loading="loading"
-        :pagination="false"
-        :scroll="tableScroll"
-        :span-method="spanMethod"
-        :row-class="rowClass"
-        row-key="key"
-      />
+        :error="loadError"
+        :has-data="overview !== null"
+        :rows="10"
+        :min-height="360"
+        @retry="loadOverview()"
+      >
+        <PartialErrorAlert :errors="sourceErrors" />
+        <a-table
+          :columns="columns"
+          :data="tableRows"
+          :loading="loading && overview !== null"
+          :pagination="false"
+          :scroll="tableScroll"
+          :span-method="spanMethod"
+          :row-class="rowClass"
+          row-key="key"
+        />
+      </AsyncState>
     </a-card>
   </div>
 </template>
@@ -24,8 +33,12 @@
   import { useI18n } from 'vue-i18n';
   import type { TableColumnData, TableData } from '@arco-design/web-vue';
   import { fetchMarketOverview, isMarketOverviewError } from '@/api/analysis';
+  import AsyncState from '@/components/async-state/index.vue';
+  import PartialErrorAlert from '@/components/partial-error-alert/index.vue';
   import useAsyncRequest from '@/hooks/async-request';
   import usePageRefresh from '@/hooks/use-page-refresh';
+  import { useIsMobile, mobileColumn } from '@/hooks/responsive';
+  import useTableScroll from '@/hooks/use-table-scroll';
   import {
     isDividerRow,
     toTableRow,
@@ -35,9 +48,9 @@
   import renderAssetNameWithTooltip from '@/utils/render-asset-cell';
   import { renderPercentCell, renderPriceCell } from '@/utils/table-cells';
   import { formatLatestDateMeta } from '@/utils/sync-meta';
-  import useTableScroll from '@/hooks/use-table-scroll';
 
   const { t } = useI18n();
+  const isMobile = useIsMobile();
   const tableScroll = useTableScroll();
 
   defineOptions({
@@ -53,6 +66,7 @@
   const {
     loading,
     data: overview,
+    error: loadError,
     run: loadOverview,
   } = useAsyncRequest((forceRefresh?: boolean) =>
     fetchMarketOverview(forceRefresh ?? false),
@@ -61,9 +75,7 @@
   const metaText = computed(() =>
     formatLatestDateMeta(overview.value?.latest_trading_date),
   );
-  const errorSummary = computed(() =>
-    (overview.value?.errors ?? []).slice(0, 3).join('；'),
-  );
+  const sourceErrors = computed(() => overview.value?.errors ?? []);
 
   const formatPeriod = (start: string | null, end: string | null) => {
     if (!start || !end) return '';
@@ -123,6 +135,7 @@
   const columns = computed<TableColumnData[]>(() => [
     {
       title: t('pages.marketOverview.columns.asset'),
+      ...mobileColumn(isMobile.value, 132, 'left'),
       render: ({ record }: { record: TableData }) => {
         const row = toTableRow<TableRow>(record);
         if (isDividerRow(row)) {
@@ -141,6 +154,7 @@
     {
       title: t('pages.marketOverview.columns.currentPrice'),
       align: 'right',
+      ...mobileColumn(isMobile.value, 110),
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row) return null;
@@ -153,6 +167,7 @@
     {
       title: t('pages.marketOverview.columns.dailyChange'),
       align: 'right',
+      ...mobileColumn(isMobile.value, 88),
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row || isMarketOverviewError(row)) return null;
@@ -162,6 +177,7 @@
     {
       title: t('pages.marketOverview.columns.weeklyChange'),
       align: 'right',
+      ...mobileColumn(isMobile.value, 88),
       render: ({ record }: { record: TableData }) => {
         const row = guardDataRow(record);
         if (!row || isMarketOverviewError(row)) return null;

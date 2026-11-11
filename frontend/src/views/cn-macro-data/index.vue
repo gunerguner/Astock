@@ -4,15 +4,16 @@
       <template #extra>
         <span v-if="metaText" class="meta-text">{{ metaText }}</span>
       </template>
-      <a-spin :loading="loading" class="chart-spin chart-spin-main">
-        <div v-if="!loading && loadError" class="chart-empty">
-          {{ $t('common.loadFailed') }}
-        </div>
-        <div v-else-if="!loading && !cpiHasData" class="chart-empty">
-          {{ $t('pages.cnMacroData.noData') }}
-        </div>
-        <div v-else ref="cpiChartRef" class="chart-canvas chart-canvas-main" />
-      </a-spin>
+      <AsyncState
+        :loading="loading"
+        :error="loadError"
+        :has-data="cpiHasData"
+        :empty-text="$t('pages.cnMacroData.noData')"
+        :min-height="'var(--chart-height-main)'"
+        @retry="loadMacro()"
+      >
+        <div ref="cpiChartRef" class="chart-canvas chart-canvas-main" />
+      </AsyncState>
     </a-card>
 
     <div class="chart-row">
@@ -20,50 +21,34 @@
         :title="$t('pages.cnMacroData.titlePmi')"
         class="section-card chart-row-item"
       >
-        <a-spin :loading="loading" class="chart-spin chart-spin-half">
-          <div
-            v-if="!loading && loadError"
-            class="chart-empty chart-empty-half"
-          >
-            {{ $t('common.loadFailed') }}
-          </div>
-          <div
-            v-else-if="!loading && !pmiHasData"
-            class="chart-empty chart-empty-half"
-          >
-            {{ $t('pages.cnMacroData.noData') }}
-          </div>
-          <div
-            v-else
-            ref="pmiChartRef"
-            class="chart-canvas chart-canvas-half"
-          />
-        </a-spin>
+        <AsyncState
+          :loading="loading"
+          :error="loadError"
+          :has-data="pmiHasData"
+          :empty-text="$t('pages.cnMacroData.noData')"
+          :min-height="'var(--chart-height-half)'"
+          :stale-alert="false"
+          @retry="loadMacro()"
+        >
+          <div ref="pmiChartRef" class="chart-canvas chart-canvas-half" />
+        </AsyncState>
       </a-card>
 
       <a-card
         :title="$t('pages.cnMacroData.titleConsumer')"
         class="section-card chart-row-item"
       >
-        <a-spin :loading="loading" class="chart-spin chart-spin-half">
-          <div
-            v-if="!loading && loadError"
-            class="chart-empty chart-empty-half"
-          >
-            {{ $t('common.loadFailed') }}
-          </div>
-          <div
-            v-else-if="!loading && !consumerHasData"
-            class="chart-empty chart-empty-half"
-          >
-            {{ $t('pages.cnMacroData.noData') }}
-          </div>
-          <div
-            v-else
-            ref="consumerChartRef"
-            class="chart-canvas chart-canvas-half"
-          />
-        </a-spin>
+        <AsyncState
+          :loading="loading"
+          :error="loadError"
+          :has-data="consumerHasData"
+          :empty-text="$t('pages.cnMacroData.noData')"
+          :min-height="'var(--chart-height-half)'"
+          :stale-alert="false"
+          @retry="loadMacro()"
+        >
+          <div ref="consumerChartRef" class="chart-canvas chart-canvas-half" />
+        </AsyncState>
       </a-card>
     </div>
   </div>
@@ -72,6 +57,7 @@
 <script lang="ts" setup>
   import { computed, ref } from 'vue';
   import { fetchCnMacroData } from '@/api/analysis';
+  import AsyncState from '@/components/async-state/index.vue';
   import useAsyncRequest from '@/hooks/async-request';
   import usePageRefresh from '@/hooks/use-page-refresh';
   import { formatLatestDateMeta } from '@/utils/sync-meta';
@@ -118,6 +104,11 @@
 </script>
 
 <style scoped lang="less">
+  .page-container {
+    --chart-height-main: 360px;
+    --chart-height-half: 300px;
+  }
+
   .chart-row {
     display: flex;
     gap: 16px;
@@ -129,49 +120,24 @@
     min-width: 0;
   }
 
-  .chart-spin {
-    display: block;
-    width: 100%;
-  }
-
-  .chart-spin-main {
-    min-height: 360px;
-  }
-
-  .chart-spin-half {
-    min-height: 300px;
-  }
-
   .chart-canvas {
     width: 100%;
   }
 
   .chart-canvas-main {
-    height: 360px;
+    height: var(--chart-height-main);
   }
 
   .chart-canvas-half {
-    height: 300px;
+    height: var(--chart-height-half);
   }
 
-  .chart-empty {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--color-text-3);
-    font-size: var(--fs-body);
-  }
+  @media (max-width: @screen-mobile-max) {
+    .page-container {
+      --chart-height-main: 300px;
+      --chart-height-half: 260px;
+    }
 
-  .chart-empty,
-  .chart-spin-main .chart-empty {
-    min-height: 360px;
-  }
-
-  .chart-empty-half {
-    min-height: 300px;
-  }
-
-  @media (max-width: 720px) {
     .chart-row {
       flex-direction: column;
     }

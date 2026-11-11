@@ -8,7 +8,7 @@
     :footer="false"
     :mask="true"
     :unmount-on-close="true"
-    width="640px"
+    width="min(640px, 92vw)"
   >
     <div class="progress-summary">
       <div class="progress-summary__label">
@@ -208,6 +208,27 @@
     border-radius: 6px;
     background: var(--color-fill-1);
     font-size: var(--fs-body);
+
+    @media (max-width: @screen-mobile-max) {
+      grid-template-columns: 20px minmax(0, 1fr) auto auto;
+      gap: 6px;
+      padding: 8px;
+
+      .phase-row__elapsed {
+        display: none;
+      }
+
+      .phase-row__name > span:first-child {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+
+      .phase-row__metric,
+      .phase-row__status {
+        font-size: var(--fs-caption);
+      }
+    }
 
     &--running,
     &--done {

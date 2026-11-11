@@ -1,11 +1,18 @@
 <script lang="tsx">
-  import { computed, defineComponent, ref, watch } from 'vue';
+  import { computed, defineComponent, type PropType, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import appRoutes from '@/router/routes';
 
   export default defineComponent({
-    setup() {
+    props: {
+      mode: {
+        type: String as PropType<'horizontal' | 'vertical'>,
+        default: 'horizontal',
+      },
+    },
+    emits: ['navigate'],
+    setup(props, { emit }) {
       const { t } = useI18n();
       const router = useRouter();
       const route = useRoute();
@@ -30,12 +37,14 @@
 
       const goto = (name: string) => {
         router.push({ name });
+        // 重复点当前页时路由不变，仍需关闭抽屉
+        emit('navigate');
       };
 
       return () => (
         <a-menu
-          class="top-nav-menu"
-          mode="horizontal"
+          class={props.mode === 'vertical' ? 'drawer-nav-menu' : 'top-nav-menu'}
+          mode={props.mode}
           selected-keys={selectedKey.value}
         >
           {menuItems.value.map((item) => (

@@ -18,6 +18,7 @@ import {
 } from 'echarts/components';
 import * as echarts from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
+import { useIsMobile } from '@/hooks/responsive';
 
 echarts.use([
   LineChart,
@@ -44,6 +45,7 @@ export function macroTooltipDataIndex(params: unknown): number {
 
 export function macroLineOption(options: {
   isDark: boolean;
+  isMobile?: boolean;
   colors: string[];
   categories: string[];
   legend: string[];
@@ -58,6 +60,8 @@ export function macroLineOption(options: {
   const splitLine = options.isDark
     ? 'rgba(255,255,255,0.12)'
     : 'rgba(0,0,0,0.08)';
+  const compact = options.isMobile === true;
+  const axisFont = compact ? { fontSize: 11 } : {};
   return {
     animation: false,
     color: options.colors,
@@ -68,19 +72,22 @@ export function macroLineOption(options: {
     legend: {
       top: 8,
       data: options.legend,
-      textStyle: { color: textColor },
+      textStyle: { color: textColor, ...axisFont },
+      ...(compact ? { type: 'scroll' as const } : {}),
     },
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'cross' },
       formatter: options.tooltipFormatter,
     },
-    grid: { left: 56, right: 24, top: 56, bottom: 40 },
+    grid: compact
+      ? { left: 44, right: 12, top: 48, bottom: 32 }
+      : { left: 56, right: 24, top: 56, bottom: 40 },
     xAxis: {
       type: 'category',
       boundaryGap: false,
       data: options.categories,
-      axisLabel: { color: textColor, hideOverlap: true },
+      axisLabel: { color: textColor, hideOverlap: true, ...axisFont },
       axisLine: { lineStyle: { color: splitLine } },
     },
     yAxis: {
@@ -88,6 +95,7 @@ export function macroLineOption(options: {
       ...(options.yAxisScale ? { scale: true } : {}),
       axisLabel: {
         color: textColor,
+        ...axisFont,
         ...(options.yAxisPercent ? { formatter: (v: number) => `${v}%` } : {}),
       },
       splitLine: { lineStyle: { color: splitLine, type: 'dashed' } },
@@ -98,6 +106,7 @@ export function macroLineOption(options: {
 
 export type MacroChartOptionBuilder = (ctx: {
   isDark: boolean;
+  isMobile: boolean;
 }) => echarts.EChartsCoreOption;
 
 /**
@@ -117,6 +126,7 @@ export function useMacroLineChart(
     valueLight: 'light',
     storageKey: 'arco-theme',
   });
+  const isMobile = useIsMobile();
 
   let chart: echarts.ECharts | null = null;
 
@@ -125,7 +135,10 @@ export function useMacroLineChart(
     if (!chart) {
       chart = echarts.init(chartEl.value);
     }
-    chart.setOption(buildOption({ isDark: isDark.value }), true);
+    chart.setOption(
+      buildOption({ isDark: isDark.value, isMobile: isMobile.value }),
+      true,
+    );
   }
 
   function disposeChart() {
@@ -147,7 +160,7 @@ export function useMacroLineChart(
     chart?.resize();
   });
 
-  watch([hasData, isDark, ...deps], () => {
+  watch([hasData, isDark, isMobile, ...deps], () => {
     render();
   });
 

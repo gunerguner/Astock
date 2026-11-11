@@ -38,6 +38,7 @@ const renderUnavailableCell = (
 export default function buildMergedColumns(
   t: ComposerTranslation,
   indexConfigs: readonly IndexConfig[],
+  options: { fixedFirstColumn?: boolean } = {},
 ): TableColumnData[] {
   const indexColumns: TableColumnData[] = indexConfigs.map((index) => ({
     title: t(index.filterKey),
@@ -80,6 +81,7 @@ export default function buildMergedColumns(
       title: t('pages.bullMarket.columns.market'),
       dataIndex: 'market',
       width: 88,
+      ...(options.fixedFirstColumn ? { fixed: 'left' as const } : {}),
     },
     {
       title: t('pages.bullMarket.columns.period'),

@@ -7,7 +7,7 @@
 | 端 | 框架 | 唯一允许的位置 | 禁止 |
 |----|------|----------------|------|
 | 后端 | pytest(venv: `backend/.venv`) | `backend/tests/`(api/ = HTTP 集成,unit/ = 纯计算) | 任何 `astock/**/test_*.py`、`conftest.py` 进业务包 |
-| 前端 | vitest + happy-dom | `frontend/tests/`(目录镜像 `src/`:utils/、api/、hooks/…) | 任何 `src/**/*.test.ts`、`__tests__/` 进业务模块 |
+| 前端 | vitest + happy-dom | `frontend/tests/`(目录镜像 `src/`:utils/、api/、hooks/、components/…) | 任何 `src/**/*.test.ts`、`__tests__/` 进业务模块 |
 
 ## 常用命令
 

@@ -42,7 +42,7 @@ description: Astock A股、全球资产与中美宏观数据平台的开发约�
 │   └── .env.example
 ├── frontend/                  # Vue3 + Arco Design Pro（package.json v1.0.0）
 │   ├── config/                # Vite 构建
-│   │   ├── vite.config.base.ts   # vue/jsx/svg、@ 别名、less
+│   │   ├── vite.config.base.ts   # vue/jsx/svg、@ 别名、less（注入断点变量）
 │   │   ├── vite.config.dev.ts    # dev server + /api → :8000 代理
 │   │   ├── vite.config.prod.ts
 │   │   └── plugin/               # arco 按需、压缩、visualizer 等
@@ -66,20 +66,27 @@ description: Astock A股、全球资产与中美宏观数据平台的开发约�
 │   │   │       ├── base.ts          # DEFAULT_LAYOUT
 │   │   │       └── modules/main.ts  # 6 子路由，/ → /bull-market
 │   │   ├── components/
-│   │   │   ├── navbar/              # 顶栏（含 admin-refresh-button）
+│   │   │   ├── navbar/              # 顶栏（桌面横向菜单 / 手机汉堡抽屉）
 │   │   │   ├── menu/、footer/
-│   │   │   └── admin-refresh-button/  # 密码输入 + SSE 全量刷新 + 进度弹窗
+│   │   │   ├── admin-refresh-button/  # 密码输入 + SSE 全量刷新 + 进度弹窗
+│   │   │   ├── async-state/         # 骨架屏 / 加载失败 / 空态 / 陈旧数据横幅
+│   │   │   ├── partial-error-alert/ # 部分数据源失败告警
+│   │   │   └── sync-meta-badge/     # 卡片 extra 同步时间 + 失败重试
 │   │   ├── hooks/
 │   │   │   ├── admin-data-refresh.ts  # 流式导入状态机 + 完成后通知
-│   │   │   └── use-macro-line-chart.ts # ECharts 生命周期/暗色/resize
+│   │   │   ├── async-request.ts      # loading/data/error，失败保留旧数据
+│   │   │   ├── responsive.ts         # useIsMobile/useIsCompact + mobileColumn
+│   │   │   └── use-macro-line-chart.ts # ECharts 生命周期/暗色/resize/窄屏
 │   │   ├── utils/
 │   │   │   ├── format.ts      # formatAmount / formatPoint / formatPeriod
 │   │   │   ├── sync-meta.ts   # 卡片 extra 同步状态文案
+│   │   │   ├── error-message.ts # 统一错误文案提取
+│   │   │   ├── bull-market-filters.ts # 阈值校验 / localStorage 持久化
 │   │   │   ├── sse-stream.ts  # 通用 SSE POST 解析
 │   │   │   └── data-refresh.ts # mitt 事件总线，刷新后各页 reload
 │   │   ├── layout/            # default-layout.vue、page-layout.vue
 │   │   ├── locale/            # zh-CN / en-US 菜单与设置文案
-│   │   └── assets/style/      # global.less、breakpoint.less
+│   │   └── assets/style/      # global.less、breakpoint.less（断点变量自动注入）
 │   ├── .env.development       # VITE_API_BASE_URL
 │   ├── .env.production
 │   ├── index.html
@@ -139,8 +146,10 @@ YAML 懒加载结果用 TypedDict 约束（`PointIndexConfig`、`BullMarketPerio
 | 分析逻辑/阈值 | `services/queries/` + `config.py` / YAML → 前端页面筛选默认值 |
 | 全球资产/概览项 | `config/global_assets.yaml` 或 `market_overview.yaml` → `imports/global_assets` / `queries/global_asset` 或 `queries/market_overview/` |
 | 数据库表 | `models/` → `sync/store.batch_upsert` → `sync/status` |
-| 新前端页 | `router/routes/modules/main.ts` + `views/` + locale |
+| 新前端页 | `router/routes/modules/main.ts` + `views/` + locale；请求统一走 `useAsyncRequest` + `usePageRefresh`，容器用 `async-state` |
 | 新宏观图表 | 页面专用 `use-*-macro-chart.ts` + 共享 `hooks/use-macro-line-chart.ts`；ECharts 组件按需注册 |
+| 响应式断点 | 只改 `assets/style/breakpoint.less` + `hooks/responsive.ts`；页面内不再写裸 px 媒体查询 |
+| 手机端表格 | `mobileColumn(isMobile.value, 宽度, 'left')` 给列宽/冻结，避免窄屏列被压成竖排 |
 | 缓存/TTL | `config.py` 环境变量 + `core/redis_client.py` + `services/cache/`（含 `keys.py`） |
 | 部署/静态 404 | 改前端后须 **重建 frontend 镜像**；见 `docker/nginx.conf` |
 
