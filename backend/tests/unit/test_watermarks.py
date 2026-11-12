@@ -79,7 +79,11 @@ def test_daily_gap_stops_watermark_before_hole(db_session, monkeypatch):
 
 
 def test_macro_without_cpi_keeps_watermark_and_does_not_skip(db_session):
-    from astock.services.imports._macro_domain import run_macro_import, should_skip_macro
+    from astock.services.imports._macro_domain import (
+        MacroImportSpec,
+        run_macro_import,
+        should_skip_macro,
+    )
 
     upsert_sync_meta(
         db_session,
@@ -102,12 +106,14 @@ def test_macro_without_cpi_keeps_watermark_and_does_not_skip(db_session):
 
     result = run_macro_import(
         db_session,
-        region="us",
-        sync_table="us_macro",
-        refresh_day=15,
-        fetch_fn=fetch,
-        log_label="美国宏观",
-        required_metrics=("cpi_yoy", "fed_rate_upper"),
+        MacroImportSpec(
+            region="us",
+            sync_table="us_macro",
+            refresh_day=15,
+            fetch_fn=fetch,
+            log_label="美国宏观",
+            required_metrics=("cpi_yoy", "fed_rate_upper"),
+        ),
     )
     meta = get_sync_meta(db_session, "us_macro")
     assert meta is not None
@@ -120,7 +126,11 @@ def test_macro_without_cpi_keeps_watermark_and_does_not_skip(db_session):
 
 
 def test_macro_missing_expected_metric_does_not_advance(db_session):
-    from astock.services.imports._macro_domain import run_macro_import, should_skip_macro
+    from astock.services.imports._macro_domain import (
+        MacroImportSpec,
+        run_macro_import,
+        should_skip_macro,
+    )
 
     upsert_sync_meta(
         db_session,
@@ -138,12 +148,14 @@ def test_macro_missing_expected_metric_does_not_advance(db_session):
 
     result = run_macro_import(
         db_session,
-        region="us",
-        sync_table="us_macro",
-        refresh_day=15,
-        fetch_fn=fetch,
-        log_label="美国宏观",
-        required_metrics=("cpi_yoy", "fed_rate_upper"),
+        MacroImportSpec(
+            region="us",
+            sync_table="us_macro",
+            refresh_day=15,
+            fetch_fn=fetch,
+            log_label="美国宏观",
+            required_metrics=("cpi_yoy", "fed_rate_upper"),
+        ),
     )
     meta = get_sync_meta(db_session, "us_macro")
     assert meta is not None

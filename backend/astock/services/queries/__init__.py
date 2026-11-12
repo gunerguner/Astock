@@ -10,7 +10,11 @@ from astock.services.queries.market_overview import (
     get_market_overview,
     warmup_market_overview,
 )
-from astock.services.queries.rankings import stock_ranking, turnover_ranking
+from astock.services.queries.rankings import (
+    stock_ranking,
+    turnover_ranking,
+    turnover_series,
+)
 from astock.services.queries.us_macro import get_us_macro
 
 __all__ = [
@@ -18,6 +22,7 @@ __all__ = [
     "bull_market_turnover_stats",
     "stock_ranking",
     "turnover_ranking",
+    "turnover_series",
     "get_us_macro",
     "get_cn_macro",
     "get_price_levels",

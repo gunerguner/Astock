@@ -69,6 +69,22 @@ declare namespace API {
     items: StockRankingItem[];
   };
 
+  type TurnoverRange = '1y' | '5y' | 'all';
+
+  type TurnoverSeriesItem = {
+    date: string;
+    sse_amount: number;
+    szse_amount: number;
+    turnover: number;
+    top_rank: number | null;
+  };
+
+  type TurnoverSeries = {
+    range: TurnoverRange;
+    latest_date: string | null;
+    items: TurnoverSeriesItem[];
+  };
+
   // ---- analysis: asset price levels ----
 
   type PriceLevelConclusion =

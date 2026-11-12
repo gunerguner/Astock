@@ -58,6 +58,15 @@ export function fetchTurnoverRanking(
   });
 }
 
+/** 获取两市成交额日频序列 GET /analysis/turnover/series */
+export function fetchTurnoverSeries(
+  range: API.TurnoverRange,
+): Promise<API.TurnoverSeries> {
+  return request.get('/analysis/turnover/series', {
+    params: { range },
+  });
+}
+
 /** 获取个股成交额 TopN GET /analysis/stock/ranking */
 export function fetchStockRanking(top: number): Promise<API.StockRanking> {
   return request.get('/analysis/stock/ranking', {

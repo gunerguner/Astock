@@ -8,8 +8,12 @@ import {
   type Ref,
   type WatchSource,
 } from 'vue';
-import { useDark, useResizeObserver } from '@vueuse/core';
-import { LineChart, type LineSeriesOption } from 'echarts/charts';
+import { useResizeObserver } from '@vueuse/core';
+import {
+  LineChart,
+  type BarSeriesOption,
+  type LineSeriesOption,
+} from 'echarts/charts';
 import {
   GridComponent,
   LegendComponent,
@@ -18,6 +22,7 @@ import {
 } from 'echarts/components';
 import * as echarts from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
+import useAppDark from '@/hooks/use-app-theme';
 import { useIsMobile } from '@/hooks/responsive';
 
 echarts.use([
@@ -52,7 +57,11 @@ export function macroLineOption(options: {
   tooltipFormatter: (params: unknown) => string;
   yAxisPercent?: boolean;
   yAxisScale?: boolean;
-  series: LineSeriesOption[];
+  yAxisFormatter?: (value: number) => string;
+  boundaryGap?: boolean;
+  showLegend?: boolean;
+  grid?: { left?: number; right?: number; top?: number; bottom?: number };
+  series: Array<LineSeriesOption | BarSeriesOption>;
 }): echarts.EChartsCoreOption {
   const textColor = options.isDark
     ? 'rgba(255,255,255,0.7)'
@@ -62,6 +71,15 @@ export function macroLineOption(options: {
     : 'rgba(0,0,0,0.08)';
   const compact = options.isMobile === true;
   const axisFont = compact ? { fontSize: 11 } : {};
+  const baseGrid = compact
+    ? { left: 44, right: 12, top: 48, bottom: 32 }
+    : { left: 56, right: 24, top: 56, bottom: 40 };
+  let yAxisLabelFormatter: ((value: number) => string) | undefined;
+  if (options.yAxisFormatter) {
+    yAxisLabelFormatter = options.yAxisFormatter;
+  } else if (options.yAxisPercent) {
+    yAxisLabelFormatter = (value: number) => `${value}%`;
+  }
   return {
     animation: false,
     color: options.colors,
@@ -70,6 +88,7 @@ export function macroLineOption(options: {
       fontFamily: 'var(--font-family-sans)',
     },
     legend: {
+      show: options.showLegend !== false,
       top: 8,
       data: options.legend,
       textStyle: { color: textColor, ...axisFont },
@@ -80,12 +99,10 @@ export function macroLineOption(options: {
       axisPointer: { type: 'cross' },
       formatter: options.tooltipFormatter,
     },
-    grid: compact
-      ? { left: 44, right: 12, top: 48, bottom: 32 }
-      : { left: 56, right: 24, top: 56, bottom: 40 },
+    grid: { ...baseGrid, ...options.grid },
     xAxis: {
       type: 'category',
-      boundaryGap: false,
+      boundaryGap: options.boundaryGap ?? false,
       data: options.categories,
       axisLabel: { color: textColor, hideOverlap: true, ...axisFont },
       axisLine: { lineStyle: { color: splitLine } },
@@ -96,12 +113,18 @@ export function macroLineOption(options: {
       axisLabel: {
         color: textColor,
         ...axisFont,
-        ...(options.yAxisPercent ? { formatter: (v: number) => `${v}%` } : {}),
+        ...(yAxisLabelFormatter ? { formatter: yAxisLabelFormatter } : {}),
       },
       splitLine: { lineStyle: { color: splitLine, type: 'dashed' } },
     },
     series: options.series,
   };
+}
+
+export function readCssVar(name: string, fallback: string): string {
+  if (typeof window === 'undefined') return fallback;
+  const value = getComputedStyle(document.body).getPropertyValue(name).trim();
+  return value || fallback;
 }
 
 export type MacroChartOptionBuilder = (ctx: {
@@ -119,13 +142,7 @@ export function useMacroLineChart(
   buildOption: MacroChartOptionBuilder,
   deps: WatchSource[] = [],
 ) {
-  const isDark = useDark({
-    selector: 'body',
-    attribute: 'arco-theme',
-    valueDark: 'dark',
-    valueLight: 'light',
-    storageKey: 'arco-theme',
-  });
+  const isDark = useAppDark();
   const isMobile = useIsMobile();
 
   let chart: echarts.ECharts | null = null;

@@ -6,7 +6,6 @@ from sqlalchemy import and_, case, func
 from sqlmodel import Session, col, select
 
 from astock.config import BULL_MARKETS, POINT_INDEX_CONFIG
-from astock.core.errors import AppError
 from astock.models.point import Point
 from astock.models.turnover import Turnover
 from astock.schemas.analysis import (
@@ -54,8 +53,6 @@ def build_bull_market_stats(
         days = int(count or 0)
         total_days += days
         max_val = float(max_value) if max_value is not None else None
-        if days > 0 and max_val is None:
-            raise AppError(message=f"牛市区间 {market_name} 存在达标天数但缺少极值，请重新导入数据")
         items.append(
             bull_market_item_skeleton(
                 market_name,
@@ -144,10 +141,6 @@ def bull_market_multi_index_point_stats(
             days = int(values[f"days_{slug}"] or 0)
             max_raw = values[f"max_{slug}"]
             max_val = float(max_raw) if max_raw is not None else None
-            if days > 0 and max_val is None:
-                raise AppError(
-                    message=f"牛市区间 {market_name} 存在达标天数但缺少极值，请重新导入数据"
-                )
             total_days += days
             items.append(
                 bull_market_item_skeleton(

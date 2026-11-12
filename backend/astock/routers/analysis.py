@@ -18,6 +18,7 @@ from astock.schemas.analysis import (
     PriceLevelsResponse,
     StockRankingResponse,
     TurnoverRankingResponse,
+    TurnoverSeriesResponse,
     UsMacroResponse,
 )
 from astock.schemas.response import ApiResponse, success
@@ -30,6 +31,7 @@ from astock.services.queries import (
     get_us_macro,
     stock_ranking,
     turnover_ranking,
+    turnover_series,
 )
 
 router = APIRouter(prefix="/api/v1/analysis", tags=["analysis"])
@@ -100,6 +102,21 @@ def turnover_ranking_api(
     bull_market: str | None = Query(default=None),
 ):
     return success(turnover_ranking(db, top=top, bull_market=bull_market))
+
+
+@router.get(
+    "/turnover/series",
+    response_model=ApiResponse[TurnoverSeriesResponse],
+)
+def turnover_series_api(
+    db: DbSession,
+    series_range: str = Query(
+        default="1y",
+        alias="range",
+        pattern="^(1y|5y|all)$",
+    ),
+):
+    return success(turnover_series(db, series_range=series_range))
 
 
 @router.get(

@@ -76,7 +76,8 @@
   import { computed, ref, watch } from 'vue';
   import { useRoute } from 'vue-router';
   import { useI18n } from 'vue-i18n';
-  import { useDark, useToggle } from '@vueuse/core';
+  import { useToggle } from '@vueuse/core';
+  import useAppDark from '@/hooks/use-app-theme';
   import useLocale from '@/hooks/locale';
   import { useIsMobile } from '@/hooks/responsive';
   import Menu from '@/components/menu/index.vue';
@@ -106,13 +107,7 @@
       ? t('navbar.action.switchToEn')
       : t('navbar.action.switchToZh'),
   );
-  const isDark = useDark({
-    selector: 'body',
-    attribute: 'arco-theme',
-    valueDark: 'dark',
-    valueLight: 'light',
-    storageKey: 'arco-theme',
-  });
+  const isDark = useAppDark();
   const toggleTheme = useToggle(isDark);
   const handleToggleTheme = () => {
     toggleTheme();

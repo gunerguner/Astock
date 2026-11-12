@@ -19,6 +19,7 @@ from astock.services.cache.asset_prices import (
 )
 from astock.services.cache.closes import cache_latest_trading_date
 from astock.services.cache.keys import LATEST_TRADING_DATE_KEY
+from astock.services.imports._common import build_skip_result
 from astock.services.sync.results import (
     ImportResult,
     build_result,
@@ -93,22 +94,18 @@ def refresh_asset_highs(db: Session) -> ImportResult:
     """刷新全球资产历史最高点入库，并同步价格缓存与最新交易日。"""
     start_ts = time.perf_counter()
     skip, meta = should_skip_asset_highs(db)
-    if skip:
-        if meta is None:
-            raise RuntimeError("asset_high: should_skip 为真但 sync_meta 缺失")
-        total = count_rows(db, AssetHigh)
+    if skip and meta is not None:
         logger.info(
             "全球资产最高点刷新跳过: 已覆盖最近可结算日 (last_synced_date=%s)",
             meta.last_synced_date,
         )
-        return build_result(
-            imported=0,
-            total=total,
+        return build_skip_result(
+            db,
+            table_name="asset_high",
+            model=AssetHigh,
+            start_ts=start_ts,
             last_date=meta.last_synced_date,
-            ok=True,
-            source_errors={},
-            last_synced_at=meta.last_synced_at,
-            elapsed=round(time.perf_counter() - start_ts, 2),
+            touch_meta=False,
         )
 
     cached_at = iso_now()

@@ -4,14 +4,9 @@ import {
   formatMacroNumber,
   macroLineOption,
   macroTooltipDataIndex,
+  readCssVar,
   useMacroLineChart,
 } from '@/hooks/use-macro-line-chart';
-
-function readCssVar(name: string, fallback: string): string {
-  if (typeof window === 'undefined') return fallback;
-  const value = getComputedStyle(document.body).getPropertyValue(name).trim();
-  return value || fallback;
-}
 
 export default function useUsMacroChart(
   chartEl: Ref<HTMLElement | null>,

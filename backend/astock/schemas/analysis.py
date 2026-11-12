@@ -43,6 +43,20 @@ class TurnoverRankingResponse(BaseModel):
     items: list[TurnoverRankingItem]
 
 
+class TurnoverSeriesItem(BaseModel):
+    date: str
+    sse_amount: float
+    szse_amount: float
+    turnover: float
+    top_rank: int | None = None
+
+
+class TurnoverSeriesResponse(BaseModel):
+    range: str
+    latest_date: str | None = None
+    items: list[TurnoverSeriesItem]
+
+
 class StockRankingItem(BaseModel):
     rank: int
     date: str

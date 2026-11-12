@@ -69,25 +69,40 @@ def build_skip_result(
     db: Session,
     *,
     table_name: str,
-    model: type[SQLModel],
     start_ts: float,
+    model: type[SQLModel] | None = None,
     last_date: str | None = None,
+    total: int | None = None,
+    touch_meta: bool = True,
 ) -> ImportResult:
-    """日频数据集无新交易日时的快速跳过结果。"""
+    """已覆盖水位时的快速跳过结果。
+
+    touch_meta 为 False 时不改写 sync_meta（月频/资产跳过保持原水位时间）。
+    total 优先于按 model 计数。
+    """
     meta = get_sync_meta(db, table_name)
     last_synced = meta.last_synced_date if meta else None
     resolved_last_date = last_date if last_date is not None else last_synced
-    last_synced_at = upsert_sync_meta(
-        db,
-        table_name,
-        last_synced_date=last_synced,
-        status=SyncStatus.SUCCESS,
-        error=None,
-    )
+    if touch_meta:
+        last_synced_at = upsert_sync_meta(
+            db,
+            table_name,
+            last_synced_date=last_synced,
+            status=SyncStatus.SUCCESS,
+            error=None,
+        )
+    else:
+        last_synced_at = meta.last_synced_at if meta else None
+    if total is not None:
+        row_total = total
+    elif model is not None:
+        row_total = count_rows(db, model)
+    else:
+        raise ValueError("build_skip_result 需要 model 或 total")
     elapsed = time.perf_counter() - start_ts
     return build_result(
         imported=0,
-        total=count_rows(db, model),
+        total=row_total,
         last_date=resolved_last_date,
         ok=True,
         source_errors={},

@@ -78,6 +78,8 @@
       return false;
     }
     inputPassword.value = '';
+    // 回车走输入框的 press-enter，不会经过 Modal 的 on-before-ok，返回值关不掉浮层。
+    modalVisible.value = false;
     return true;
   }
 </script>

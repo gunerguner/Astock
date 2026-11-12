@@ -96,6 +96,17 @@ export default {
   'pages.turnoverRank.columns.stockName': 'Stock Name',
   'pages.turnoverRank.columns.stockCode': 'Stock Code',
   'pages.turnoverRank.columns.turnover': 'Turnover',
+  'pages.turnoverRank.chart.title': 'Two-Market Turnover',
+  'pages.turnoverRank.chart.range1y': '1Y',
+  'pages.turnoverRank.chart.range5y': '5Y',
+  'pages.turnoverRank.chart.rangeAll': 'All',
+  'pages.turnoverRank.chart.series': 'Total Turnover',
+  'pages.turnoverRank.chart.noData':
+    'No data yet. Please refresh all data in admin.',
+  'pages.turnoverRank.chart.tooltip.date': 'Date',
+  'pages.turnoverRank.chart.tooltip.sh': 'SSE',
+  'pages.turnoverRank.chart.tooltip.sz': 'SZSE',
+  'pages.turnoverRank.chart.tooltip.total': 'Total',
 
   'pages.assetPriceLevels.title': 'Global Asset Price Levels',
   'pages.assetPriceLevels.metalDivider': 'Precious Metals',

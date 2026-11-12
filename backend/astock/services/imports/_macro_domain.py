@@ -4,6 +4,7 @@
 import logging
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Any
 
@@ -14,6 +15,7 @@ from astock.core.sync_status import SyncStatus
 from astock.datasets.macro.types import MacroMetric, MacroRegion
 from astock.datasets.result import FetchResult
 from astock.models.macro import MacroValue
+from astock.services.imports._common import build_skip_result
 from astock.services.sync.results import (
     ImportResult,
     build_result,
@@ -95,47 +97,23 @@ def _metrics_cover(records: list[dict[str, Any]], metrics: tuple[str, ...], peri
     return all(period in found.get(metric, set()) for metric in metrics)
 
 
-def run_macro_import(
-    db: Session,
-    *,
-    region: MacroRegion,
-    sync_table: str,
-    refresh_day: int,
-    fetch_fn: Callable[[], FetchResult],
-    log_label: str,
-    required_metrics: tuple[MacroMetric, ...],
-) -> ImportResult:
-    """拉取宏观月度指标并 upsert；尊重月频跳过窗口。"""
-    start_ts = time.perf_counter()
-    skip, meta = should_skip_macro(
-        db,
-        region=region,
-        sync_table=sync_table,
-        refresh_day=refresh_day,
-    )
-    if skip:
-        if meta is None:
-            raise RuntimeError(f"{sync_table}: should_skip_macro 为真但 sync_meta 缺失")
-        total = count_macro_rows(db, region)
-        logger.info(
-            "%s刷新跳过: 已覆盖期望月份 (last_synced_date=%s expected=%s refresh_day=%s)",
-            log_label,
-            meta.last_synced_date,
-            expected_macro_period(refresh_day=refresh_day),
-            refresh_day,
-        )
-        return build_result(
-            imported=0,
-            total=total,
-            last_date=meta.last_synced_date,
-            ok=True,
-            source_errors={},
-            last_synced_at=meta.last_synced_at,
-            elapsed=round(time.perf_counter() - start_ts, 2),
-        )
+@dataclass(frozen=True)
+class MacroImportSpec:
+    """单区域月频宏观导入配置。"""
 
-    fr = fetch_fn()
-    cached_at = iso_now()
+    region: MacroRegion
+    sync_table: str
+    refresh_day: int
+    fetch_fn: Callable[[], FetchResult]
+    log_label: str
+    required_metrics: tuple[MacroMetric, ...]
+
+
+def _macro_records(
+    region: MacroRegion,
+    fr: FetchResult,
+    cached_at: str,
+) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     for row in fr.records:
         period = str(row.get("period") or "")
@@ -152,43 +130,55 @@ def run_macro_import(
                 "cached_at": cached_at,
             }
         )
+    return records
 
-    if not records:
-        error = fr.error_summary() or f"{log_label}拉取失败"
-        old_meta = get_sync_meta(db, sync_table)
-        last_synced_at = upsert_sync_meta(
-            db,
-            sync_table,
-            last_synced_date=old_meta.last_synced_date if old_meta else None,
-            status=SyncStatus.FAILED,
-            error=error,
-        )
-        result = build_result(
-            imported=0,
-            total=count_macro_rows(db, region),
-            last_date=old_meta.last_synced_date if old_meta else None,
-            ok=False,
-            source_errors=fr.to_error_map(sync_table),
-            last_synced_at=last_synced_at,
-        )
-        return finalize_import_result(
-            result, start_ts=start_ts, log_label=f"{log_label}刷新"
-        )
 
-    imported = batch_upsert(db, MacroValue, records, _CONFLICT_COLS)
+def _failed_empty(
+    db: Session,
+    spec: MacroImportSpec,
+    fr: FetchResult,
+    start_ts: float,
+) -> ImportResult:
+    error = fr.error_summary() or f"{spec.log_label}拉取失败"
+    old_meta = get_sync_meta(db, spec.sync_table)
+    last_synced_at = upsert_sync_meta(
+        db,
+        spec.sync_table,
+        last_synced_date=old_meta.last_synced_date if old_meta else None,
+        status=SyncStatus.FAILED,
+        error=error,
+    )
+    result = build_result(
+        imported=0,
+        total=count_macro_rows(db, spec.region),
+        last_date=old_meta.last_synced_date if old_meta else None,
+        ok=False,
+        source_errors=fr.to_error_map(spec.sync_table),
+        last_synced_at=last_synced_at,
+    )
+    return finalize_import_result(
+        result, start_ts=start_ts, log_label=f"{spec.log_label}刷新"
+    )
+
+
+def _resolve_macro_status(
+    fr: FetchResult,
+    records: list[dict[str, Any]],
+    spec: MacroImportSpec,
+    *,
+    imported: int,
+    old_date: str | None,
+) -> tuple[SyncStatus, str | None]:
     latest = _latest_cpi_period(records)
-    expected = expected_macro_period(refresh_day=refresh_day)
-    old_meta = get_sync_meta(db, sync_table)
-    old_date = old_meta.last_synced_date if old_meta else None
-    covered = bool(latest) and _metrics_cover(records, required_metrics, expected)
+    expected = expected_macro_period(refresh_day=spec.refresh_day)
+    covered = bool(latest) and _metrics_cover(records, spec.required_metrics, expected)
     if not latest:
         fr.errors.append("本次没有有效 CPI，水位保持不变")
         fr.ok = False
     elif latest < expected or not covered or not fr.ok:
+        found = _metric_periods(records)
         missing = [
-            metric
-            for metric in required_metrics
-            if expected not in _metric_periods(records).get(metric, set())
+            metric for metric in spec.required_metrics if expected not in found.get(metric, set())
         ]
         if latest < expected:
             fr.errors.append(f"源端最新 CPI 月份 {latest} 尚未覆盖期望 {expected}")
@@ -197,31 +187,68 @@ def run_macro_import(
         fr.ok = False
 
     if fr.ok and covered and latest:
-        status = SyncStatus.SUCCESS
-        watermark = forward_date(old_date, latest)
-    elif imported > 0:
-        status = SyncStatus.PARTIAL_FAILURE
-        watermark = old_date
-    else:
-        status = SyncStatus.FAILED
-        watermark = old_date
+        return SyncStatus.SUCCESS, forward_date(old_date, latest)
+    if imported > 0:
+        return SyncStatus.PARTIAL_FAILURE, old_date
+    return SyncStatus.FAILED, old_date
 
+
+def run_macro_import(db: Session, spec: MacroImportSpec) -> ImportResult:
+    """拉取宏观月度指标并 upsert；尊重月频跳过窗口。"""
+    start_ts = time.perf_counter()
+    skip, meta = should_skip_macro(
+        db,
+        region=spec.region,
+        sync_table=spec.sync_table,
+        refresh_day=spec.refresh_day,
+    )
+    if skip and meta is not None:
+        logger.info(
+            "%s刷新跳过: 已覆盖期望月份 (last_synced_date=%s expected=%s refresh_day=%s)",
+            spec.log_label,
+            meta.last_synced_date,
+            expected_macro_period(refresh_day=spec.refresh_day),
+            spec.refresh_day,
+        )
+        return build_skip_result(
+            db,
+            table_name=spec.sync_table,
+            start_ts=start_ts,
+            last_date=meta.last_synced_date,
+            total=count_macro_rows(db, spec.region),
+            touch_meta=False,
+        )
+
+    fr = spec.fetch_fn()
+    records = _macro_records(spec.region, fr, iso_now())
+    if not records:
+        return _failed_empty(db, spec, fr, start_ts)
+
+    imported = batch_upsert(db, MacroValue, records, _CONFLICT_COLS)
+    old_meta = get_sync_meta(db, spec.sync_table)
+    status, watermark = _resolve_macro_status(
+        fr,
+        records,
+        spec,
+        imported=imported,
+        old_date=old_meta.last_synced_date if old_meta else None,
+    )
     last_synced_at = upsert_sync_meta(
         db,
-        sync_table,
+        spec.sync_table,
         last_synced_date=watermark,
         status=status,
         error=None if status == SyncStatus.SUCCESS else fr.error_summary(),
     )
     result = build_result(
         imported=imported,
-        total=count_macro_rows(db, region),
+        total=count_macro_rows(db, spec.region),
         last_date=watermark,
         ok=status == SyncStatus.SUCCESS,
-        source_errors=fr.to_error_map(sync_table) if fr.errors else {},
+        source_errors=fr.to_error_map(spec.sync_table) if fr.errors else {},
         last_synced_at=last_synced_at,
         status=status,
     )
     return finalize_import_result(
-        result, start_ts=start_ts, log_label=f"{log_label}刷新"
+        result, start_ts=start_ts, log_label=f"{spec.log_label}刷新"
     )

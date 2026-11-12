@@ -10,6 +10,7 @@ import {
   fetchMarketOverview,
   fetchStockRanking,
   fetchTurnoverRanking,
+  fetchTurnoverSeries,
   fetchUsMacroData,
   isMarketOverviewError,
   isPriceLevelPending,
@@ -70,6 +71,13 @@ describe('URL 与参数构造', () => {
     await fetchStockRanking(10);
     expect(getMock).toHaveBeenCalledWith('/analysis/stock/ranking', {
       params: { top: 10 },
+    });
+  });
+
+  test('两市成交额日频序列', async () => {
+    await fetchTurnoverSeries('5y');
+    expect(getMock).toHaveBeenCalledWith('/analysis/turnover/series', {
+      params: { range: '5y' },
     });
   });
 

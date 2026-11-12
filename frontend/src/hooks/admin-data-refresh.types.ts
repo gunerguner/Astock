@@ -39,15 +39,7 @@ export const PHASE_ORDER: PhaseKey[] = [
 ];
 
 export function isPhaseKey(value: string | undefined): value is PhaseKey {
-  return (
-    value === 'turnover' ||
-    value === 'point' ||
-    value === 'stock' ||
-    value === 'global_assets' ||
-    value === 'us_macro' ||
-    value === 'cn_macro' ||
-    value === 'market_overview'
-  );
+  return (PHASE_ORDER as readonly string[]).includes(value ?? '');
 }
 
 export function createInitialProgressState(): RefreshProgressState {
